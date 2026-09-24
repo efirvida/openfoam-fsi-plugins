@@ -98,7 +98,8 @@ experimental anchors and per-directory data provenance.
   kernel is documented as an ablation of the kernel/width confound.
 - **Rotational augmentation (Du–Selig 3D stall delay):** the shared actuator
   element chain supports an additive, default-off `rotationalAugmentation` block
-  (`model DuSelig`, `a=b=d=1`; Yang & Sotiropoulos Eqs. 9–12) inherited by ALM,
+  (`model DuSelig`, `a=b=d=1`; original Du & Selig 1998 prefactor form, the
+  equations Yang & Sotiropoulos reproduce as Eqs. 9–12) inherited by ALM,
   ASM and the mesh surface. It is enabled for the Phase VI proxy through
   `--rotational-augmentation on`, never by the committed case. The correction is
   applied literally with no invented clamp and no free-parameter calibration;

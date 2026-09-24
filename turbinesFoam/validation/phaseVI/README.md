@@ -361,17 +361,27 @@ inherit it with no per-model code:
 ```
 CL,3D = CL,2D + fL (CL,p − CL,2D)
 CD,3D = CD,2D − fD (CD,2D − CD,0)
-fL = (1/2π)[ (1.6(c/r)^a − (c/r)^((d/Λ)(R/r))) / (0.1267b + (c/r)^((d/Λ)(R/r))) − 1 ]
-fD = (1/2π)[ (1.6(c/r)^a − (c/r)^((d/(2Λ))(R/r))) / (0.1267b + (c/r)^((d/(2Λ))(R/r))) − 1 ]
+fL = (1/2π)[ (1.6(c/r)/0.1267) · ((a − (c/r)^((d/Λ)(R/r))) / (b + (c/r)^((d/Λ)(R/r)))) − 1 ]
+fD = (1/2π)[ (1.6(c/r)/0.1267) · ((a − (c/r)^((d/(2Λ))(R/r))) / (b + (c/r)^((d/(2Λ))(R/r)))) − 1 ]
 ```
 
 with `CL,p = 2π(α − α0)`, `CD,0` the 2D drag at zero angle of attack,
 `Λ = ΩR/√(U² + (ΩR)²)`, and `a = b = d = 1` (the paper defaults). The exponent
-is `(d/Λ)(R/r)` for `fL` and `(d/(2Λ))(R/r)` for `fD`.
+is `(d/Λ)(R/r)` for `fL` and `(d/(2Λ))(R/r)` for `fD`. This is the original
+Du & Selig (1998) **prefactor** form: `1.6(c/r)/0.1267` multiplies the fraction
+`(a − X)/(b + X)`, and `a`/`b` are the numerator/denominator constants, not an
+exponent of `c/r`. It is reproduced by NREL `AirfoilPrep.py`, BYU `CCBlade.jl`,
+Munduate (2002) Eq. 3.6, IOP 2024 Eq. (3) and Li/Liu/Yang (2022) *Energies*
+15:6533. The split form printed by arXiv:1702.02108v4 Eqs. 11–12
+(`(1.6(c/r)a − X)/(0.1267b + X) − 1`) is a transcription error and is **not**
+implemented; see
+`openspec/changes/rotational-augmentation/research-formulation-fidelity.md`.
 
 **Sensitivity note and claim boundary.** The correction is applied **literally**
 with no invented clamp and **no free-parameter calibration** (`a=b=d=1` only).
-Near the tip `fL` becomes negative and reduces the corrected lift — a
+Near the tip the prefactor vanishes and `fL` tends to `−1/(2π)`, which reduces
+the corrected outboard lift; `fD` is positive inboard and turns negative only in
+a thin tip band (zero near `r/R ≈ 0.75` at the Phase VI `Λ`) — a
 published-model characteristic that is recorded, not clamped. The end-effect
 factor is applied **after** the augmentation hook (the paper's order), so the two
 effects are not double-counted. Because the combined Du–Selig + dynamic-stall
@@ -422,6 +432,35 @@ to the profile's zero-lift reference, which does not exist for that table, so
 `correctRotationalAugmentation()` skips any profile without a station in the
 `[−10, 10]°` reference window rather than fabricating one (no invented clamp).
 The lifting S809 sections are corrected as usual.
+
+**Corrected-form proxy outcome (fidelity correction, 2026-09-24).** After
+restoring the prefactor form (see **Formulation** above), the committed 0.25-rev
+D/32 matrix was re-run on `sequana_cpu_dev` (build/test job `11600617`; proxy
+jobs `11600623`, `11600630`, `11600635`). The control gate still passes (control
+U13 `cp = −0.044809`, unchanged because augmentation is off), and the harness
+still exits non-zero because the U13 augmentation-on `cp`/`ct` are not positive —
+but the corrected form moves them from clearly negative to ≈0:
+
+| U13 variant | `cp` mean (final row) | `ct` mean | mid-span `c_ref_t` |
+|---|---|---|---|
+| `control` | −0.044809 (−0.045859) | −0.015346 | −0.070378 |
+| `augmentation-on` | **−0.000080** (−0.002094) | −0.000027 | **+0.305817** |
+| `augmentation-on + root-off` | **+0.021690** (+0.019482) | +0.007428 | +0.436461 |
+
+Before the correction (split form) the same variants gave U13 `cp` −0.051234 /
+−0.033349 and mid-span `c_ref_t` +0.084376 / +0.188596. The U7 `cp` (final row)
+was 0.309981 / 0.309268 / 0.336636 (control / augmentation-on / root-off); with
+the corrected form it is **0.309981 / 0.344433 / 0.373306**, and the root-off
+ablation shrinks the power deficit from −14.99 % (control) to +1.79 %, inside the
+±15 % band.
+
+The correction also moves the analytic factors to their primary-source shape at
+`Λ ≈ 0.946`: `fL` now crosses zero at `r/R ≈ 0.90` (was `≈ 0.69`) and `fD` is
+positive out to `r/R ≈ 0.75`, turning negative only in a thin tip band (was
+`≈ 0.36`). Caveat: the U13 augmentation-on integrated signal is ≈0 — smaller
+than the 0.25-rev window's observed ≈11 % systematic bias — so this short run
+resolves only the sign shift (clearly negative → ≈0), not whether any residual
+failure remains; the primary criterion is still reported unweakened.
 
 ## Comparison
 

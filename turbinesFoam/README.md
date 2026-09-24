@@ -161,31 +161,44 @@ radial geometry the element warns and skips the correction (no abort).
 With `CL,2D`/`CD,2D` the static polar values, `CL,p = 2*pi*(alpha - alpha0)` the
 potential-flow lift, `CD,0` the profile's zero-lift drag, `c/r` the local
 chord-to-radius ratio, `R/r` the rotor-to-local radius ratio and
-`Lambda = Omega*R / sqrt(U^2 + (Omega*R)^2)`, the correction is the paper's
-Du–Selig equations (Yang & Sotiropoulos, arXiv:1702.02108v4, Eqs. 9–12):
+`Lambda = Omega*R / sqrt(U^2 + (Omega*R)^2)`, the correction is the original
+Du & Selig (1998) formulation (AIAA-98-0021, the primary source for the
+equations Yang & Sotiropoulos reproduce as Eqs. 9–12):
 
     CL,3D = CL,2D + fL * (CL,p - CL,2D)
     CD,3D = CD,2D - fD * (CD,2D - CD,0)
-    fL = (1/2*pi) * [ (1.6*(c/r)^a - (c/r)^((d/Lambda)*(R/r))) /
-                      (0.1267*b + (c/r)^((d/Lambda)*(R/r))) - 1 ]
-    fD = (1/2*pi) * [ (1.6*(c/r)^a - (c/r)^((d/(2*Lambda))*(R/r))) /
-                      (0.1267*b + (c/r)^((d/(2*Lambda))*(R/r))) - 1 ]
+    fL = (1/2*pi) * [ (1.6*(c/r)/0.1267) *
+                      ((a - (c/r)^((d/Lambda)*(R/r))) /
+                       (b + (c/r)^((d/Lambda)*(R/r)))) - 1 ]
+    fD = (1/2*pi) * [ (1.6*(c/r)/0.1267) *
+                      ((a - (c/r)^((d/(2*Lambda))*(R/r))) /
+                       (b + (c/r)^((d/(2*Lambda))*(R/r)))) - 1 ]
 
-The exponent is `(d/Lambda)*(R/r)` for `fL` and `(d/(2*Lambda))*(R/r)` for
-`fD`; the paper constants default to `a = b = d = 1`. The correction is applied
-in place on the coefficients **after** the static lookup and **before** dynamic
-stall, added mass and the end-effect factor, so every downstream stage and the
-per-element CSV consume the corrected values and no stage re-applies it.
+`1.6*(c/r)/0.1267` is a **prefactor** on the fraction `(a - X)/(b + X)`; `a` and
+`b` are the numerator/denominator constants. The exponent is
+`(d/Lambda)*(R/r)` for `fL` and `(d/(2*Lambda))*(R/r)` for `fD`; the paper
+constants default to `a = b = d = 1`. This prefactor form is the primary-source
+form, reproduced by NREL `AirfoilPrep.py`, BYU `CCBlade.jl`, Munduate (2002)
+Eq. 3.6, IOP 2024 Eq. (3) and Li/Liu/Yang (2022) *Energies* 15:6533. The split
+form printed by arXiv:1702.02108v4 is a transcription error and is not
+implemented; see
+`openspec/changes/rotational-augmentation/research-formulation-fidelity.md`.
+
+The correction is applied in place on the coefficients **after** the static
+lookup and **before** dynamic stall, added mass and the end-effect factor, so
+every downstream stage and the per-element CSV consume the corrected values and
+no stage re-applies it.
 
 ### Sensitivity note and claim boundary
 
 - **No free-parameter calibration:** only the paper constants `a = b = d = 1`
   are used; there is no fit or tuning of the correction.
-- **Near-tip behaviour:** for small `c/r` the lift factor `fL` becomes negative
-  (approaching `-1/(2*pi)`), so the outboard stalled lift is *reduced*; `fD` is
-  positive inboard and negative outboard at the Phase VI `Lambda`. The equations
-  are implemented literally with **no invented clamp**, and the behaviour is
-  recorded rather than suppressed.
+- **Near-tip behaviour:** for small `c/r` the prefactor vanishes and the lift
+  factor `fL` tends to `-1/(2*pi)`, so the outboard stalled lift is *reduced*;
+  `fD` is positive inboard and turns negative only in a thin tip band (zero
+  near `r/R ~ 0.75` at the Phase VI `Lambda`). The equations are implemented
+  literally with **no invented clamp**, and the behaviour is recorded rather
+  than suppressed.
 - **End-effect ordering:** the end-effect factor is applied after the hook, so
   the paper's Du–Selig → tip-loss order is preserved by construction; the tip
   lift is additionally reduced by the tip-loss model.

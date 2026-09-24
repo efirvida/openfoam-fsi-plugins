@@ -338,6 +338,43 @@ secondary, documents the ≈2× `c_ref_t`-vs-measured-CT definitional caveat
 without fixing it, and exits non-zero naming the offending variant/metric on a
 miss. The production campaign stays prepared-only.
 
+#### 12. Restore the Du–Selig prefactor form (arXiv Eqs. 11–12 transcription error)
+
+**Files:**
+- `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineElement/actuatorLineElement.{H,C}`
+- `turbinesFoam/tests/test_rotational_augmentation.py`
+- `turbinesFoam/README.md`
+- `openspec/changes/rotational-augmentation/{design.md,research-formulation-fidelity.md}`
+
+**Problem:** The implemented `fL`/`fD` matched Eqs. 11–12 as *printed* by
+Yang & Sotiropoulos (arXiv:1702.02108v4), but that printed form —
+`(1.6(c/r)a − X)/(0.1267b + X) − 1` — is a transcription error. It treats
+`1.6(c/r)` and `0.1267` as numerator/denominator terms instead of a prefactor,
+which inverts the drag-correction sign over most of the blade and enlarges the
+outboard `fL < 0` region roughly fourfold by span.
+
+**Fix:** restored the original Du & Selig (1998) prefactor form for both `fL`
+and `fD` (`(1.6(c/r)/0.1267)·(a − X)/(b + X) − 1`, `a`/`b` the fraction
+constants, not an exponent), and expanded the in-code documentation
+(formulation, symbols, primary source, independent cross-checks, the
+transcription-error note, the constants `a=b=d=1`, the unclamped outboard
+`fL<0`/`fD<0` behaviour and the `c/r`/`R/r`/`Λ` inputs). The reference test and
+the design/README formulation text were updated to the primary-source form. The
+switch semantics, exponent `(d/Λ)(R/r)`, `Λ`, and the no-clamp decision are
+unchanged. Evidence and cross-checks (NREL `AirfoilPrep.py`, BYU `CCBlade.jl`,
+Munduate 2002, IOP 2024, Li/Liu/Yang 2022 *Energies* 15:6533):
+`openspec/changes/rotational-augmentation/research-formulation-fidelity.md`.
+
+**Measured outcome.** Re-running the committed 0.25-rev D/32 proxy with the
+corrected form (build/test job `11600617`; proxy jobs `11600623`, `11600630`,
+`11600635`) moves the U13 augmentation-on integrated `cp` from `−0.051234`
+(split form) to `−0.000080`, and the U7 `cp` from `+0.309268` to `+0.344433`
+(root-off `+0.336636` → `+0.373306`). Analytically, `fL` now crosses zero at
+`r/R ≈ 0.90` (was `≈ 0.69`) and `fD` stays positive out to `r/R ≈ 0.75` (was
+negative beyond `≈ 0.36`). The U13 primary criterion (`cp`/`ct` > 0) still fails
+— the corrected value is ≈0, within the short-window spread — so the harness
+continues to fail loudly and the criterion is left unweakened.
+
 ---
 
 ### Bug Fixes (FSI Physics)
