@@ -370,7 +370,9 @@ def test_runner_lets_yaml_govern_rotational_augmentation(tmp_path):
     `--rotational-augmentation` is forwarded only when requested. With the YAML
     set to `true`, a prepare-only run renders `active on;`; an explicit
     `--rotational-augmentation off` overrides it; an invalid value is rejected
-    before any render.
+    before any render. The same runner contract forwards `--root-effects off`
+    (the augmented candidate `--rotational-augmentation on --root-effects off`)
+    to the renderer.
     """
     sandbox = tmp_path / "sandbox"
     package = sandbox / "validation" / "phaseVI"
@@ -435,6 +437,16 @@ def test_runner_lets_yaml_govern_rotational_augmentation(tmp_path):
     rejected = prepare("--rotational-augmentation", "bogus")
     assert rejected.returncode == 2
     assert "on or off" in rejected.stderr
+
+    # `--root-effects off` is forwarded to the renderer (the augmented
+    # candidate); an invalid value is rejected before any render.
+    root_off = prepare("--root-effects", "off")
+    assert root_off.returncode == 0, root_off.stderr
+    rendered = (run_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+    assert "rootEffects off;" in block(rendered, "GlauertCoeffs")
+    bad_root = prepare("--root-effects", "bogus")
+    assert bad_root.returncode == 2
+    assert "on or off" in bad_root.stderr
 
 
 def test_root_effect_ablation_rendered(cfg, tmp_path):

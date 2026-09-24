@@ -44,8 +44,11 @@ scripts/                  runners, mesh/stage tooling, comparison
   slurm/stage3.slurm      prepared-only IDDES + nChordwise array (do not submit)
   slurm/stage3-d64.slurm  prepared-only D/64 sensitivity array (do not submit)
   slurm/asm-mesh.slurm    prepared-only ASM-mesh D/32 gate + D/48 array (do not submit)
+  slurm/campaign-rotational-augmentation.slurm
+                          prepared-only aug+root-off power-curve array (do not submit)
 runs/                     rendered run directories (gitignored)
 results/                  comparison output (gitignored)
+CAMPAIGN.md               prepared rotational-augmentation campaign (do not submit)
 ```
 
 ## Environment
@@ -104,6 +107,7 @@ refines z like x/y); recorded in `design.md` §5 and `config/case.yaml`.
 scripts/runPhaseVI.sh -m alm|asm|asm-mesh -u <speed> [-mesh coarse|fine|ultra]
                       [--domain long|squat] [-s H|S] [--solver urans|iddes]
                       [--nchordwise N] [--ranks N] [--stage0] [--restart]
+                      [--rotational-augmentation on|off] [--root-effects on|off]
                       [--run] [--submit]
 ```
 
@@ -193,6 +197,14 @@ deliberately not staged, so no blanket job array can pick it up.
 speed, mesh, sequence), 48 ranks, ≤ 96 h per task, restart from `latestTime`.
 It refuses to run without `PHASEVI_LONG_QUEUE_AUTHORIZED=1`, and no script
 submits it automatically.
+
+The rotational-augmentation candidate campaign (three models, the full staged
+curve at D/32 plus a D/48 spot-check, `--rotational-augmentation on
+--root-effects off`) is prepared in
+`scripts/slurm/campaign-rotational-augmentation.slurm`; its matrix, launch
+command, baseline, acceptance criteria and the association submit-limit caveat
+are documented in `CAMPAIGN.md`. It is prepared only and refuses to run without
+`PHASEVI_LONG_QUEUE_AUTHORIZED=1`.
 
 ### Stage 3 arrays (prepared only)
 

@@ -396,6 +396,35 @@ writes into distinct `proxy-asm-mesh-U*` directories, leaving the committed ALM
 matrix and its behavior byte-identical. The submit command exports `PROXY_MODEL`
 so the chunked wrapper runs the selected model.
 
+#### 14. Prepare the rotational-augmentation power-curve campaign array
+
+**Files:**
+- `turbinesFoam/validation/phaseVI/scripts/slurm/campaign-rotational-augmentation.slurm` (new)
+- `turbinesFoam/validation/phaseVI/scripts/runPhaseVI.sh`
+- `turbinesFoam/validation/phaseVI/CAMPAIGN.md` (new)
+- `turbinesFoam/validation/phaseVI/README.md`
+- `turbinesFoam/tests/test_phasevi_case.py`
+
+**Problem:** The converged phase gate for the rotational-augmentation change
+(archive-report finding C-1, which the 0.25-rev proxy cannot resolve) had no
+prepared, launchable matrix: the candidate arm (augmentation on + root effects
+off) across ALM, ASM and ASM-MESH was described but not staged. `runPhaseVI.sh`
+also had no way to request the render-time root-effect ablation
+(`--root-effects`), so the candidate could not be run through the runner.
+
+**Fix:** a prepared-only 21-task array (`sequana_cpu`, 48 ranks, ≤ 96 h) maps
+each index to a `(model, speed, mesh)` tuple — the full staged curve at D/32
+(7/10/13/15/25 m/s for all three models) plus a D/48 spot-check at 7 and 13 m/s
+— and invokes `runPhaseVI.sh --rotational-augmentation on --root-effects off
+--run` behind the `PHASEVI_LONG_QUEUE_AUTHORIZED=1` gate (exit 5 otherwise,
+never submitted). The runner gains `--root-effects on|off`, validated and
+forwarded to `generate_case.py` in the same way as `--rotational-augmentation`,
+and a runner contract test covers it. `CAMPAIGN.md` records the matrix, launch
+command, the ±15 % power/torque/thrust acceptance bands, the baseline (the
+ALM/ASM `aug off` 2026-09-21 results), the D/48-with-new-physics rationale and
+the association submit-limit caveat (the 21 array tasks count against
+`MaxSubmitJobs=24`). No job is submitted by this change.
+
 ---
 
 ### Bug Fixes (FSI Physics)

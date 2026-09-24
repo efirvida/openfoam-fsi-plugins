@@ -6,7 +6,8 @@
 #   runPhaseVI.sh -m alm|asm|asm-mesh -u <wind-speed> [-mesh coarse|fine|ultra]
 #                 [--domain long|squat] [-s H|S] [--solver urans|iddes]
 #                 [--nchordwise N] [--ranks N] [--stage0] [--restart]
-#                 [--rotational-augmentation on|off] [--run] [--submit]
+#                 [--rotational-augmentation on|off] [--root-effects on|off]
+#                 [--run] [--submit]
 #
 # -m/-u select the model and the per-speed measured TSR from config/case.yaml.
 # -mesh selects the mesh (default coarse = D/32); -s S selects the Sequence S
@@ -31,9 +32,11 @@
 # development queue. --restart resumes from the latest written time (falls back
 # to startTime when no time has been written yet). --rotational-augmentation
 # on|off overrides config/case.yaml for this render; when the flag is absent the
-# YAML `actuator.rotational_augmentation.active` value governs unchanged. --run
-# executes decomposePar and mpirun (inside a Slurm allocation); --submit hands
-# the run to Slurm.
+# YAML `actuator.rotational_augmentation.active` value governs unchanged.
+# --root-effects on|off likewise overrides `actuator.end_effects.root` for this
+# render (the Glauert root-effect ablation); absent, the YAML value governs.
+# --run executes decomposePar and mpirun (inside a Slurm allocation); --submit
+# hands the run to Slurm.
 #
 # Exit codes:
 #   2  unsupported input (model, speed, mesh, domain, sequence, flag
@@ -47,7 +50,7 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/.." && pwd)
 
 usage() {
-    sed -n '2,43p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,46p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 model=""
@@ -59,6 +62,7 @@ solver=urans
 nchordwise=""
 ranks_override=""
 rotational_augmentation=""
+root_effects=""
 stage0=0
 restart=0
 run=0
@@ -74,6 +78,7 @@ while [ $# -gt 0 ]; do
         --nchordwise) nchordwise="$2"; shift ;;
         --ranks) ranks_override="$2"; shift ;;
         --rotational-augmentation) rotational_augmentation="$2"; shift ;;
+        --root-effects) root_effects="$2"; shift ;;
         --stage0) stage0=1 ;;
         --restart) restart=1 ;;
         --run) run=1 ;;
@@ -136,6 +141,12 @@ if [ -n "$rotational_augmentation" ]; then
     case "$rotational_augmentation" in
         on|off) ;;
         *) echo "ERROR: --rotational-augmentation must be on or off" >&2; exit 2 ;;
+    esac
+fi
+if [ -n "$root_effects" ]; then
+    case "$root_effects" in
+        on|off) ;;
+        *) echo "ERROR: --root-effects must be on or off" >&2; exit 2 ;;
     esac
 fi
 if [ "$submit" -eq 1 ] && { [ "$solver" = "iddes" ] || [ -n "$nchordwise" ] \
@@ -208,6 +219,9 @@ if [ -n "$nchordwise" ]; then
 fi
 if [ -n "$rotational_augmentation" ]; then
     render_args="$render_args --rotational-augmentation $rotational_augmentation"
+fi
+if [ -n "$root_effects" ]; then
+    render_args="$render_args --root-effects $root_effects"
 fi
 if [ "$stage0" -eq 1 ]; then
     render_args="$render_args --end-revs 0.25"
