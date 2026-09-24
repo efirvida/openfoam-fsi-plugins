@@ -798,9 +798,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--rotational-augmentation",
         choices=("on", "off"),
-        default="off",
+        default=None,
         help="render the Du-Selig rotational-augmentation switch; the default "
-             "off matches the committed case (config/case.yaml)",
+             "comes from config/case.yaml (off). `on`/`off` overrides it",
     )
     parser.add_argument(
         "--root-effects",
@@ -823,7 +823,8 @@ def main(argv: list[str] | None = None) -> int:
         cfg = load_config(args.config)
         case_dir = args.case_dir.resolve()
         augmentation = dict(cfg["actuator"]["rotational_augmentation"])
-        augmentation["active"] = args.rotational_augmentation == "on"
+        if args.rotational_augmentation is not None:
+            augmentation["active"] = args.rotational_augmentation == "on"
         root_effects = (
             None if args.root_effects is None else args.root_effects == "on"
         )

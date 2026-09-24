@@ -6,7 +6,7 @@
 #   runPhaseVI.sh -m alm|asm|asm-mesh -u <wind-speed> [-mesh coarse|fine|ultra]
 #                 [--domain long|squat] [-s H|S] [--solver urans|iddes]
 #                 [--nchordwise N] [--ranks N] [--stage0] [--restart]
-#                 [--run] [--submit]
+#                 [--rotational-augmentation on|off] [--run] [--submit]
 #
 # -m/-u select the model and the per-speed measured TSR from config/case.yaml.
 # -mesh selects the mesh (default coarse = D/32); -s S selects the Sequence S
@@ -29,8 +29,11 @@
 #
 # --stage0 caps the run at 0.25 revolutions (spec bound 0.3) for the authorized
 # development queue. --restart resumes from the latest written time (falls back
-# to startTime when no time has been written yet). --run executes decomposePar
-# and mpirun (inside a Slurm allocation); --submit hands the run to Slurm.
+# to startTime when no time has been written yet). --rotational-augmentation
+# on|off overrides config/case.yaml for this render; when the flag is absent the
+# YAML `actuator.rotational_augmentation.active` value governs unchanged. --run
+# executes decomposePar and mpirun (inside a Slurm allocation); --submit hands
+# the run to Slurm.
 #
 # Exit codes:
 #   2  unsupported input (model, speed, mesh, domain, sequence, flag
@@ -44,7 +47,7 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/.." && pwd)
 
 usage() {
-    sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,43p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 model=""
@@ -55,6 +58,7 @@ sequence=H
 solver=urans
 nchordwise=""
 ranks_override=""
+rotational_augmentation=""
 stage0=0
 restart=0
 run=0
@@ -69,6 +73,7 @@ while [ $# -gt 0 ]; do
         --solver) solver="$2"; shift ;;
         --nchordwise) nchordwise="$2"; shift ;;
         --ranks) ranks_override="$2"; shift ;;
+        --rotational-augmentation) rotational_augmentation="$2"; shift ;;
         --stage0) stage0=1 ;;
         --restart) restart=1 ;;
         --run) run=1 ;;
@@ -126,6 +131,12 @@ if [ -n "$ranks_override" ]; then
         echo "ERROR: --ranks must be a positive integer" >&2
         exit 2
     fi
+fi
+if [ -n "$rotational_augmentation" ]; then
+    case "$rotational_augmentation" in
+        on|off) ;;
+        *) echo "ERROR: --rotational-augmentation must be on or off" >&2; exit 2 ;;
+    esac
 fi
 if [ "$submit" -eq 1 ] && { [ "$solver" = "iddes" ] || [ -n "$nchordwise" ] \
         || [ -n "$ranks_override" ]; }; then
@@ -194,6 +205,9 @@ echo "Preparing $run_id in $run_dir"
 render_args="--mesh $mesh --speed $speed --domain $domain --sequence $sequence --case-dir $run_dir --solver $solver --ranks $ranks"
 if [ -n "$nchordwise" ]; then
     render_args="$render_args --n-chordwise $nchordwise"
+fi
+if [ -n "$rotational_augmentation" ]; then
+    render_args="$render_args --rotational-augmentation $rotational_augmentation"
 fi
 if [ "$stage0" -eq 1 ]; then
     render_args="$render_args --end-revs 0.25"

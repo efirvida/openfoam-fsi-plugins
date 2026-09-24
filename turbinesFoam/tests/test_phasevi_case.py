@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 TESTS_DIR = Path(__file__).resolve().parent
 TURBINESFOAM = TESTS_DIR.parent
@@ -306,6 +307,134 @@ def test_rotational_augmentation_rendered(cfg, tmp_path):
     for name in ("ALM", "ASM", "ASM-MESH"):
         rendered = (case_dir / "system" / f"fvOptions.{name}").read_text()
         assert "active on;" in block(rendered, "rotationalAugmentation")
+
+
+def test_rotational_augmentation_yaml_governs_and_flag_overrides(cfg, tmp_path):
+    """The YAML `active` value drives the render; the CLI flag overrides it.
+
+    Mirrors the `--root-effects` contract: an absent flag leaves the YAML value
+    (`config/case.yaml`) in charge; a present flag wins in both directions.
+    """
+    def run(config, *flags, tag):
+        case_dir = tmp_path / tag
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(PACKAGE / "tools" / "generate_case.py"),
+                "--config", str(config),
+                *flags,
+                "--case-dir", str(case_dir),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        blocks = {
+            name: block(
+                (case_dir / "system" / f"fvOptions.{name}").read_text(),
+                "rotationalAugmentation",
+            )
+            for name in ("ALM", "ASM", "ASM-MESH")
+        }
+        return blocks
+
+    def yaml_with(active):
+        variant = copy.deepcopy(cfg)
+        variant["actuator"]["rotational_augmentation"]["active"] = active
+        path = tmp_path / f"case-active-{active}.yaml"
+        path.write_text(yaml.safe_dump(variant, sort_keys=False))
+        return path
+
+    # YAML active: true, no CLI flag -> the switch renders on in every twin.
+    for twin, text in run(yaml_with(True), tag="yaml-on").items():
+        assert "active on;" in text, twin
+
+    # YAML active: false, no CLI flag -> unchanged default (off).
+    for twin, text in run(yaml_with(False), tag="yaml-off").items():
+        assert "active off;" in text, twin
+
+    # The flag overrides the YAML in both directions.
+    for twin, text in run(
+        yaml_with(True), "--rotational-augmentation", "off", tag="flag-off"
+    ).items():
+        assert "active off;" in text, twin
+    for twin, text in run(
+        yaml_with(False), "--rotational-augmentation", "on", tag="flag-on"
+    ).items():
+        assert "active on;" in text, twin
+
+
+def test_runner_lets_yaml_govern_rotational_augmentation(tmp_path):
+    """The runner forces no augmentation value; the YAML governs.
+
+    `--rotational-augmentation` is forwarded only when requested. With the YAML
+    set to `true`, a prepare-only run renders `active on;`; an explicit
+    `--rotational-augmentation off` overrides it; an invalid value is rejected
+    before any render.
+    """
+    sandbox = tmp_path / "sandbox"
+    package = sandbox / "validation" / "phaseVI"
+    package.parent.mkdir(parents=True)
+    shutil.copytree(
+        PACKAGE,
+        package,
+        ignore=shutil.ignore_patterns(
+            "runs", "results", "polyMesh", "__pycache__"
+        ),
+    )
+    (sandbox / "geometry").symlink_to(TURBINESFOAM / "geometry")
+    environment = package / "scripts" / "check_environment.sh"
+    environment.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    environment.chmod(0o755)
+    mesh = package / "runs" / "mesh-coarse" / "constant" / "polyMesh"
+    mesh.mkdir(parents=True)
+    (mesh / ".keep").write_text("", encoding="utf-8")
+
+    # The sandbox YAML drives the render through the runner.
+    config = package / "config" / "case.yaml"
+    variant = yaml.safe_load(config.read_text(encoding="utf-8"))
+    variant["actuator"]["rotational_augmentation"]["active"] = True
+    config.write_text(yaml.safe_dump(variant, sort_keys=False), encoding="utf-8")
+
+    shim = tmp_path / "bin"
+    shim.mkdir()
+    (shim / "python3").symlink_to(sys.executable)
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("SLURM_")
+    }
+    env["PATH"] = str(shim) + os.pathsep + env.get("PATH", "")
+
+    def prepare(*flags):
+        return subprocess.run(
+            [
+                "sh", str(package / "scripts" / "runPhaseVI.sh"),
+                "-m", "alm", "-u", "7", "-mesh", "coarse",
+                *flags,
+            ],
+            cwd=package,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    prepared = prepare()
+    assert prepared.returncode == 0, prepared.stderr
+    run_dir = package / "runs" / "alm-U7-coarse"
+    rendered = (run_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+    assert "active on;" in block(rendered, "rotationalAugmentation")
+
+    # An explicit flag overrides the YAML.
+    overridden = prepare("--rotational-augmentation", "off")
+    assert overridden.returncode == 0, overridden.stderr
+    rendered = (run_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+    assert "active off;" in block(rendered, "rotationalAugmentation")
+
+    # An invalid value is rejected before any render.
+    rejected = prepare("--rotational-augmentation", "bogus")
+    assert rejected.returncode == 2
+    assert "on or off" in rejected.stderr
 
 
 def test_root_effect_ablation_rendered(cfg, tmp_path):
