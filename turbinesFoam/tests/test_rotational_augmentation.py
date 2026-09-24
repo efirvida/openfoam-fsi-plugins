@@ -129,16 +129,23 @@ def static_cd(alpha_deg):
 
 
 def du_selig_factors(c_over_r, r_over_r, lam, a=1.0, b=1.0, d=1.0):
-    """Du-Selig Eqs. 11-12 factors ``fL`` and ``fD``."""
+    """Du-Selig Eqs. 11-12 factors ``fL`` and ``fD`` (original prefactor form).
+
+    ``1.6(c/r)/0.1267`` multiplies the fraction ``(a - X)/(b + X)``; ``a``/``b``
+    are the numerator/denominator constants, not an exponent of ``c/r``. This is
+    the primary-source (Du & Selig 1998) form, not the split form printed by
+    arXiv:1702.02108v4; see
+    ``openspec/changes/rotational-augmentation/research-formulation-fidelity.md``.
+    """
     x_l = (d / lam) * r_over_r
     x_d = (d / (2.0 * lam)) * r_over_r
     q_l = c_over_r ** x_l
     q_d = c_over_r ** x_d
     f_l = (1.0 / (2.0 * np.pi)) * (
-        (1.6 * c_over_r ** a - q_l) / (0.1267 * b + q_l) - 1.0
+        (1.6 * c_over_r / 0.1267) * ((a - q_l) / (b + q_l)) - 1.0
     )
     f_d = (1.0 / (2.0 * np.pi)) * (
-        (1.6 * c_over_r ** a - q_d) / (0.1267 * b + q_d) - 1.0
+        (1.6 * c_over_r / 0.1267) * ((a - q_d) / (b + q_d)) - 1.0
     )
     return f_l, f_d
 
@@ -159,15 +166,19 @@ def du_selig(c_over_r, r_over_r, lam, alpha_deg, cl_2d, cd_2d,
     return f_l, f_d, cl_p, cl_3d, cd_3d
 
 
+def _lambda(tsr):
+    """``Lambda = Omega*R / sqrt(U^2 + (Omega*R)^2)`` with ``Omega*R = tsr*U``."""
+    omega_r = tsr * U_REF  # Omega = tsr*U/R, so Omega*R = tsr*U
+    return omega_r / np.sqrt(U_REF ** 2 + omega_r ** 2)
+
+
 def _expected_corrected(alpha_deg, radius, tsr):
     """Expected (cl, cd) for the fixture operating point at ``alpha_deg``."""
-    omega = tsr * U_REF / ROTOR_RADIUS
-    omega_r = omega * ROTOR_RADIUS
-    lam = omega_r / np.sqrt(U_REF ** 2 + omega_r ** 2)
     cl_2d = static_cl(alpha_deg)
     cd_2d = static_cd(alpha_deg)
     _, _, _, cl_3d, cd_3d = du_selig(
-        CHORD / radius, ROTOR_RADIUS / radius, lam, alpha_deg, cl_2d, cd_2d
+        CHORD / radius, ROTOR_RADIUS / radius, _lambda(tsr),
+        alpha_deg, cl_2d, cd_2d
     )
     return cl_3d, cd_3d, cl_2d, cd_2d
 
@@ -328,13 +339,14 @@ def cylinder_case(tmp_path_factory):
 def test_du_selig_reference_values():
     """Eqs. 9-12 reproduce the hand sample, the near-tip limit and the C++."""
     # Design/spec hand sample: c/r ~ 0.271, R/r ~ 2.27, Lambda ~ 0.95,
-    # CL,p ~ 3.1 and the diagnosed static CL,2D in 0.598..0.73 -> 1.11..1.21.
+    # CL,p ~ 3.1 and the diagnosed static CL,2D in 0.598..0.73 -> 1.45..1.53.
+    # The prefactor form gives fL ~ 0.3394, not the split form's 0.2036.
     f_l, _ = du_selig_factors(0.271, 2.27, 0.95)
-    assert f_l == pytest.approx(0.2036, rel=2e-3)
+    assert f_l == pytest.approx(0.3394, rel=2e-3)
     cl_3d, _ = du_selig_corrected(f_l, 0.0, 3.1, 0.73, 0.0)
-    assert cl_3d == pytest.approx(1.213, rel=1e-2)
+    assert cl_3d == pytest.approx(1.534, rel=1e-2)
     cl_3d_control, _ = du_selig_corrected(f_l, 0.0, 3.1, 0.598, 0.0)
-    assert 1.10 <= cl_3d_control <= 1.22
+    assert 1.44 <= cl_3d_control <= 1.53
 
     # Near-tip limit: as c/r -> 0, fL -> -1/(2*pi) (recorded, never clamped).
     f_l_tip, _ = du_selig_factors(1.0e-4, 20.0, 0.95)
@@ -355,9 +367,14 @@ def test_cpp_constants_and_config_pinned():
         "..", "src", "fvOptions", "actuatorLineSource", "actuatorLineElement",
         "actuatorLineElement.C",
     )).read()
-    # Equation constants and the verified exponent forms.
-    assert "1.6*Foam::pow(cOverR, a_)" in src
-    assert "0.1267*b_" in src
+    # Equation constants and the verified exponent forms. The fix is the
+    # original Du & Selig prefactor form: 1.6(c/r)/0.1267 multiplies
+    # (a - X)/(b + X). The split form printed by arXiv:1702.02108v4 is a
+    # transcription error and must not reappear in the source.
+    assert "(1.6*cOverR/0.1267)*((a_ - qL)/(b_ + qL))" in src
+    assert "(1.6*cOverR/0.1267)*((a_ - qD)/(b_ + qD))" in src
+    assert "1.6*Foam::pow(cOverR, a_)" not in src
+    assert "0.1267*b_" not in src
     assert "(d_/lambda)*ROverR" in src
     assert "(d_/(2.0*lambda))*ROverR" in src
     assert "liftCoefficient_ += fL*(CLp - liftCoefficient_)" in src
@@ -431,8 +448,14 @@ def test_correction_applied(default_case, on_case):
         assert row["cd"] == pytest.approx(cd_3d, rel=2e-4)
         # The correction changed the output from the static polar.
         assert row["cl"] != pytest.approx(cl_2d, rel=1e-6)
-        # Inboard deep stall gains lift (fL > 0); outboard loses it (fL < 0).
-        if element == 0:
+        # The lift direction follows the sign of the analytic fL. At this
+        # fixture's radii (r/R = 0.33 and 0.78, both inboard of the ~0.90
+        # zero-crossing of the corrected prefactor form) fL > 0, so the lift
+        # rises at both elements.
+        f_l, _ = du_selig_factors(
+            CHORD / radius, ROTOR_RADIUS / radius, _lambda(TSR_ON)
+        )
+        if f_l > 0.0:
             assert row["cl"] > cl_2d
         else:
             assert row["cl"] < cl_2d

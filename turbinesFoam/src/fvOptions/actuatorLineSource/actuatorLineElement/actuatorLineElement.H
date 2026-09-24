@@ -252,7 +252,15 @@ protected:
         //- Lookup force coefficients
         void lookupCoefficients();
 
-        //- Apply the Du-Selig rotational augmentation in place
+        //- Apply the Du-Selig rotational augmentation (3D stall delay) in
+        //  place to liftCoefficient_/dragCoefficient_.
+        //  Implements Eqs. 9-12 of Du & Selig (1998), AIAA-98-0021, in the
+        //  original prefactor form, with the published constants a = b = d = 1.
+        //  The lift factor tends to -1/(2*pi) as c/r -> 0; that outboard sign
+        //  change is inherent to the model and is deliberately not clamped.
+        //  The definition in actuatorLineElement.C documents the full
+        //  formulation, the independent source cross-checks and the
+        //  arXiv:1702.02108v4 transcription-error note.
         void correctRotationalAugmentation();
 
         //- Calculate projection width epsilon

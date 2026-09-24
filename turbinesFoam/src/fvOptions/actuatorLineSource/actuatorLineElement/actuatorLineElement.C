@@ -288,10 +288,68 @@ void Foam::fv::actuatorLineElement::lookupCoefficients()
 
 void Foam::fv::actuatorLineElement::correctRotationalAugmentation()
 {
-    // The Du-Selig correction is defined relative to the profile's zero-lift
-    // reference. A degenerate placeholder table (the Phase VI root `cylinder`
-    // has only +/-180 deg) has no such reference; skip the correction rather
-    // than fabricate one (no invented clamp, design section 2.4).
+    // Rotationally augmented (3D stall-delayed) blade-load correction.
+    //
+    // Formulation -- Du & Selig (1998), AIAA-98-0021:
+    //
+    //     CL,3D = CL,2D + fL*(CL,p - CL,2D)                         (Eq. 9)
+    //     CD,3D = CD,2D - fD*(CD,2D - CD,0)                         (Eq. 10)
+    //     fL = (1/2pi)[ (1.6(c/r)/0.1267)*(a - X_L)/(b + X_L) - 1 ] (Eq. 11)
+    //     fD = (1/2pi)[ (1.6(c/r)/0.1267)*(a - X_D)/(b + X_D) - 1 ] (Eq. 12)
+    //
+    // Symbols:
+    //
+    //     CL,2D, CD,2D  static two-dimensional coefficients at the element's
+    //                   angle of attack (looked up in calculateForce)
+    //     CL,p = 2pi(alpha - alpha0)   potential-flow lift
+    //     alpha0        zero-lift angle of attack
+    //     CD,0          two-dimensional drag at zero angle of attack (the
+    //                   paper's definition; mapped here to the polar's
+    //                   zero-lift drag, a documented semantic mismatch)
+    //     c/r          chordLength_/radius_     local chord over local radius
+    //     R/r          rotorRadius_/radius_     rotor radius over local radius
+    //     Lambda       Omega*R/sqrt(|U|^2 + (Omega*R)^2)   tip-speed ratio,
+    //                   with R = rotorRadius_, U = freeStreamVelocity_
+    //     X_L          (c/r)^((d/Lambda)(R/r))
+    //     X_D          (c/r)^((d/(2 Lambda))(R/r))
+    //     a, b, d       published constants, all equal to 1 (no calibration)
+    //
+    // Note the prefactor form: 1.6(c/r)/0.1267 multiplies the fraction
+    // (a - X)/(b + X); a and b are the numerator/denominator constants, not
+    // an exponent or multiplier of (c/r).
+    //
+    // Primary source: Du & Selig, "A 3-D stall-delay model for horizontal axis
+    // wind turbine performance prediction", AIAA-98-0021 (1998). The prefactor
+    // form above is the original formulation, independently reproduced by:
+    //
+    //   - NREL AirfoilPrep.py (Hansen/Ning), the NREL reference implementation
+    //   - BYU CCBlade.jl (du.a/du.b/du.d, expon = d/(Lambda*rR))
+    //   - Munduate (2002), PhD thesis, Univ. of Glasgow, Eq. 3.6
+    //   - IOP 2024, J. Phys. Conf. Ser. 2767:022029, Eq. (3)
+    //   - Li, Liu & Yang (2022), Energies 15(18):6533, Eqs. (21)-(22)
+    //
+    // Fidelity note: arXiv:1702.02108v4 (Yang & Sotiropoulos) prints a
+    // *different*, split form -- (1.6(c/r)a - X)/(0.1267b + X) - 1 -- which
+    // treats 1.6(c/r) and 0.1267 as numerator/denominator terms instead of a
+    // prefactor. That printed form is a transcription error: it flips the sign
+    // of fD over most of the blade and is inconsistent with the same author's
+    // later peer-reviewed treatment (Energies 15:6533). This implementation
+    // follows the primary source, not the preprint. Full evidence:
+    // openspec/changes/rotational-augmentation/research-formulation-fidelity.md
+    //
+    // Outboard behaviour: as c/r -> 0 (near the tip) the prefactor vanishes and
+    // fL -> -1/(2pi) ~ -0.159; fD likewise turns negative in a thin tip band.
+    // That sign change is inherent to Du & Selig, not an artefact: the -1 and
+    // the tip limit appear in every reproduction listed above. It is NOT
+    // clamped -- no invented fL >= 0 gate or radial restriction. The citable
+    // safeguard used by NREL/CCBlade is an angle-of-attack taper (a separate
+    // change); this change pairs Du & Selig with the existing end-effect model
+    // instead.
+    //
+    // The correction is defined relative to the profile's zero-lift reference.
+    // A degenerate placeholder table (the Phase VI root `cylinder` has only
+    // +/-180 deg) has no such reference; skip the correction rather than
+    // fabricate one.
     if (not profileData_.hasZeroLiftReference())
     {
         return;
@@ -306,16 +364,19 @@ void Foam::fv::actuatorLineElement::correctRotationalAugmentation()
         magSqr(freeStreamVelocity_) + sqr(omegaR)
     );
 
-    // Du-Selig Eqs. 11-12: the exponent is (d/Lambda)(R/r) for fL and
-    // (d/(2 Lambda))(R/r) for fD (a = b = d = 1 by default)
+    // Exponents (d/Lambda)(R/r) for fL and (d/(2 Lambda))(R/r) for fD; a = b =
+    // d = 1 by default. The text-dump reading d*Lambda*R/r is a layout
+    // artefact and is not used.
     const scalar xL = (d_/lambda)*ROverR;
     const scalar xD = (d_/(2.0*lambda))*ROverR;
     const scalar qL = Foam::pow(cOverR, xL);
     const scalar qD = Foam::pow(cOverR, xD);
+
+    // Du-Selig Eqs. 11-12 (original prefactor form)
     const scalar fL = (1.0/(2.0*pi))
-        *((1.6*Foam::pow(cOverR, a_) - qL)/(0.1267*b_ + qL) - 1.0);
+        *((1.6*cOverR/0.1267)*((a_ - qL)/(b_ + qL)) - 1.0);
     const scalar fD = (1.0/(2.0*pi))
-        *((1.6*Foam::pow(cOverR, a_) - qD)/(0.1267*b_ + qD) - 1.0);
+        *((1.6*cOverR/0.1267)*((a_ - qD)/(b_ + qD)) - 1.0);
 
     // Du-Selig Eqs. 9-10, in place on the static coefficients
     const scalar alpha = degToRad(angleOfAttack_);
