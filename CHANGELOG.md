@@ -375,6 +375,27 @@ negative beyond `≈ 0.36`). The U13 primary criterion (`cp`/`ct` > 0) still fai
 — the corrected value is ≈0, within the short-window spread — so the harness
 continues to fail loudly and the criterion is left unweakened.
 
+#### 13. Add an ALM/ASM-mesh model selector to the proxy harness
+
+**Files:**
+- `turbinesFoam/validation/phaseVI/scripts/proxyRotationalAugmentation.py`, `scripts/proxyRotationalAugmentation.sh` (updated)
+- `turbinesFoam/tests/test_phasevi_proxy.py`
+
+**Problem:** The committed proxy harness hard-coded the ALM element
+(`MODEL = "alm"`), so the mesh-backed surface variant (`asm-mesh`) could not be
+exercised at run time — the W-3 finding: ASM-mesh structural inheritance was
+guaranteed (both models consume `element.force()` in the shared chain) but never
+confirmed by a real run.
+
+**Fix:** `--model alm|asm-mesh` (and `PROXY_MODEL` in the sbatch wrapper) selects
+the render identity. `asm-mesh` renders `actuatorSurfaceElement` with
+`nChordwise` and the staged `surfaceGeometry` through the same
+`generate_case.render_fv_options` call, prepares its base via
+`runPhaseVI.sh -m asm-mesh` (which stages the sha256-checked blade STL) and
+writes into distinct `proxy-asm-mesh-U*` directories, leaving the committed ALM
+matrix and its behavior byte-identical. The submit command exports `PROXY_MODEL`
+so the chunked wrapper runs the selected model.
+
 ---
 
 ### Bug Fixes (FSI Physics)

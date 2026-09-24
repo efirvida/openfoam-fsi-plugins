@@ -200,8 +200,8 @@ def test_no_production_submission(cfg):
 
 def test_prepare_isolates_variant_toggles(tmp_path, cfg, monkeypatch):
     """Each prepared copy keeps its own fvOptions despite the hardlink base."""
-    def fake_base(work_root, speed, ranks, force):
-        base = proxy.base_run_dir(work_root, speed)
+    def fake_base(work_root, speed, ranks, force, model=proxy.MODEL):
+        base = proxy.base_run_dir(work_root, speed, model)
         (base / "system").mkdir(parents=True)
         # The base twin is hardlinked into every variant; a shared inode would
         # make the last write win.
@@ -222,6 +222,41 @@ def test_prepare_isolates_variant_toggles(tmp_path, cfg, monkeypatch):
             # The base twin must stay untouched (the inode was not shared).
             base = proxy.base_run_dir(tmp_path, speed)
             assert (base / "system" / "fvOptions").read_text() == "base\n"
+
+
+def test_model_selector(cfg):
+    """The proxy model selector switches ALM <-> the mesh-backed surface."""
+    assert proxy.MODEL_CHOICES == ("alm", "asm-mesh")
+    assert proxy.MODEL_SPECS["alm"].surface_geometry is None
+    assert proxy.MODEL_SPECS["asm-mesh"].surface_geometry is not None
+
+    alm = proxy.variant_matrix(cfg, model="alm")
+    mesh = proxy.variant_matrix(cfg, model="asm-mesh")
+    # Both matrices share every key but the two toggles internally.
+    proxy.assert_variants_share_keys(cfg, model="asm-mesh")
+    for speed in proxy.SPEEDS:
+        assert "elementType actuatorLineElement;" in alm[(speed, "control")]
+        assert "surfaceGeometry" not in alm[(speed, "control")]
+        assert (
+            "elementType actuatorSurfaceElement;" in mesh[(speed, "control")]
+        )
+        assert "nChordwise" in mesh[(speed, "control")]
+        assert (
+            f'surfaceGeometry "{proxy.MODEL_SPECS["asm-mesh"].surface_geometry}";'
+            in mesh[(speed, "control")]
+        )
+
+    # Directory naming and the submit export keep the two models apart.
+    variant = {"name": "control"}
+    assert proxy.variant_dir(Path("/w"), "7", variant) == Path("/w/proxy-U7-control")
+    assert proxy.variant_dir(Path("/w"), "7", variant, "asm-mesh") == Path(
+        "/w/proxy-asm-mesh-U7-control"
+    )
+    assert proxy.base_run_dir(Path("/w"), "7", "asm-mesh") == Path(
+        "/w/asm-mesh-U7-coarse-s0"
+    )
+    command = proxy.build_submit_command(Path("job.sh"), proxy.DEV_QUEUE, "asm-mesh")
+    assert any("PROXY_MODEL=asm-mesh" in part for part in command)
 
 
 def test_step_selector():

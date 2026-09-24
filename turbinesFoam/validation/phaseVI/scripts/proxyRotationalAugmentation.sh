@@ -14,8 +14,13 @@
 # authorized harness path, which refuses any production queue. The production
 # campaign stays prepared-only.
 #
+# The model defaults to `alm`; pass `--model asm-mesh` (or set PROXY_MODEL) for
+# the mesh-backed surface model. The `--run` path prepares the base through
+# `runPhaseVI.sh -m "$model"`, which also stages the blade STL.
+#
 # Usage:
-#   sbatch validation/phaseVI/scripts/proxyRotationalAugmentation.sh [SPEED:VARIANT ...]
+#   sbatch validation/phaseVI/scripts/proxyRotationalAugmentation.sh \
+#       [--model alm|asm-mesh] [SPEED:VARIANT ...]
 #SBATCH -p sequana_cpu_dev
 #SBATCH --ntasks=48
 #SBATCH --nodes=1
@@ -60,9 +65,25 @@ if [ ! -f "$here/proxyRotationalAugmentation.py" ]; then
 fi
 
 step_args=""
+model=${PROXY_MODEL:-alm}
+expect_model=0
 for step in "$@"; do
-    step_args="$step_args --step $step"
+    if [ "$expect_model" -eq 1 ]; then
+        model=$step
+        expect_model=0
+        continue
+    fi
+    case "$step" in
+        --model) expect_model=1 ;;
+        --model=*) model=${step#--model=} ;;
+        *) step_args="$step_args --step $step" ;;
+    esac
 done
+if [ "$expect_model" -eq 1 ]; then
+    echo "ERROR: --model requires a value (alm|asm-mesh)" >&2
+    exit 2
+fi
 
 # shellcheck disable=SC2086
-python3 "$here/proxyRotationalAugmentation.py" --run --ranks 48 $step_args
+python3 "$here/proxyRotationalAugmentation.py" --run --ranks 48 \
+    --model "$model" $step_args

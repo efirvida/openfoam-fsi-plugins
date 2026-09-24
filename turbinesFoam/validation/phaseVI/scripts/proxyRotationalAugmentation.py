@@ -21,11 +21,17 @@ refuses any production queue, and no code path cancels or modifies a
 production job: the production campaign stays prepared-only.
 
 Usage:
-    proxyRotationalAugmentation.py --check|--dry-run
-    proxyRotationalAugmentation.py --prepare [--force]
-    proxyRotationalAugmentation.py --run
-    proxyRotationalAugmentation.py --evaluate
-    proxyRotationalAugmentation.py --submit
+    proxyRotationalAugmentation.py --check|--dry-run [--model alm|asm-mesh]
+    proxyRotationalAugmentation.py --prepare [--force] [--model alm|asm-mesh]
+    proxyRotationalAugmentation.py --run [--model alm|asm-mesh]
+    proxyRotationalAugmentation.py --evaluate [--model alm|asm-mesh]
+    proxyRotationalAugmentation.py --submit [--model alm|asm-mesh]
+
+`--model` selects the ALM (default, the committed matrix) or the mesh-backed
+surface model (`asm-mesh`). `asm-mesh` renders the `actuatorSurfaceElement`
+twin with the staged blade surface and stages the committed STL through
+`runPhaseVI.sh -m asm-mesh`; both models consume the same actuator-element load
+chain, so the augmentation/root toggles are the only experimental changes.
 
 `--check` renders the matrix in memory and prints the configuration without
 submitting anything. `--prepare` renders the self-contained variant copies;
@@ -44,6 +50,7 @@ import os
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -72,6 +79,36 @@ RUN_RANKS = 48
 DEV_QUEUE = "sequana_cpu_dev"
 SEQUENCE = "H"
 MODEL = "alm"
+
+#: Proxy model selector. The default `alm` is the committed matrix; `asm-mesh`
+#: is the mesh-backed surface model. Element type and surface key are the only
+#: render differences; both feed the same actuator-element load chain
+#: (`element.force()`), where the rotational augmentation lives.
+SURFACE_MODEL = "asm-mesh"
+
+
+@dataclass(frozen=True)
+class ModelSpec:
+    """Render identity of one proxy model."""
+
+    name: str
+    element_type: str
+    surface_geometry: str | None
+
+    @property
+    def variant_prefix(self) -> str:
+        return "proxy" if self.name == MODEL else f"proxy-{self.name}"
+
+
+MODEL_SPECS: dict[str, ModelSpec] = {
+    MODEL: ModelSpec(MODEL, generate_case.ALM_ELEMENT, None),
+    SURFACE_MODEL: ModelSpec(
+        SURFACE_MODEL,
+        generate_case.ASM_ELEMENT,
+        generate_case.SURFACE_GEOMETRY,
+    ),
+}
+MODEL_CHOICES = tuple(MODEL_SPECS)
 
 #: Any queue containing one of these markers is a production queue and is
 #: refused by `--submit` (prepared-only boundary).
@@ -112,29 +149,41 @@ ELEMENT_DIR = Path("postProcessing") / "actuatorLineElements" / "0"
 # * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 
 
-def variant_dir(work_root: Path, speed: str, variant: dict[str, Any]) -> Path:
-    return work_root / f"proxy-U{speed}-{variant['name']}"
+def variant_dir(
+    work_root: Path, speed: str, variant: dict[str, Any], model: str = MODEL
+) -> Path:
+    spec = MODEL_SPECS[model]
+    return work_root / f"{spec.variant_prefix}-U{speed}-{variant['name']}"
 
 
-def base_run_dir(work_root: Path, speed: str) -> Path:
-    return work_root / f"{MODEL}-U{speed}-{MESH}-s0"
+def base_run_dir(work_root: Path, speed: str, model: str = MODEL) -> Path:
+    return work_root / f"{model}-U{speed}-{MESH}-s0"
 
 
 def augmentation_block(active: bool) -> dict[str, Any]:
     return {**AUGMENTATION, "active": bool(active)}
 
 
-def render_variant(cfg, speed, case_dir: Path, variant: dict[str, Any]) -> str:
-    """Render the ALM `fvOptions` twin for one proxy variant."""
+def render_variant(
+    cfg, speed, case_dir: Path, variant: dict[str, Any], model: str = MODEL
+) -> str:
+    """Render the proxy `fvOptions` twin for one model and variant."""
+    spec = MODEL_SPECS[model]
+    surface = (
+        {}
+        if spec.surface_geometry is None
+        else {"surface_geometry": spec.surface_geometry}
+    )
     return generate_case.render_fv_options(
         cfg,
         speed,
         MESH,
         case_dir,
-        generate_case.ALM_ELEMENT,
+        spec.element_type,
         sequence=SEQUENCE,
         rotational_augmentation=augmentation_block(variant["augmentation"]),
         root_effects=variant["root"],
+        **surface,
     )
 
 
@@ -207,18 +256,22 @@ def assert_rendered_toggle(text: str, variant: dict[str, Any]) -> None:
         )
 
 
-def variant_matrix(cfg, case_dir: Path | None = None) -> dict[tuple[str, str], str]:
+def variant_matrix(
+    cfg, case_dir: Path | None = None, model: str = MODEL
+) -> dict[tuple[str, str], str]:
     case_dir = case_dir if case_dir is not None else PACKAGE / "case"
     return {
-        (speed, variant["name"]): render_variant(cfg, speed, case_dir, variant)
+        (speed, variant["name"]): render_variant(cfg, speed, case_dir, variant, model)
         for speed in SPEEDS
         for variant in VARIANTS
     }
 
 
-def assert_variants_share_keys(cfg, case_dir: Path | None = None) -> None:
+def assert_variants_share_keys(
+    cfg, case_dir: Path | None = None, model: str = MODEL
+) -> None:
     """Fail when variants differ in anything but the two toggles."""
-    matrix = variant_matrix(cfg, case_dir)
+    matrix = variant_matrix(cfg, case_dir, model)
     for speed in SPEEDS:
         stripped = {
             variant["name"]: toggle_stripped(matrix[(speed, variant["name"])])
@@ -241,7 +294,7 @@ def assert_variants_share_keys(cfg, case_dir: Path | None = None) -> None:
             )
 
 
-def configuration(cfg, work_root: Path) -> dict[str, Any]:
+def configuration(cfg, work_root: Path, model: str = MODEL) -> dict[str, Any]:
     return {
         "case": str(PACKAGE / "case"),
         "work_root": str(work_root),
@@ -251,7 +304,7 @@ def configuration(cfg, work_root: Path) -> dict[str, Any]:
         "revolutions": REVOLUTIONS,
         "ranks": RUN_RANKS,
         "queue": DEV_QUEUE,
-        "model": MODEL,
+        "model": model,
         "sequence": SEQUENCE,
         "variants": [
             {
@@ -297,7 +350,9 @@ def assert_dev_queue(queue: str) -> None:
         )
 
 
-def build_submit_command(job_script: Path, queue: str) -> list[str]:
+def build_submit_command(
+    job_script: Path, queue: str, model: str = MODEL
+) -> list[str]:
     """`sbatch` command for the serial chain. Never a Slurm array."""
     assert_dev_queue(queue)
     return [
@@ -305,8 +360,9 @@ def build_submit_command(job_script: Path, queue: str) -> list[str]:
         f"--partition={queue}",
         f"--ntasks={RUN_RANKS}",
         # Slurm spools the script, so `$0` no longer points at the committed
-        # wrapper; export the harness directory for it to resolve its Python.
-        f"--export=ALL,PROXY_SCRIPTS_DIR={SCRIPTS}",
+        # wrapper; export the harness directory for it to resolve its Python
+        # and the model for it to select the same render.
+        f"--export=ALL,PROXY_SCRIPTS_DIR={SCRIPTS},PROXY_MODEL={model}",
         str(job_script),
     ]
 
@@ -318,16 +374,18 @@ def _run(command: list[str], cwd: Path | None = None, check: bool = True):
     return subprocess.run(command, cwd=str(cwd) if cwd else None, check=check)
 
 
-def prepare_base(work_root: Path, speed: str, ranks: int, force: bool) -> Path:
+def prepare_base(
+    work_root: Path, speed: str, ranks: int, force: bool, model: str = MODEL
+) -> Path:
     """Prepare the committed 0.25-rev base case through `runPhaseVI.sh`."""
-    base = base_run_dir(work_root, speed)
+    base = base_run_dir(work_root, speed, model)
     if base.is_dir() and not force:
         return base
     if base.is_dir():
         shutil.rmtree(base)
     command = [
         str(SCRIPTS / "runPhaseVI.sh"),
-        "-m", MODEL,
+        "-m", model,
         "-u", speed,
         "-mesh", MESH,
         "--stage0",
@@ -339,7 +397,9 @@ def prepare_base(work_root: Path, speed: str, ranks: int, force: bool) -> Path:
     return base
 
 
-def prepare(work_root: Path, cfg, ranks: int, force: bool = False) -> list[Path]:
+def prepare(
+    work_root: Path, cfg, ranks: int, force: bool = False, model: str = MODEL
+) -> list[Path]:
     """Render the self-contained variant copies; never submits a job.
 
     Idempotent: an existing variant package is kept unless ``force`` is set, so
@@ -347,9 +407,9 @@ def prepare(work_root: Path, cfg, ranks: int, force: bool = False) -> list[Path]
     """
     prepared: list[Path] = []
     for speed in SPEEDS:
-        base = prepare_base(work_root, speed, ranks, force)
+        base = prepare_base(work_root, speed, ranks, force, model)
         for variant in VARIANTS:
-            vdir = variant_dir(work_root, speed, variant)
+            vdir = variant_dir(work_root, speed, variant, model)
             if vdir.is_dir() and not force:
                 prepared.append(vdir)
                 continue
@@ -360,7 +420,7 @@ def prepare(work_root: Path, cfg, ranks: int, force: bool = False) -> list[Path]
             if post.exists():
                 shutil.rmtree(post)
             post.mkdir(parents=True, exist_ok=True)
-            fv_options = render_variant(cfg, speed, vdir, variant)
+            fv_options = render_variant(cfg, speed, vdir, variant, model)
             # The package copy hardlinks the base files; unlink the twin first
             # so the variant's write does not silently rewrite the shared inode
             # (which would make every variant render the last write).
@@ -372,6 +432,7 @@ def prepare(work_root: Path, cfg, ranks: int, force: bool = False) -> list[Path]
             manifest = {
                 "speed_m_s": float(speed),
                 "variant": variant["name"],
+                "model": model,
                 "rotationalAugmentation": "on" if variant["augmentation"] else "off",
                 "rootEffects": "on" if variant["root"] else "off",
                 "mesh": MESH,
@@ -412,6 +473,7 @@ def run_variants(
     work_root: Path,
     ranks: int | None = None,
     steps: list[dict[str, str]] | None = None,
+    model: str = MODEL,
 ) -> int:
     """Run each selected variant serially. Requires loaded OpenFOAM."""
     if ranks is None:
@@ -424,7 +486,7 @@ def run_variants(
     for step in selected_steps(steps):
         speed = step["speed"]
         variant = by_name[step["variant"]]
-        vdir = variant_dir(work_root, speed, variant)
+        vdir = variant_dir(work_root, speed, variant, model)
         if not (vdir / "system" / "fvOptions").is_file():
             raise RuntimeError(f"{vdir} is not prepared; run --prepare first")
         post = vdir / "postProcessing"
@@ -529,7 +591,7 @@ def load_measured(speeds=SPEEDS) -> dict[str, dict[str, float]]:
     return measured
 
 
-def build_metrics(work_root: Path, cfg, measured) -> dict[str, Any]:
+def build_metrics(work_root: Path, cfg, measured, model: str = MODEL) -> dict[str, Any]:
     radius = float(cfg["turbine"]["radius"])
     area = math.pi * radius**2
     metrics: dict[str, Any] = {}
@@ -538,7 +600,7 @@ def build_metrics(work_root: Path, cfg, measured) -> dict[str, Any]:
         rho = measured[speed]["rho_kg_m3"]
         q_dyn = 0.5 * rho * area * float(speed) ** 2
         for variant in VARIANTS:
-            vdir = variant_dir(work_root, speed, variant)
+            vdir = variant_dir(work_root, speed, variant, model)
             rows = read_rows(vdir / TURBINE_CSV)
             if not rows:
                 raise ValueError(f"{vdir / TURBINE_CSV}: no data rows")
@@ -643,13 +705,15 @@ def check_gates(metrics, measured) -> tuple[list[str], dict[str, Any]]:
     return failures, report
 
 
-def evaluate(work_root: Path, cfg, output: Path | None = None) -> int:
+def evaluate(
+    work_root: Path, cfg, output: Path | None = None, model: str = MODEL
+) -> int:
     measured = load_measured()
-    metrics = build_metrics(work_root, cfg, measured)
+    metrics = build_metrics(work_root, cfg, measured, model)
     failures, report = check_gates(metrics, measured)
     report["metrics"] = metrics
     report["measured"] = measured
-    report["configuration"] = configuration(cfg, work_root)
+    report["configuration"] = configuration(cfg, work_root, model)
     payload = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if output is not None:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -676,6 +740,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--submit", action="store_true",
                         help="submit the serial chain to the development queue")
     parser.add_argument("--queue", default=DEV_QUEUE)
+    parser.add_argument("--model", choices=MODEL_CHOICES, default=MODEL,
+                        help="proxy model: alm (default) or the mesh-backed "
+                             "surface asm-mesh")
     parser.add_argument("--ranks", type=int, default=RUN_RANKS)
     parser.add_argument("--step", action="append", default=None, metavar="SPEED:VARIANT",
                         help="run only this prepared step (repeatable, for "
@@ -691,9 +758,10 @@ def main(argv: list[str] | None = None) -> int:
     cfg = load_config(args.config)
 
     if args.check:
-        assert_variants_share_keys(cfg)
-        print(json.dumps(configuration(cfg, work_root), indent=2, sort_keys=True))
-        print("check: variant matrix shares all keys but the two toggles")
+        assert_variants_share_keys(cfg, model=args.model)
+        print(json.dumps(configuration(cfg, work_root, args.model),
+                         indent=2, sort_keys=True))
+        print(f"check: {args.model} variant matrix shares all keys but the two toggles")
         print("check: submitting nothing")
         return 0
 
@@ -701,22 +769,24 @@ def main(argv: list[str] | None = None) -> int:
         # The committed wrapper is the serial chain driver; the Python harness
         # never builds an array. Production queues are refused.
         job_script = SCRIPTS / "proxyRotationalAugmentation.sh"
-        command = build_submit_command(job_script, args.queue)
+        command = build_submit_command(job_script, args.queue, args.model)
         print(" ".join(command))
         return subprocess.run(command, check=False).returncode
 
     if args.prepare or args.run:
         steps = [parse_step(step) for step in args.step] if args.step else None
         if args.run:
-            prepared = prepare(work_root, cfg, args.ranks, force=args.force)
+            prepared = prepare(work_root, cfg, args.ranks, force=args.force,
+                               model=args.model)
             print(f"prepared {len(prepared)} variants under {work_root}")
-            return run_variants(work_root, args.ranks, steps)
-        prepared = prepare(work_root, cfg, args.ranks, force=args.force)
+            return run_variants(work_root, args.ranks, steps, args.model)
+        prepared = prepare(work_root, cfg, args.ranks, force=args.force,
+                           model=args.model)
         print(f"prepared {len(prepared)} variants under {work_root}")
         return 0
 
     if args.evaluate:
-        return evaluate(work_root, cfg, args.out)
+        return evaluate(work_root, cfg, args.out, args.model)
 
     parser.error("choose one of --check/--dry-run, --prepare, --run, "
                  "--evaluate, --submit")
