@@ -5,9 +5,9 @@
 # Usage:
 #   runPhaseVI.sh -m alm|asm|asm-mesh -u <wind-speed> [-mesh coarse|fine|ultra]
 #                 [--domain long|squat] [-s H|S] [--solver urans|iddes]
-#                 [--nchordwise N] [--ranks N] [--stage0] [--restart]
-#                 [--rotational-augmentation on|off] [--root-effects on|off]
-#                 [--run] [--submit]
+#                 [--nchordwise N] [--ranks N] [--run-label WORD] [--stage0]
+#                 [--restart] [--rotational-augmentation on|off]
+#                 [--root-effects on|off] [--run] [--submit]
 #
 # -m/-u select the model and the per-speed measured TSR from config/case.yaml.
 # -mesh selects the mesh (default coarse = D/32); -s S selects the Sequence S
@@ -27,6 +27,10 @@
 # chordwise strip count (ASM family only; appends -ncN) and --ranks N overrides
 # the configured decomposition (rendered into decomposeParDict and used for
 # mpirun); inside a Slurm allocation --ranks must match SLURM_NTASKS.
+# --run-label WORD appends -WORD to the run id (`runs/<id>-WORD`) and records it
+# in run.json, so two render variants of the same (model, speed, mesh) live in
+# separate, independently restartable directories (the two-arm campaign uses it
+# to keep the augmentation/root arms apart).
 #
 # --stage0 caps the run at 0.25 revolutions (spec bound 0.3) for the authorized
 # development queue. --restart resumes from the latest written time (falls back
@@ -50,7 +54,7 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/.." && pwd)
 
 usage() {
-    sed -n '2,46p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 model=""
@@ -63,6 +67,7 @@ nchordwise=""
 ranks_override=""
 rotational_augmentation=""
 root_effects=""
+run_label=""
 stage0=0
 restart=0
 run=0
@@ -79,6 +84,7 @@ while [ $# -gt 0 ]; do
         --ranks) ranks_override="$2"; shift ;;
         --rotational-augmentation) rotational_augmentation="$2"; shift ;;
         --root-effects) root_effects="$2"; shift ;;
+        --run-label) run_label="$2"; shift ;;
         --stage0) stage0=1 ;;
         --restart) restart=1 ;;
         --run) run=1 ;;
@@ -149,9 +155,20 @@ if [ -n "$root_effects" ]; then
         *) echo "ERROR: --root-effects must be on or off" >&2; exit 2 ;;
     esac
 fi
+if [ -n "$run_label" ]; then
+    # A path-safe token: letters, digits, dot, underscore, hyphen; no leading
+    # dot/hyphen, so the appended `-<label>` cannot escape the runs/ directory.
+    case "$run_label" in
+        *[!A-Za-z0-9._-]*|.*|-*)
+            echo "ERROR: --run-label must match [A-Za-z0-9._-]+ and not start with '.' or '-'" >&2
+            exit 2
+            ;;
+    esac
+fi
 if [ "$submit" -eq 1 ] && { [ "$solver" = "iddes" ] || [ -n "$nchordwise" ] \
-        || [ -n "$ranks_override" ]; }; then
-    echo "ERROR: --submit cannot carry --solver iddes, --nchordwise or --ranks;" >&2
+        || [ -n "$ranks_override" ] || [ -n "$run_label" ]; }; then
+    echo "ERROR: --submit cannot carry --solver iddes, --nchordwise, --ranks" >&2
+    echo "  or --run-label;" >&2
     echo "  Stage 3 is submitted through its prepared arrays:" >&2
     echo "  scripts/slurm/stage3.slurm and scripts/slurm/stage3-d64.slurm." >&2
     exit 2
@@ -209,6 +226,9 @@ if [ -n "$nchordwise" ]; then
 fi
 if [ "$stage0" -eq 1 ]; then
     run_id="$run_id-s0"
+fi
+if [ -n "$run_label" ]; then
+    run_id="$run_id-$run_label"
 fi
 run_dir="$root/runs/$run_id"
 
@@ -285,7 +305,7 @@ cp -al "$mesh_dir/constant/polyMesh" "$run_dir/constant/polyMesh"
 echo "Linked shared $mesh mesh from $mesh_dir"
 
 python3 - "$run_dir" "$root" "$model" "$speed_token" "$mesh" "$domain" "$sequence" \
-    "$stage0" "$solver" "$nchordwise" "$ranks" "$staged_stl_sha256" <<'PY'
+    "$stage0" "$solver" "$nchordwise" "$ranks" "$staged_stl_sha256" "$run_label" <<'PY'
 import datetime
 import hashlib
 import json
@@ -306,7 +326,8 @@ from pathlib import Path
     nchordwise,
     ranks,
     staged_stl_sha256,
-) = sys.argv[1:13]
+    run_label,
+) = sys.argv[1:14]
 run_dir = Path(run_dir)
 root = Path(root)
 
@@ -334,6 +355,7 @@ payload = {
     "solver": solver,
     "n_chordwise": int(nchordwise) if nchordwise else None,
     "ranks": int(ranks),
+    "run_label": run_label or None,
     "stage0": stage0 == "1",
     "run_dir": str(run_dir),
     "start_time_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -403,6 +425,15 @@ else
     suggestion="$0 -m $model -u $speed_token -mesh $mesh --sequence $sequence --solver $solver --ranks $ranks"
     if [ -n "$nchordwise" ]; then
         suggestion="$suggestion --nchordwise $nchordwise"
+    fi
+    if [ -n "$run_label" ]; then
+        suggestion="$suggestion --run-label $run_label"
+    fi
+    if [ -n "$rotational_augmentation" ]; then
+        suggestion="$suggestion --rotational-augmentation $rotational_augmentation"
+    fi
+    if [ -n "$root_effects" ]; then
+        suggestion="$suggestion --root-effects $root_effects"
     fi
     echo "Prepared $run_id. Run the solver with:"
     echo "  $suggestion --run"

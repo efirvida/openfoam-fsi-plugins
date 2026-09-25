@@ -45,7 +45,7 @@ scripts/                  runners, mesh/stage tooling, comparison
   slurm/stage3-d64.slurm  prepared-only D/64 sensitivity array (do not submit)
   slurm/asm-mesh.slurm    prepared-only ASM-mesh D/32 gate + D/48 array (do not submit)
   slurm/campaign-rotational-augmentation.slurm
-                          prepared-only aug+root-off power-curve array (do not submit)
+                          prepared-only two-arm aug/root power-curve array (do not submit)
 runs/                     rendered run directories (gitignored)
 results/                  comparison output (gitignored)
 CAMPAIGN.md               prepared rotational-augmentation campaign (do not submit)
@@ -106,7 +106,8 @@ refines z like x/y); recorded in `design.md` §5 and `config/case.yaml`.
 ```sh
 scripts/runPhaseVI.sh -m alm|asm|asm-mesh -u <speed> [-mesh coarse|fine|ultra]
                       [--domain long|squat] [-s H|S] [--solver urans|iddes]
-                      [--nchordwise N] [--ranks N] [--stage0] [--restart]
+                      [--nchordwise N] [--ranks N] [--run-label WORD]
+                      [--stage0] [--restart]
                       [--rotational-augmentation on|off] [--root-effects on|off]
                       [--run] [--submit]
 ```
@@ -128,6 +129,11 @@ commit, OpenFOAM version, config sha256, variant, solver, `n_chordwise`,
   below) and appends `-iddes` to the run id.
 - `--nchordwise N` overrides the ASM chordwise strip count (ASM only; rejected
   for ALM) and appends `-ncN`; the configured default is 5.
+- `--run-label WORD` appends `-WORD` to the run id (`runs/<id>-WORD`) and records
+  it in `run.json`; `WORD` must match `[A-Za-z0-9._-]+` and not start with `.`
+  or `-`. It lets a campaign keep two render variants of the same `(model,
+  speed, mesh)` — e.g. the augmentation/root arms — in separate, independently
+  restartable directories. It is refused with `--submit`.
 - `--ranks N` overrides `decomposition.number_of_subdomains` in the rendered
   `decomposeParDict` and for `mpirun -np`; inside a Slurm allocation the runner
   fails (exit 2) unless `N == SLURM_NTASKS`.
@@ -199,11 +205,16 @@ It refuses to run without `PHASEVI_LONG_QUEUE_AUTHORIZED=1`, and no script
 submits it automatically.
 
 The rotational-augmentation candidate campaign (three models, the full staged
-curve at D/32 plus a D/48 spot-check, `--rotational-augmentation on
---root-effects off`) is prepared in
-`scripts/slurm/campaign-rotational-augmentation.slurm`; its matrix, launch
-command, baseline, acceptance criteria and the association submit-limit caveat
-are documented in `CAMPAIGN.md`. It is prepared only and refuses to run without
+curve at D/32 plus a D/48 spot-check, in two physics arms — the candidate
+`--rotational-augmentation on --root-effects off`, root-on `on/on`, plus the
+ASM-mesh control `off/on`) is prepared in
+`scripts/slurm/campaign-rotational-augmentation.slurm`. It groups its 47 runs
+into **7 array tasks** (one per model×arm, each running all its speeds
+sequentially with `--run-label`-separated run directories), so it fits the
+association's `MaxSubmitJobs=24`. Its matrix, task→run table, resource
+arithmetic (48 ranks vs the 30k cells/core heuristic), launch command, baseline
+and gap notes, acceptance criteria and the association submit-limit caveat are
+documented in `CAMPAIGN.md`. It is prepared only and refuses to run without
 `PHASEVI_LONG_QUEUE_AUTHORIZED=1`.
 
 ### Stage 3 arrays (prepared only)

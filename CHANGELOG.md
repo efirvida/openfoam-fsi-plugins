@@ -425,6 +425,39 @@ ALM/ASM `aug off` 2026-09-21 results), the D/48-with-new-physics rationale and
 the association submit-limit caveat (the 21 array tasks count against
 `MaxSubmitJobs=24`). No job is submitted by this change.
 
+#### 15. Redesign the rotational-augmentation campaign as a two-arm, 7-task array
+
+**Files:**
+- `turbinesFoam/validation/phaseVI/scripts/slurm/campaign-rotational-augmentation.slurm`
+- `turbinesFoam/validation/phaseVI/scripts/runPhaseVI.sh`
+- `turbinesFoam/validation/phaseVI/CAMPAIGN.md`
+- `turbinesFoam/validation/phaseVI/README.md`
+- `turbinesFoam/tests/test_phasevi_case.py`
+
+**Problem:** The 21-task campaign could not be submitted: each array task counts
+against the association `MaxSubmitJobs=24`, and only ~9 slots were free. It also
+covered a single arm (augmentation on + root effects off), so no model could be
+evaluated at both root-effect settings with data; and both arms of the same
+`(model, speed, mesh)` would have rendered into the same `runs/<id>` directory,
+so `--restart` would continue from the other arm's physics.
+
+**Fix:** the array is regrouped into **7 tasks** (`--array=0-6`), one task per
+`(model, arm)`, each running its speeds sequentially: two physics arms
+(`--rotational-augmentation on --root-effects off` and `on/on`) over the D/32
+full curve (3×5×2 = 30 runs) and the D/48 spot-check (3×2×2 = 12 runs), plus the
+5 ASM-mesh coarse control (`aug off`, `root on`) runs that complete the
+three-way at the committed physics (the ALM/ASM control baselines already
+exist). `runPhaseVI.sh` gains `--run-label WORD`, validated and appended to the
+run id and recorded in `run.json`, so the arms live in separate, independently
+restartable directories; a runner contract test covers it. The task keeps
+`--ntasks=48`, `sequana_cpu` and `≤ 96 h`, and CAMPAIGN.md now records the arm
+matrix, the task→runs table, the continue-on-error failure policy, the resource
+arithmetic (coarse 6,674,304 cells / fine 22,525,776 cells against the 30k
+cells/core heuristic), the launch command, the ±15 % acceptance bands and the
+association submit-limit caveat with the fresh `--test-only` result (7 tasks
+fit the 9 free slots; the previous 21 did not). No job is submitted by this
+change.
+
 ---
 
 ### Bug Fixes (FSI Physics)

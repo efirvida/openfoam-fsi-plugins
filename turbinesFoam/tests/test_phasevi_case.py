@@ -449,6 +449,87 @@ def test_runner_lets_yaml_govern_rotational_augmentation(tmp_path):
     assert "on or off" in bad_root.stderr
 
 
+def test_runner_run_label_isolates_arms(tmp_path):
+    """`--run-label` gives each render variant its own restartable run dir.
+
+    The two-arm campaign runs the same (model, speed, mesh) with a different
+    augmentation/root setting per arm; without the label both arms render into
+    the same `runs/<id>` directory and `--restart` would continue from the other
+    arm's physics. The label is appended to the run id and recorded in run.json.
+    """
+    sandbox = tmp_path / "sandbox"
+    package = sandbox / "validation" / "phaseVI"
+    package.parent.mkdir(parents=True)
+    shutil.copytree(
+        PACKAGE,
+        package,
+        ignore=shutil.ignore_patterns("runs", "results", "polyMesh", "__pycache__"),
+    )
+    (sandbox / "geometry").symlink_to(TURBINESFOAM / "geometry")
+    environment = package / "scripts" / "check_environment.sh"
+    environment.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    environment.chmod(0o755)
+    mesh = package / "runs" / "mesh-coarse" / "constant" / "polyMesh"
+    mesh.mkdir(parents=True)
+    (mesh / ".keep").write_text("", encoding="utf-8")
+
+    shim = tmp_path / "bin"
+    shim.mkdir()
+    (shim / "python3").symlink_to(sys.executable)
+    env = {
+        key: value for key, value in os.environ.items() if not key.startswith("SLURM_")
+    }
+    env["PATH"] = str(shim) + os.pathsep + env.get("PATH", "")
+
+    def prepare(*flags):
+        return subprocess.run(
+            [
+                "sh", str(package / "scripts" / "runPhaseVI.sh"),
+                "-m", "alm", "-u", "7", "-mesh", "coarse",
+                *flags,
+            ],
+            cwd=package,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    arm_a = prepare(
+        "--rotational-augmentation", "on", "--root-effects", "off",
+        "--run-label", "aug-on-root-off",
+    )
+    assert arm_a.returncode == 0, arm_a.stderr
+    arm_b = prepare(
+        "--rotational-augmentation", "on", "--root-effects", "on",
+        "--run-label", "aug-on-root-on",
+    )
+    assert arm_b.returncode == 0, arm_b.stderr
+
+    dir_a = package / "runs" / "alm-U7-coarse-aug-on-root-off"
+    dir_b = package / "runs" / "alm-U7-coarse-aug-on-root-on"
+    assert dir_a.is_dir() and dir_b.is_dir()
+    # The two arms do not alias each other; each records its own label.
+    assert (
+        json.loads((dir_a / "run.json").read_text(encoding="utf-8"))["run_label"]
+        == "aug-on-root-off"
+    )
+    assert (
+        json.loads((dir_b / "run.json").read_text(encoding="utf-8"))["run_label"]
+        == "aug-on-root-on"
+    )
+    assert "rootEffects off;" in block(
+        (dir_a / "system" / "fvOptions").read_text(encoding="utf-8"), "GlauertCoeffs"
+    )
+    assert "rootEffects on;" in block(
+        (dir_b / "system" / "fvOptions").read_text(encoding="utf-8"), "GlauertCoeffs"
+    )
+
+    # A path-unsafe label is rejected before any render.
+    bad = prepare("--run-label", "bad/slash")
+    assert bad.returncode == 2
+    assert "run-label" in bad.stderr
+
+
 def test_root_effect_ablation_rendered(cfg, tmp_path):
     """The root-effect ablation is render-time; the committed default keeps on."""
     committed = (PACKAGE / "case" / "system" / "fvOptions.ALM").read_text()
