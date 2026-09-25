@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  preCICE configuration for the of-plugins ASM FSI smoke test.
+
+  Fluid  = OpenFOAM + precice-openfoam-adapter (pointCloud interface)
+  Solid  = dummy-solid (mock structural participant)
+
+  The interface is the actuator-surface point cloud. The fluid publishes the
+  aerodynamic Force (global frame) and reads the Displacement; the solid
+  applies a mock spring law and returns the displacement on the same vertices.
+-->
+<precice-configuration>
+  <log>
+    <sink
+      type="stream"
+      output="stdout"
+      filter="%Severity% > debug"
+      format="preCICE:%ColorizedSeverity% %Message%"
+      enabled="true" />
+    <sink
+      type="file"
+      output="precice-Fluid.log"
+      filter="%Severity% > debug"
+      format="preCICE:%ColorizedSeverity% %Message%"
+      enabled="true" />
+  </log>
+
+  <data:vector name="Force" />
+  <data:vector name="Displacement" />
+
+  <mesh name="Fluid-Mesh" dimensions="3">
+    <use-data name="Force" />
+    <use-data name="Displacement" />
+  </mesh>
+
+  <mesh name="Solid-Mesh" dimensions="3">
+    <use-data name="Force" />
+    <use-data name="Displacement" />
+  </mesh>
+
+  <participant name="Fluid">
+    <provide-mesh name="Fluid-Mesh" />
+    <write-data name="Force" mesh="Fluid-Mesh" />
+    <read-data name="Displacement" mesh="Fluid-Mesh" />
+  </participant>
+
+  <participant name="Solid">
+    <receive-mesh name="Fluid-Mesh" from="Fluid" />
+    <provide-mesh name="Solid-Mesh" />
+    <mapping:nearest-neighbor
+      direction="read"
+      from="Fluid-Mesh"
+      to="Solid-Mesh"
+      constraint="conservative" />
+    <mapping:nearest-neighbor
+      direction="write"
+      from="Solid-Mesh"
+      to="Fluid-Mesh"
+      constraint="consistent" />
+    <write-data name="Displacement" mesh="Solid-Mesh" />
+    <read-data name="Force" mesh="Solid-Mesh" />
+  </participant>
+
+  <m2n:sockets acceptor="Fluid" connector="Solid" />
+
+  <coupling-scheme:serial-implicit>
+    <participants first="Fluid" second="Solid" />
+    <max-time-windows value="50" />
+    <time-window-size value="0.008" />
+    <max-iterations value="3" />
+    <exchange data="Force" mesh="Fluid-Mesh" from="Fluid" to="Solid" />
+    <exchange data="Displacement" mesh="Solid-Mesh" from="Solid" to="Fluid" />
+    <acceleration:constant>
+      <relaxation value="0.5" />
+    </acceleration:constant>
+  </coupling-scheme:serial-implicit>
+</precice-configuration>
