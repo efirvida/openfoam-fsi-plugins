@@ -92,6 +92,12 @@ inline bool Foam::fv::surfaceSamplerBase::fsiActive() const
 }
 
 
+inline bool Foam::fv::surfaceSamplerBase::fsiGeometryInitialized() const
+{
+    return fsiGeometryInitialized_;
+}
+
+
 inline const Foam::word&
 Foam::fv::surfaceSamplerBase::fsiCoordinateFieldName() const
 {

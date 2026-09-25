@@ -204,6 +204,10 @@ public:
             //- Rotate the actuator line about a specified axis
             void rotate(vector rotationPoint, vector axis, scalar radians);
 
+            //- Capture the FSI geometry reference of the blade surface at the
+            //  post-setup configuration (no-op when the FSI layer is off)
+            void initializeFsiGeometry();
+
             //- Pitch the blade about its chord mount
             void pitch(scalar radians);
 

@@ -61,4 +61,16 @@ inline void Foam::fv::bladeSurfaceSource::pitch(const scalar radians)
 }
 
 
+inline void Foam::fv::bladeSurfaceSource::initializeFsiGeometry()
+{
+    sampler_.initializeFsiGeometry();
+}
+
+
+inline void Foam::fv::bladeSurfaceSource::fsiUpdateGeometry()
+{
+    sampler_.fsiUpdateGeometry();
+}
+
+
 // ************************************************************************* //

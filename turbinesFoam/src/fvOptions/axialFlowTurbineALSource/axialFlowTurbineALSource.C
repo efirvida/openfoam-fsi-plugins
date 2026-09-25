@@ -729,6 +729,13 @@ Foam::fv::axialFlowTurbineALSource::axialFlowTurbineALSource
     scalar yawAngle = coeffs_.lookupOrDefault("yawAngle", 0.0);
     yaw(degToRad(yawAngle));
 
+    // Capture the FSI geometry reference now that all static transforms have
+    // been applied (no-op when the FSI layer is off)
+    forAll(blades_, i)
+    {
+        blades_[i].initializeFsiGeometry();
+    }
+
     if (debug)
     {
         Info<< "axialFlowTurbineALSource created at time = " << time_.value()

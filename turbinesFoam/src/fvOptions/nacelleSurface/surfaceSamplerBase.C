@@ -29,6 +29,7 @@ License
 #include "mathematicalConstants.H"
 #include "OSspecific.H"
 #include "PstreamReduceOps.H"
+#include "PrimitivePatch.H"
 
 // * * * * * * * * * * * * * Private Member Functions  * * * * * * * * * * * //
 
@@ -114,7 +115,13 @@ Foam::fv::surfaceSamplerBase::surfaceSamplerBase
     fsiDispFieldName_(word::null),
     fsiCoordFieldPtr_(),
     fsiForceFieldPtr_(),
-    fsiDispFieldPtr_()
+    fsiDispFieldPtr_(),
+    fsiReferencePoints_(),
+    fsiReferenceCentroids_(),
+    fsiRotationPoint_(vector::zero),
+    fsiRotationAxis_(vector(0, 0, 1)),
+    fsiTotalAngle_(0.0),
+    fsiGeometryInitialized_(false)
 {
     if (!dict.found(geometryKey))
     {
@@ -172,6 +179,25 @@ Foam::fv::surfaceSamplerBase::surfaceSamplerBase
     Info<< "Surface sampler: read " << positions_.size()
         << " faces and " << surface_->points().size()
         << " vertices from " << geometryPath << endl;
+}
+
+
+void Foam::fv::surfaceSamplerBase::updateBodyFrame()
+{
+    if (identityBodyFrame_)
+    {
+        positionsBody_ = positions_;
+        normalsBody_ = normals_;
+        return;
+    }
+
+    const tensor globalToBody = bodyToGlobal_.T();
+
+    forAll(positions_, i)
+    {
+        positionsBody_[i] = globalToBody & (positions_[i] - bodyOrigin_);
+        normalsBody_[i] = globalToBody & normals_[i];
+    }
 }
 
 
@@ -310,6 +336,115 @@ void Foam::fv::surfaceSamplerBase::writeForceField
 
     // Registry the global-frame force per vertex for the preCICE adapter
     *fsiForceFieldPtr_ = vertexForces;
+}
+
+
+Foam::tensor Foam::fv::surfaceSamplerBase::rotationTensor
+(
+    const vector& axis,
+    const scalar radians
+)
+{
+    // Same arithmetic as actuatorLineElement::rotate (from SOWFA), so the
+    // surface stays in lockstep with the blade elements
+    tensor RM;
+    const scalar angle = radians;
+
+    RM.xx() = sqr(axis.x()) + (1.0 - sqr(axis.x()))*cos(angle);
+    RM.xy() = axis.x()*axis.y()*(1.0 - cos(angle)) - axis.z()*sin(angle);
+    RM.xz() = axis.x()*axis.z()*(1.0 - cos(angle)) + axis.y()*sin(angle);
+    RM.yx() = axis.x()*axis.y()*(1.0 - cos(angle)) + axis.z()*sin(angle);
+    RM.yy() = sqr(axis.y()) + (1.0 - sqr(axis.y()))*cos(angle);
+    RM.yz() = axis.y()*axis.z()*(1.0 - cos(angle)) - axis.x()*sin(angle);
+    RM.zx() = axis.x()*axis.z()*(1.0 - cos(angle)) - axis.y()*sin(angle);
+    RM.zy() = axis.y()*axis.z()*(1.0 - cos(angle)) + axis.x()*sin(angle);
+    RM.zz() = sqr(axis.z()) + (1.0 - sqr(axis.z()))*cos(angle);
+
+    return RM;
+}
+
+
+void Foam::fv::surfaceSamplerBase::initializeFsiGeometry()
+{
+    if (!fsiActive_)
+    {
+        return;
+    }
+
+    // The reference is the post-setup configuration: the imported vertices
+    // and face centroids after the static azimuth/tilt/yaw transforms
+    fsiReferencePoints_ = surfacePoints();
+    fsiReferenceCentroids_ = positions_;
+
+    fsiRotationPoint_ = vector::zero;
+    fsiRotationAxis_ = vector(0, 0, 1);
+    fsiTotalAngle_ = 0.0;
+    fsiGeometryInitialized_ = true;
+
+    // Publish the reference vertices: the preCICE point cloud is fixed and the
+    // mapping is built once from this configuration
+    writeCoordinateField();
+
+    Info<< "Surface sampler: FSI geometry reference captured ("
+        << fsiReferencePoints_.size() << " vertices)" << endl;
+}
+
+
+void Foam::fv::surfaceSamplerBase::accumulateFsiRotation
+(
+    const point& rotationPoint,
+    const vector& axis,
+    const scalar radians
+)
+{
+    fsiRotationPoint_ = rotationPoint;
+    fsiRotationAxis_ = axis;
+    fsiTotalAngle_ += radians;
+}
+
+
+void Foam::fv::surfaceSamplerBase::fsiUpdateGeometry()
+{
+    if (!fsiActive_ || !fsiGeometryInitialized_)
+    {
+        return;
+    }
+
+    const vectorIOField& u = *fsiDispFieldPtr_;
+
+    if (u.size() != fsiReferencePoints_.size())
+    {
+        FatalErrorInFunction
+            << "FSI displacement field \"" << fsiDispFieldName_ << "\" has "
+            << u.size() << " entries but the surface has "
+            << fsiReferencePoints_.size() << " vertices" << nl
+            << exit(FatalError);
+    }
+
+    const tensor R = rotationTensor(fsiRotationAxis_, fsiTotalAngle_);
+
+    // current = rotationPoint + R & (reference + u_fsi - rotationPoint)
+    pointField curVerts(fsiReferencePoints_.size());
+
+    forAll(curVerts, i)
+    {
+        curVerts[i] =
+            fsiRotationPoint_
+          + (R & (fsiReferencePoints_[i] + u[i] - fsiRotationPoint_));
+    }
+
+    // Refresh the face geometry from the deformed vertices
+    PrimitivePatch<faceList, pointField> curPatch
+    (
+        surface_->surfFaces(),
+        curVerts
+    );
+
+    positions_ = curPatch.faceCentres();
+    normals_ = curPatch.faceNormals();
+    areas_ = curPatch.magFaceAreas();
+
+    updateBodyFrame();
 }
 
 

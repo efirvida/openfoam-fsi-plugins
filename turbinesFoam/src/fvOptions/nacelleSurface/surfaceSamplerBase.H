@@ -136,6 +136,18 @@ protected:
         autoPtr<vectorIOField> fsiForceFieldPtr_;
         autoPtr<vectorIOField> fsiDispFieldPtr_;
 
+        //- FSI geometry reference (post-setup vertices and face centroids)
+        List<point> fsiReferencePoints_;
+        List<point> fsiReferenceCentroids_;
+
+        //- Accumulated rigid rotation of the FSI reference
+        point fsiRotationPoint_;
+        vector fsiRotationAxis_;
+        scalar fsiTotalAngle_;
+
+        //- True once the FSI geometry reference has been captured
+        bool fsiGeometryInitialized_;
+
 
     // Protected Member Functions
 
@@ -165,9 +177,16 @@ protected:
             const scalar h
         ) const;
 
+        //- Refresh the body-frame positions/normals from the global lists
+        void updateBodyFrame();
+
         //- Create the optional FSI registry fields from the 'fsi' sub-dict;
         //  no-op when the sub-dict is absent (the coupling layer stays off)
         void createFsiFields(const dictionary& dict);
+
+        //- Rotation tensor about a unit axis by radians (same arithmetic as
+        //  the element rotation, for lockstep)
+        static tensor rotationTensor(const vector& axis, const scalar radians);
 
         //- Distribute the per-node forces onto the local cells (Eq. 18).
         //  When \c candidates is \c nullptr every local cell is visited (the
@@ -236,6 +255,9 @@ public:
             //- True when the optional FSI coupling fields are active
             inline bool fsiActive() const;
 
+            //- True once the FSI geometry reference has been captured
+            inline bool fsiGeometryInitialized() const;
+
             //- FSI registry field names
             inline const word& fsiCoordinateFieldName() const;
             inline const word& fsiForceFieldName() const;
@@ -251,6 +273,24 @@ public:
         //  force-conserving) and write the FSI force field (global frame).
         //  No-op when the FSI layer is off.
         void writeForceField(const List<vector>& faceForces);
+
+        //- Capture the FSI geometry reference at the post-setup configuration
+        //  and reset the accumulated rotation. No-op when the layer is off.
+        void initializeFsiGeometry();
+
+        //- Accumulate a rigid rotation of the FSI reference; called from the
+        //  sampler's rotate path once the reference is captured
+        void accumulateFsiRotation
+        (
+            const point& rotationPoint,
+            const vector& axis,
+            const scalar radians
+        );
+
+        //- Recompute the current geometry as R(total)*(reference + u_fsi) and
+        //  refresh the face centroids, normals and areas. No-op when the layer
+        //  is off or the reference is not captured yet.
+        void fsiUpdateGeometry();
 };
 
 

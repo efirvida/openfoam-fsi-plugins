@@ -192,9 +192,6 @@ class bladeSurfaceSampler
         //- Build the per-rank bin grid and the per-node candidate lists
         void buildCandidates();
 
-        //- Refresh the body-frame positions/normals from the global lists
-        void updateBodyFrame();
-
         //- Rotate the node geometry rigidly about point/axis and refresh the
         //  body frame
         void rotateGeometry

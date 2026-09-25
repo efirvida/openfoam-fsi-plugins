@@ -663,6 +663,15 @@ void Foam::fv::actuatorLineSource::rotate
 }
 
 
+void Foam::fv::actuatorLineSource::initializeFsiGeometry()
+{
+    if (surface_.valid())
+    {
+        surface_->initializeFsiGeometry();
+    }
+}
+
+
 void Foam::fv::actuatorLineSource::pitch(scalar radians)
 {
     forAll(elements_, i)
@@ -796,6 +805,13 @@ void Foam::fv::actuatorLineSource::addSup
     if (harmonicPitchingActive_)
     {
         harmonicPitching();
+    }
+
+    // FSI: refresh the surface geometry as R(total)*(reference + u_fsi) before
+    // the aerodynamic calculation (no-op when the FSI layer is off)
+    if (surface_.valid())
+    {
+        surface_->fsiUpdateGeometry();
     }
 
     // Zero out force field

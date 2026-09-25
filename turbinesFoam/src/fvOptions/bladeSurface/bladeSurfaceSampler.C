@@ -342,25 +342,6 @@ void Foam::fv::bladeSurfaceSampler::buildCandidates()
 }
 
 
-void Foam::fv::bladeSurfaceSampler::updateBodyFrame()
-{
-    if (identityBodyFrame_)
-    {
-        positionsBody_ = positions_;
-        normalsBody_ = normals_;
-        return;
-    }
-
-    const tensor globalToBody = bodyToGlobal_.T();
-
-    forAll(positions_, i)
-    {
-        positionsBody_[i] = globalToBody & (positions_[i] - bodyOrigin_);
-        normalsBody_[i] = globalToBody & normals_[i];
-    }
-}
-
-
 Foam::tensor Foam::fv::bladeSurfaceSampler::rotationMatrix
 (
     const vector& axis,
@@ -653,12 +634,28 @@ void Foam::fv::bladeSurfaceSampler::rotate
             << exit(FatalError);
     }
 
+    if (fsiActive() && fsiGeometryInitialized())
+    {
+        // FSI: accumulate the rigid rotation and defer; the geometry is
+        // recomputed from the reference in fsiUpdateGeometry()
+        accumulateFsiRotation(rotationPoint, axis/mag(axis), radians);
+        return;
+    }
+
     rotateGeometry(rotationPoint, axis/mag(axis), radians);
 }
 
 
 void Foam::fv::bladeSurfaceSampler::translate(const vector& translation)
 {
+    if (fsiActive() && fsiGeometryInitialized())
+    {
+        FatalErrorInFunction
+            << "Translate after the FSI geometry reference is captured is not "
+            << "supported; translate before initializing the FSI layer"
+            << nl << exit(FatalError);
+    }
+
     forAll(positions_, i)
     {
         positions_[i] += translation;
@@ -672,6 +669,14 @@ void Foam::fv::bladeSurfaceSampler::translate(const vector& translation)
 
 void Foam::fv::bladeSurfaceSampler::pitch(const scalar radians)
 {
+    if (fsiActive() && fsiGeometryInitialized())
+    {
+        FatalErrorInFunction
+            << "Pitch after the FSI geometry reference is captured is not "
+            << "supported; set the pitch before initializing the FSI layer"
+            << nl << exit(FatalError);
+    }
+
     // Documented rigid approximation (D5): the surface pitches about the root
     // element pitch axis through the root chord pitch-axis point
     rotateGeometry(pitchPoint_, pitchAxis_, radians);

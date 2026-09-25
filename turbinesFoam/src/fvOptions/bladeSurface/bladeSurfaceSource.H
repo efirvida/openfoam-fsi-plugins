@@ -222,6 +222,16 @@ public:
             void pitch(const scalar radians);
 
 
+        // FSI coupling layer (no-op when the 'fsi' sub-dictionary is absent)
+
+            //- Capture the FSI geometry reference at the post-setup
+            //  configuration
+            void initializeFsiGeometry();
+
+            //- Recompute the FSI geometry as R(total)*(reference + u_fsi)
+            void fsiUpdateGeometry();
+
+
         // Evaluation
 
             //- Moment of the distributed load about point, per unit density,
