@@ -223,6 +223,16 @@ def main(argv: list[str]) -> int:
     if args.static:
         text = re.sub(r"tipSpeedRatio\s+[0-9.eE+-]+", "tipSpeedRatio 0", text)
 
+        # The Glauert end-effects model normalises the element velocity
+        # (elementVel/mag(elementVel)), which is zero for a non-rotating rotor
+        # and raises a floating-point exception. Disable it for the static
+        # cases.
+        block = find_block(text, "endEffects")
+        if block is not None:
+            _, brace, end = block
+            seg = text[brace:end].replace("active on;", "active off;", 1)
+            text = text[:brace] + seg + text[end:]
+
     fvopts.write_text(text)
 
     # ---- preciceDict, controlDict, config ---------------------------------
