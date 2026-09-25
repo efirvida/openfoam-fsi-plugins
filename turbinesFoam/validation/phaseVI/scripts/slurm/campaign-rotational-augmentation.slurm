@@ -76,7 +76,11 @@
 #   PHASEVI_LONG_QUEUE_AUTHORIZED=1 sbatch scripts/slurm/campaign-rotational-augmentation.slurm
 #SBATCH -p sequana_cpu
 #SBATCH --ntasks=48
-#SBATCH --nodes=1
+# Allow 1-2 nodes: a 48-rank task otherwise needs a fully free 48-core node, and
+# the partition is fragmented. Slurm uses one node when available, else two
+# (24+24); the 48 ranks/decomposition are unchanged, so this also exercises the
+# cross-node MPI partition of the whole chain.
+#SBATCH --nodes=1-2
 # Memory: the partition default DefMemPerCPU=8000 makes 48 ranks request 375 GB
 # (the whole node, 384 GB), so each task needed a fully empty node to schedule.
 # Cap it explicitly; the fine mesh (22.5 M cells / 48 ranks) needs well under this.
