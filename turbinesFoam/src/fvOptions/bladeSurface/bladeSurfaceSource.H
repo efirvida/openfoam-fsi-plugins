@@ -228,8 +228,14 @@ public:
             //  configuration
             void initializeFsiGeometry();
 
+            //- Capture the per-element FSI reference geometry
+            void initializeFsiElements();
+
             //- Recompute the FSI geometry as R(total)*(reference + u_fsi)
             void fsiUpdateGeometry();
+
+            //- Update the element geometry from the per-patch rigid fit
+            void fsiUpdateElements();
 
 
         // Evaluation

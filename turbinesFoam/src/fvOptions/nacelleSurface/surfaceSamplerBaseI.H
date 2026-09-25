@@ -98,6 +98,20 @@ inline bool Foam::fv::surfaceSamplerBase::fsiGeometryInitialized() const
 }
 
 
+inline const Foam::List<Foam::point>&
+Foam::fv::surfaceSamplerBase::fsiCurrentPoints() const
+{
+    return fsiCurrentPoints_;
+}
+
+
+inline const Foam::List<Foam::point>&
+Foam::fv::surfaceSamplerBase::fsiReferencePoints() const
+{
+    return fsiReferencePoints_;
+}
+
+
 inline const Foam::word&
 Foam::fv::surfaceSamplerBase::fsiCoordinateFieldName() const
 {

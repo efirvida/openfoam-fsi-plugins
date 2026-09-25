@@ -433,6 +433,9 @@ void Foam::fv::surfaceSamplerBase::fsiUpdateGeometry()
           + (R & (fsiReferencePoints_[i] + u[i] - fsiRotationPoint_));
     }
 
+    // Publish the current vertices (the element FSI update consumes them)
+    fsiCurrentPoints_ = curVerts;
+
     // Refresh the face geometry from the deformed vertices
     PrimitivePatch<faceList, pointField> curPatch
     (

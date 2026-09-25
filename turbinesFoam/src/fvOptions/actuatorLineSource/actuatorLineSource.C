@@ -668,6 +668,7 @@ void Foam::fv::actuatorLineSource::initializeFsiGeometry()
     if (surface_.valid())
     {
         surface_->initializeFsiGeometry();
+        surface_->initializeFsiElements();
     }
 }
 
@@ -807,11 +808,13 @@ void Foam::fv::actuatorLineSource::addSup
         harmonicPitching();
     }
 
-    // FSI: refresh the surface geometry as R(total)*(reference + u_fsi) before
-    // the aerodynamic calculation (no-op when the FSI layer is off)
+    // FSI: refresh the surface geometry as R(total)*(reference + u_fsi) and
+    // the element geometry from the per-patch rigid fit, before the
+    // aerodynamic calculation (no-op when the FSI layer is off)
     if (surface_.valid())
     {
         surface_->fsiUpdateGeometry();
+        surface_->fsiUpdateElements();
     }
 
     // Zero out force field

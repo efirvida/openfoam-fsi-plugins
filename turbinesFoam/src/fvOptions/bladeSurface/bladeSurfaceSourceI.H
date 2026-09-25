@@ -67,9 +67,21 @@ inline void Foam::fv::bladeSurfaceSource::initializeFsiGeometry()
 }
 
 
+inline void Foam::fv::bladeSurfaceSource::initializeFsiElements()
+{
+    sampler_.initializeFsiElements(elements_);
+}
+
+
 inline void Foam::fv::bladeSurfaceSource::fsiUpdateGeometry()
 {
     sampler_.fsiUpdateGeometry();
+}
+
+
+inline void Foam::fv::bladeSurfaceSource::fsiUpdateElements()
+{
+    sampler_.fsiUpdateElements(elements_);
 }
 
 

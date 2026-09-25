@@ -140,6 +140,9 @@ protected:
         List<point> fsiReferencePoints_;
         List<point> fsiReferenceCentroids_;
 
+        //- Current FSI surface vertices (valid after fsiUpdateGeometry())
+        List<point> fsiCurrentPoints_;
+
         //- Accumulated rigid rotation of the FSI reference
         point fsiRotationPoint_;
         vector fsiRotationAxis_;
@@ -257,6 +260,12 @@ public:
 
             //- True once the FSI geometry reference has been captured
             inline bool fsiGeometryInitialized() const;
+
+            //- Current FSI surface vertices (valid after fsiUpdateGeometry())
+            inline const List<point>& fsiCurrentPoints() const;
+
+            //- FSI reference surface vertices (captured post-setup)
+            inline const List<point>& fsiReferencePoints() const;
 
             //- FSI registry field names
             inline const word& fsiCoordinateFieldName() const;

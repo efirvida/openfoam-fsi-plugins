@@ -171,6 +171,14 @@ class bladeSurfaceSampler
         //- Gaussian width factor (meshFactor), D7 fallback chain
         scalar meshFactor_;
 
+        //- FSI element state: reference geometry and the per-element vertex
+        //  sets (built from the face patch partition at FSI init)
+        List<point> fsiElementRefPos_;
+        List<vector> fsiElementRefChord_;
+        List<vector> fsiElementRefSpan_;
+        List<List<label>> fsiElementVertices_;
+        bool fsiElementsInitialized_;
+
 
     // Private Member Functions
 
@@ -204,6 +212,17 @@ class bladeSurfaceSampler
         //- Rotation matrix about axis by radians; the same arithmetic as
         //  actuatorLineElement::rotate (from SOWFA), for lockstep
         static tensor rotationMatrix(const vector& axis, const scalar radians);
+
+        //- Best-fit rigid transform (Kabsch) mapping reference points P onto
+        //  current points Q via H = sum (P-cP)(Q-cQ)^T and its SVD; returns
+        //  the rotation R and the translation t (Q ~ R*P + t)
+        static void rigidFit
+        (
+            const UList<point>& P,
+            const UList<point>& Q,
+            tensor& R,
+            vector& t
+        );
 
         //- Distribute the node forces onto their candidate cells (Eq. 18);
         //  the kernel is the paper cosine or the Gaussian ablation
@@ -269,6 +288,17 @@ public:
 
             //- Gaussian width factor
             inline scalar meshFactor() const;
+
+
+        // FSI coupling layer (no-op when the 'fsi' sub-dictionary is absent)
+
+            //- Capture the per-element reference geometry and the
+            //  vertex->element association
+            void initializeFsiElements(PtrList<actuatorLineElement>& elements);
+
+            //- Update the element geometry from the per-patch rigid fit of the
+            //  current surface vertices
+            void fsiUpdateElements(PtrList<actuatorLineElement>& elements);
 
 
         // Manipulation (rigid, forwarded by the owning blade source)

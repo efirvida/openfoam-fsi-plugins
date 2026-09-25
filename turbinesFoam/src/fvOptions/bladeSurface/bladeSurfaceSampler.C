@@ -28,6 +28,7 @@ License
 #include "volFields.H"
 #include "mathematicalConstants.H"
 #include "PstreamReduceOps.H"
+#include "SVD.H"
 
 // * * * * * * * * * * * * * Private Member Functions  * * * * * * * * * * * //
 
@@ -680,6 +681,200 @@ void Foam::fv::bladeSurfaceSampler::pitch(const scalar radians)
     // Documented rigid approximation (D5): the surface pitches about the root
     // element pitch axis through the root chord pitch-axis point
     rotateGeometry(pitchPoint_, pitchAxis_, radians);
+}
+
+
+void Foam::fv::bladeSurfaceSampler::initializeFsiElements
+(
+    PtrList<actuatorLineElement>& elements
+)
+{
+    if (!fsiActive())
+    {
+        return;
+    }
+
+    const label nElements = elements.size();
+
+    fsiElementRefPos_.setSize(nElements);
+    fsiElementRefChord_.setSize(nElements);
+    fsiElementRefSpan_.setSize(nElements);
+    fsiElementVertices_.setSize(nElements);
+
+    forAll(elements, e)
+    {
+        fsiElementRefPos_[e] = elements[e].position();
+        fsiElementRefChord_[e] = elements[e].chordDirection();
+        fsiElementRefSpan_[e] = elements[e].spanDirection();
+        fsiElementVertices_[e].clear();
+    }
+
+    // Vertex->element association from the face-centroid patch partition:
+    // every face belongs to one element, so its vertices belong to that
+    // element. Each vertex is assigned once, to the first element that owns an
+    // incident face
+    const faceList& faces = surface_->surfFaces();
+
+    labelList vertElement(fsiReferencePoints_.size(), -1);
+
+    forAll(faces, f)
+    {
+        const label e = patch_[f];
+        const face& fv = faces[f];
+
+        forAll(fv, k)
+        {
+            const label v = fv[k];
+
+            if (vertElement[v] == -1)
+            {
+                vertElement[v] = e;
+                fsiElementVertices_[e].append(v);
+            }
+        }
+    }
+
+    fsiElementsInitialized_ = true;
+
+    Info<< "Blade surface sampler: FSI element reference captured ("
+        << nElements << " elements)" << endl;
+}
+
+
+void Foam::fv::bladeSurfaceSampler::fsiUpdateElements
+(
+    PtrList<actuatorLineElement>& elements
+)
+{
+    if (!fsiActive() || !fsiElementsInitialized_)
+    {
+        return;
+    }
+
+    const List<point>& P = fsiReferencePoints();
+    const List<point>& Q = fsiCurrentPoints();
+
+    forAll(elements, e)
+    {
+        const List<label>& verts = fsiElementVertices_[e];
+
+        // A rigid fit needs at least three non-collinear points; a degenerate
+        // patch keeps the reference orientation and only follows the
+        // accumulated rotation of the surface
+        if (verts.size() < 3)
+        {
+            elements[e].setFsiGeometry
+            (
+                elements[e].position(),
+                elements[e].chordDirection(),
+                elements[e].spanDirection()
+            );
+            continue;
+        }
+
+        List<point> Pe(verts.size());
+        List<point> Qe(verts.size());
+
+        forAll(verts, k)
+        {
+            Pe[k] = P[verts[k]];
+            Qe[k] = Q[verts[k]];
+        }
+
+        tensor R;
+        vector t;
+        rigidFit(Pe, Qe, R, t);
+
+        elements[e].setFsiGeometry
+        (
+            (R & fsiElementRefPos_[e]) + t,
+            R & fsiElementRefChord_[e],
+            R & fsiElementRefSpan_[e]
+        );
+    }
+}
+
+
+void Foam::fv::bladeSurfaceSampler::rigidFit
+(
+    const UList<point>& P,
+    const UList<point>& Q,
+    tensor& R,
+    vector& t
+)
+{
+    const label n = P.size();
+
+    // Centroids of the reference and current point sets
+    point cP = vector::zero;
+    point cQ = vector::zero;
+
+    forAll(P, i)
+    {
+        cP += P[i];
+        cQ += Q[i];
+    }
+
+    cP /= scalar(n);
+    cQ /= scalar(n);
+
+    // Cross-covariance H = sum (P - cP)(Q - cQ)^T
+    tensor H = tensor::zero;
+
+    forAll(P, i)
+    {
+        H += (P[i] - cP)*(Q[i] - cQ);
+    }
+
+    // 3x3 SVD: H = U S V^T
+    scalarRectangularMatrix A(3, 3);
+    A(0,0) = H.xx(); A(0,1) = H.xy(); A(0,2) = H.xz();
+    A(1,0) = H.yx(); A(1,1) = H.yy(); A(1,2) = H.yz();
+    A(2,0) = H.zx(); A(2,1) = H.zy(); A(2,2) = H.zz();
+
+    const SVD svd(A);
+
+    const scalarRectangularMatrix& Um = svd.U();
+    const scalarRectangularMatrix& Vm = svd.V();
+
+    tensor U, V;
+    U.xx() = Um(0,0); U.xy() = Um(0,1); U.xz() = Um(0,2);
+    U.yx() = Um(1,0); U.yy() = Um(1,1); U.yz() = Um(1,2);
+    U.zx() = Um(2,0); U.zy() = Um(2,1); U.zz() = Um(2,2);
+
+    V.xx() = Vm(0,0); V.xy() = Vm(0,1); V.xz() = Vm(0,2);
+    V.yx() = Vm(1,0); V.yy() = Vm(1,1); V.yz() = Vm(1,2);
+    V.zx() = Vm(2,0); V.zy() = Vm(2,1); V.zz() = Vm(2,2);
+
+    // Kabsch: R = V diag(1, 1, det(V U^T)) U^T maps P onto Q
+    const scalar d = sign(det(V & U.T()));
+
+    tensor D = tensor::zero;
+    D.xx() = 1.0;
+    D.yy() = 1.0;
+    D.zz() = d;
+
+    R = V & D & U.T();
+
+    // Guard against the transposed convention: keep the rotation with the
+    // lower centred residual (both candidates are proper rotations)
+    scalar errR = 0.0;
+    scalar errRT = 0.0;
+
+    forAll(P, i)
+    {
+        const vector p = P[i] - cP;
+        const vector q = Q[i] - cQ;
+        errR += magSqr(q - (R & p));
+        errRT += magSqr(q - (R.T() & p));
+    }
+
+    if (errRT < errR)
+    {
+        R = R.T();
+    }
+
+    t = cQ - (R & cP);
 }
 
 

@@ -278,6 +278,19 @@ Foam::label Foam::fv::actuatorLineElement::findCell
 }
 
 
+void Foam::fv::actuatorLineElement::setFsiGeometry
+(
+    const vector& position,
+    const vector& chordDirection,
+    const vector& spanDirection
+)
+{
+    position_ = position;
+    chordDirection_ = chordDirection;
+    spanDirection_ = spanDirection;
+}
+
+
 void Foam::fv::actuatorLineElement::lookupCoefficients()
 {
     liftCoefficient_ = profileData_.liftCoefficient(angleOfAttack_);

@@ -360,6 +360,16 @@ public:
             //- Return the element location
             const vector& position();
 
+            //- Set the element geometry directly from an FSI rigid fit
+            //  (position, chord and span directions); the chord length and
+            //  the mount fraction are preserved
+            void setFsiGeometry
+            (
+                const vector& position,
+                const vector& chordDirection,
+                const vector& spanDirection
+            );
+
             //- Return the element velocity
             const vector& velocity();
 
