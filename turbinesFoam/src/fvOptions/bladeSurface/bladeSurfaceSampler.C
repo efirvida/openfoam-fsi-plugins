@@ -145,7 +145,7 @@ void Foam::fv::bladeSurfaceSampler::buildPartition
             FatalErrorInFunction
                 << "Blade surface element patch " << e << " is empty: the "
                 << "element station " << elementStation_[e]
-                << " owns no triangle centroid" << nl
+                << " owns no face centroid" << nl
                 << exit(FatalError);
         }
     }
@@ -170,7 +170,7 @@ void Foam::fv::bladeSurfaceSampler::buildPartition
         patchAreaShare_[i] = areas_[i]/patchArea_[e];
     }
 
-    // Fatal invariant: the patch areas sum to the total triSurface area
+    // Fatal invariant: the patch areas sum to the total surface area
     scalar totalArea = 0.0;
     scalar patchAreaSum = 0.0;
 

@@ -30,10 +30,12 @@ Description
     It provides only the generic sampling assets shared by the surface
     implementations:
 
-    - the \c triSurface load (auto-detecting ASCII/binary) with case-relative
-      path resolution (key configurable, default \c geometry)
-    - the centroid node set: one node per triangle in surface face order, with
-      the outward unit normal and the area weight
+    - the \c MeshedSurface<face> load (format auto-detected from the file
+      extension: STL, OBJ, VTK, ...) with case-relative path resolution (key
+      configurable, default \c geometry); mixed tri/quad/poly faces are kept
+    - the surface vertices (the FSI point cloud) and the centroid node set:
+      one node per face in surface face order, with the outward unit normal
+      and the area weight
     - the body-frame transform (optional \c bodyOrigin and \c bodyAxis entries,
       completed deterministically) and the body-frame node geometry
     - the local cell size (findCell + reduce(minOp) sentinel)
@@ -63,7 +65,8 @@ SourceFiles
 #include "point.H"
 #include "vector.H"
 #include "tensor.H"
-#include "triSurface.H"
+#include "MeshedSurface.H"
+#include "face.H"
 #include "fvMesh.H"
 #include "volFieldsFwd.H"
 
@@ -88,10 +91,10 @@ protected:
         //- Mesh the surface is sampled on
         const fvMesh& mesh_;
 
-        //- Surface triangulation, auto-detected ASCII/binary
-        autoPtr<triSurface> surface_;
+        //- Surface mesh (tri/quad/poly), format auto-detected from extension
+        autoPtr<MeshedSurface<face>> surface_;
 
-        //- Node positions (global frame, triangle centroids, face order)
+        //- Node positions (global frame, face centroids, face order)
         List<point> positions_;
 
         //- Node outward unit normals (global frame)
@@ -182,8 +185,11 @@ public:
 
         // Access
 
-            //- Number of nodes (triangle centroids)
+            //- Number of nodes (face centroids)
             inline label nNodes() const;
+
+            //- Surface mesh vertices in the global frame (the FSI point cloud)
+            inline const pointField& surfacePoints() const;
 
             //- Node positions in the body frame
             inline const List<point>& positions() const;

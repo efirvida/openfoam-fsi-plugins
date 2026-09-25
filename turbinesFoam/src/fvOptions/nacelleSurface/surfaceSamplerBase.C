@@ -137,18 +137,19 @@ Foam::fv::surfaceSamplerBase::surfaceSamplerBase
             << exit(FatalError);
     }
 
-    // triSurface::New auto-detects the ASCII/binary STL format
-    surface_.reset(triSurface::New(geometryPath));
+    // MeshedSurface<face>::New auto-detects the format from the file
+    // extension (STL, OBJ, VTK, ...) and keeps mixed tri/quad/poly faces
+    surface_.reset(MeshedSurface<face>::New(geometryPath));
 
     if (surface_->size() == 0)
     {
         FatalErrorInFunction
             << "Surface file " << geometryPath
-            << " contains no triangles" << nl
+            << " contains no faces" << nl
             << exit(FatalError);
     }
 
-    // One node per triangle: centroid position, outward unit normal, area
+    // One node per face: centroid position, outward unit normal, area
     positions_ = surface_->faceCentres();
     normals_ = surface_->faceNormals();
     areas_ = surface_->magFaceAreas();
@@ -159,7 +160,8 @@ Foam::fv::surfaceSamplerBase::surfaceSamplerBase
     createBodyFrame(dict);
 
     Info<< "Surface sampler: read " << positions_.size()
-        << " triangles from " << geometryPath << endl;
+        << " faces and " << surface_->points().size()
+        << " vertices from " << geometryPath << endl;
 }
 
 

@@ -40,7 +40,7 @@ Description
                  + y_gen*surfaceChordDirection
                  + x_gen*(surfaceChordDirection ^ surfaceSpanDirection)
 
-    Every triangle centroid becomes a node carrying the S1 sampling assets
+    Every face centroid becomes a node carrying the S1 sampling assets
     (area weight, outward normal, stable surface order). Each node is then
     associated once with an actuator line element:
 
@@ -55,7 +55,7 @@ Description
     station (patch boundaries at the element-station midpoints, open at the
     root/tip ends). The constructor asserts, fatally, that every node is
     assigned, that every element owns a non-empty patch and that the patch
-    areas sum to the total triSurface area.
+    areas sum to the total surface area.
 
     The distribution uses a per-node candidate list built once on top of a
     per-rank uniform bin grid over the local cell centres (bin size

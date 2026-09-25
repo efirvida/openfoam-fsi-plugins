@@ -31,6 +31,13 @@ inline Foam::label Foam::fv::surfaceSamplerBase::nNodes() const
 }
 
 
+inline const Foam::pointField&
+Foam::fv::surfaceSamplerBase::surfacePoints() const
+{
+    return surface_->points();
+}
+
+
 inline const Foam::List<Foam::point>&
 Foam::fv::surfaceSamplerBase::positions() const
 {
