@@ -5,6 +5,10 @@
 # Usage:
 #   run_case.sh <run-dir> [max-time]
 #
+# Environment:
+#   RANKS   number of fluid ranks (default 1). >1 runs decomposePar and
+#           mpirun -np RANKS pimpleFoam -parallel; the dummy stays serial.
+#
 # <run-dir> is a rendered + wired run directory (see wire_case.py). The mesh is
 # generated here if it is missing. The fluid is launched first; the script waits
 # for the sampler to write the reference cloud (coords-blade<i>.dat) before
@@ -49,8 +53,18 @@ fi
 rm -f coords-blade*.dat
 
 # ---- Launch the fluid -----------------------------------------------------
-echo "run_case.sh: starting the fluid (pimpleFoam)"
-pimpleFoam > log.pimpleFoam 2>&1 &
+RANKS="${RANKS:-1}"
+FLUID_CMD="pimpleFoam"
+
+if [ "$RANKS" -gt 1 ]; then
+    echo "run_case.sh: decomposing into $RANKS subdomains"
+    sed -i "s/^numberOfSubdomains .*/numberOfSubdomains ${RANKS};/" system/decomposeParDict
+    decomposePar -force > log.decomposePar 2>&1
+    FLUID_CMD="mpirun -np ${RANKS} pimpleFoam -parallel"
+fi
+
+echo "run_case.sh: starting the fluid ($FLUID_CMD)"
+$FLUID_CMD > log.pimpleFoam 2>&1 &
 FLUID=$!
 
 # ---- Wait for the reference cloud -----------------------------------------
@@ -74,7 +88,7 @@ fi
 
 # ---- Launch the solid -----------------------------------------------------
 echo "run_case.sh: starting the dummy solid"
-"$DUMMY" precice-config.xml Solid solid-meshes.dat > log.solid 2>&1 &
+"$DUMMY" precice-config.xml Solid solid-meshes.dat solid-trace.dat > log.solid 2>&1 &
 SOLID=$!
 
 # ---- Wait for both --------------------------------------------------------

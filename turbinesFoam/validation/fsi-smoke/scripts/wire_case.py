@@ -103,6 +103,7 @@ def fsi_block(blade_index: int) -> str:
         f"                forceField        surface{blade_index}Forces;\n"
         f"                displacementField surface{blade_index}Displacement;\n"
         f'                coordinateFile    "coords-blade{blade_index}.dat";\n'
+        f'                debugFile         "fsi-trace-blade{blade_index}.dat";\n'
         "            }\n"
     )
 

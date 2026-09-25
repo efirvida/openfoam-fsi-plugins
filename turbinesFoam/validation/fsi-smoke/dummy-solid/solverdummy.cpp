@@ -16,7 +16,11 @@
       <meshName> <coordinates.dat>
 
   Usage:
-    solverdummy <precice-config.xml> <participant> <meshesFile>
+    solverdummy <precice-config.xml> <participant> <meshesFile> [traceFile]
+
+  The optional traceFile receives, per time window and per point, the
+  received force and the written displacement (the correctness checker
+  compares it against the fluid-side trace).
 */
 
 #include <algorithm>
@@ -74,17 +78,25 @@ std::vector<double> readCoordinates(const std::string& fileName)
 
 int main(int argc, char** argv)
 {
-    if (argc != 4)
+    if (argc != 4 && argc != 5)
     {
         std::cout
             << "Usage: solverdummy <precice-config.xml> <participant> "
-               "<meshesFile>\n";
+               "<meshesFile> [traceFile]\n";
         return EXIT_FAILURE;
     }
 
     const std::string configFileName(argv[1]);
     const std::string solverName(argv[2]);
     const std::string meshesFileName(argv[3]);
+    const std::string traceFileName = (argc == 5) ? argv[4] : "";
+
+    if (!traceFileName.empty())
+    {
+        // Truncate any previous trace
+        std::ofstream trace(traceFileName, std::ios::trunc);
+        trace << "# step mesh point Fx Fy Fz ux uy uz\n";
+    }
 
     // Fixed interface contract for this harness
     const std::string readDataName = "Force";
@@ -224,6 +236,23 @@ int main(int argc, char** argv)
         {
             participant.writeData(
                 m.name, writeDataName, m.vertexIDs, m.disp);
+        }
+
+        if (!traceFileName.empty())
+        {
+            std::ofstream trace(traceFileName, std::ios::app);
+            for (const auto& m : meshes)
+            {
+                for (int i = 0; i < m.n; i++)
+                {
+                    trace << step << ' ' << m.name << ' ' << i;
+                    for (int d = 0; d < dimensions; d++)
+                        trace << ' ' << m.force.at(dimensions * i + d);
+                    for (int d = 0; d < dimensions; d++)
+                        trace << ' ' << m.disp.at(dimensions * i + d);
+                    trace << '\n';
+                }
+            }
         }
 
         if (step % 10 == 0)

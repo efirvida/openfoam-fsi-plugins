@@ -32,6 +32,8 @@ License
 #include "PrimitivePatch.H"
 #include "OFstream.H"
 
+#include <fstream>
+
 // * * * * * * * * * * * * * Private Member Functions  * * * * * * * * * * * //
 
 void Foam::fv::surfaceSamplerBase::createBodyFrame
@@ -115,6 +117,7 @@ Foam::fv::surfaceSamplerBase::surfaceSamplerBase
     fsiForceFieldName_(word::null),
     fsiDispFieldName_(word::null),
     fsiCoordFileName_(fileName::null),
+    fsiDebugFile_(word::null),
     fsiCoordFieldPtr_(),
     fsiForceFieldPtr_(),
     fsiDispFieldPtr_(),
@@ -222,6 +225,8 @@ void Foam::fv::surfaceSamplerBase::createFsiFields(const dictionary& dict)
         fsiDict.getOrDefault<word>("displacementField", "surfaceDisplacement");
     fsiCoordFileName_ =
         fsiDict.getOrDefault<fileName>("coordinateFile", fileName::null);
+    fsiDebugFile_ =
+        fsiDict.getOrDefault<word>("debugFile", word::null);
 
     const Time& runTime = mesh_.time();
 
@@ -340,6 +345,41 @@ void Foam::fv::surfaceSamplerBase::writeForceField
 
     // Registry the global-frame force per vertex for the preCICE adapter
     *fsiForceFieldPtr_ = vertexForces;
+
+    // Optional correctness trace
+    writeFsiDebug();
+}
+
+
+void Foam::fv::surfaceSamplerBase::writeFsiDebug()
+{
+    if (fsiDebugFile_.empty() || !Pstream::master())
+    {
+        return;
+    }
+
+    std::ofstream os(fsiDebugFile_.c_str(), std::ios::app);
+
+    if (!os)
+    {
+        return;
+    }
+
+    const vectorIOField& F = *fsiForceFieldPtr_;
+    const vectorIOField& u = *fsiDispFieldPtr_;
+
+    os << "# t " << mesh_.time().value()
+       << " n " << fsiCurrentPoints_.size() << '\n';
+
+    forAll(fsiCurrentPoints_, i)
+    {
+        const point& X = fsiCurrentPoints_[i];
+
+        os << i << ' '
+           << X.x() << ' ' << X.y() << ' ' << X.z() << ' '
+           << F[i].x() << ' ' << F[i].y() << ' ' << F[i].z() << ' '
+           << u[i].x() << ' ' << u[i].y() << ' ' << u[i].z() << '\n';
+    }
 }
 
 

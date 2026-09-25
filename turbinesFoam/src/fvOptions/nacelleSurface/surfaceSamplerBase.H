@@ -135,6 +135,10 @@ protected:
         //  so an external structural participant can share the point cloud
         fileName fsiCoordFileName_;
 
+        //- Optional per-vertex coupling trace (coordinates, force and
+        //  displacement) appended every step, for the correctness checker
+        word fsiDebugFile_;
+
         //- Owning FSI registry fields; created only when the layer is active
         autoPtr<vectorIOField> fsiCoordFieldPtr_;
         autoPtr<vectorIOField> fsiForceFieldPtr_;
@@ -286,6 +290,10 @@ public:
         //  force-conserving) and write the FSI force field (global frame).
         //  No-op when the FSI layer is off.
         void writeForceField(const List<vector>& faceForces);
+
+        //- Append the per-vertex coupling trace (coordinates, force and
+        //  displacement) to fsiDebugFile_ when configured. No-op otherwise.
+        void writeFsiDebug();
 
         //- Capture the FSI geometry reference at the post-setup configuration
         //  and reset the accumulated rotation. No-op when the layer is off.
