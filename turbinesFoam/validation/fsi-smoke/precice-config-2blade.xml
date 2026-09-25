@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!--
-  preCICE configuration: single-blade ASM FSI smoke test.
+  preCICE configuration: two-blade ASM FSI smoke test (cases 2 and 3).
 
-  Fluid = OpenFOAM + precice-openfoam-adapter (pointCloud interface)
-  Solid = dummy-solid (mock structural participant)
+  Fluid = OpenFOAM + precice-openfoam-adapter (two pointCloud interfaces)
+  Solid = dummy-solid (mock structural participant, two meshes)
 
-  One blade, one point cloud, one exchange. The blade may be static (case 1)
-  or prescribed-rotation; the coupling contract is identical.
+  Each blade has its own point cloud and its own exchange; the blade
+  subdictionaries carry distinct field names (surfaceCoords1/2, ...).
 -->
 <precice-configuration>
   <log>
@@ -31,33 +31,48 @@
     <use-data name="Force" />
     <use-data name="Displacement" />
   </mesh>
-
   <mesh name="Blade1-Solid" dimensions="3">
+    <use-data name="Force" />
+    <use-data name="Displacement" />
+  </mesh>
+
+  <mesh name="Blade2-Fluid" dimensions="3">
+    <use-data name="Force" />
+    <use-data name="Displacement" />
+  </mesh>
+  <mesh name="Blade2-Solid" dimensions="3">
     <use-data name="Force" />
     <use-data name="Displacement" />
   </mesh>
 
   <participant name="Fluid">
     <provide-mesh name="Blade1-Fluid" />
+    <provide-mesh name="Blade2-Fluid" />
     <write-data name="Force" mesh="Blade1-Fluid" />
     <read-data name="Displacement" mesh="Blade1-Fluid" />
+    <write-data name="Force" mesh="Blade2-Fluid" />
+    <read-data name="Displacement" mesh="Blade2-Fluid" />
   </participant>
 
   <participant name="Solid">
     <receive-mesh name="Blade1-Fluid" from="Fluid" />
     <provide-mesh name="Blade1-Solid" />
+    <receive-mesh name="Blade2-Fluid" from="Fluid" />
+    <provide-mesh name="Blade2-Solid" />
+
     <mapping:nearest-neighbor
-      direction="read"
-      from="Blade1-Fluid"
-      to="Blade1-Solid"
-      constraint="conservative" />
+      direction="read" from="Blade1-Fluid" to="Blade1-Solid" constraint="conservative" />
     <mapping:nearest-neighbor
-      direction="write"
-      from="Blade1-Solid"
-      to="Blade1-Fluid"
-      constraint="consistent" />
+      direction="write" from="Blade1-Solid" to="Blade1-Fluid" constraint="consistent" />
+    <mapping:nearest-neighbor
+      direction="read" from="Blade2-Fluid" to="Blade2-Solid" constraint="conservative" />
+    <mapping:nearest-neighbor
+      direction="write" from="Blade2-Solid" to="Blade2-Fluid" constraint="consistent" />
+
     <write-data name="Displacement" mesh="Blade1-Solid" />
     <read-data name="Force" mesh="Blade1-Solid" />
+    <write-data name="Displacement" mesh="Blade2-Solid" />
+    <read-data name="Force" mesh="Blade2-Solid" />
   </participant>
 
   <m2n:sockets acceptor="Fluid" connector="Solid" />
@@ -69,6 +84,8 @@
     <max-iterations value="3" />
     <exchange data="Force" mesh="Blade1-Fluid" from="Fluid" to="Solid" />
     <exchange data="Displacement" mesh="Blade1-Solid" from="Solid" to="Fluid" />
+    <exchange data="Force" mesh="Blade2-Fluid" from="Fluid" to="Solid" />
+    <exchange data="Displacement" mesh="Blade2-Solid" from="Solid" to="Fluid" />
     <acceleration:constant>
       <relaxation value="0.5" />
     </acceleration:constant>

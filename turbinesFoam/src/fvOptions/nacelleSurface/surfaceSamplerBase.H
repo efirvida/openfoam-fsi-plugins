@@ -131,6 +131,10 @@ protected:
         word fsiForceFieldName_;
         word fsiDispFieldName_;
 
+        //- Optional file the reference vertices are written to at FSI init,
+        //  so an external structural participant can share the point cloud
+        fileName fsiCoordFileName_;
+
         //- Owning FSI registry fields; created only when the layer is active
         autoPtr<vectorIOField> fsiCoordFieldPtr_;
         autoPtr<vectorIOField> fsiForceFieldPtr_;

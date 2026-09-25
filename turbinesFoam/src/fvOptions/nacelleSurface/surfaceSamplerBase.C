@@ -30,6 +30,7 @@ License
 #include "OSspecific.H"
 #include "PstreamReduceOps.H"
 #include "PrimitivePatch.H"
+#include "OFstream.H"
 
 // * * * * * * * * * * * * * Private Member Functions  * * * * * * * * * * * //
 
@@ -113,6 +114,7 @@ Foam::fv::surfaceSamplerBase::surfaceSamplerBase
     fsiCoordFieldName_(word::null),
     fsiForceFieldName_(word::null),
     fsiDispFieldName_(word::null),
+    fsiCoordFileName_(fileName::null),
     fsiCoordFieldPtr_(),
     fsiForceFieldPtr_(),
     fsiDispFieldPtr_(),
@@ -218,6 +220,8 @@ void Foam::fv::surfaceSamplerBase::createFsiFields(const dictionary& dict)
         fsiDict.getOrDefault<word>("forceField", "surfaceForces");
     fsiDispFieldName_ =
         fsiDict.getOrDefault<word>("displacementField", "surfaceDisplacement");
+    fsiCoordFileName_ =
+        fsiDict.getOrDefault<fileName>("coordinateFile", fileName::null);
 
     const Time& runTime = mesh_.time();
 
@@ -384,6 +388,25 @@ void Foam::fv::surfaceSamplerBase::initializeFsiGeometry()
     // Publish the reference vertices: the preCICE point cloud is fixed and the
     // mapping is built once from this configuration
     writeCoordinateField();
+
+    // Optionally write the reference cloud to a plain file, so an external
+    // structural participant can register the same vertices
+    if (!fsiCoordFileName_.empty())
+    {
+        OFstream os(fsiCoordFileName_);
+        os << "# FSI reference vertices (" << fsiReferencePoints_.size()
+           << ")" << nl;
+
+        forAll(fsiReferencePoints_, i)
+        {
+            os << fsiReferencePoints_[i].x() << ' '
+               << fsiReferencePoints_[i].y() << ' '
+               << fsiReferencePoints_[i].z() << nl;
+        }
+
+        Info<< "Surface sampler: wrote the FSI reference cloud to "
+            << fsiCoordFileName_ << endl;
+    }
 
     Info<< "Surface sampler: FSI geometry reference captured ("
         << fsiReferencePoints_.size() << " vertices)" << endl;
