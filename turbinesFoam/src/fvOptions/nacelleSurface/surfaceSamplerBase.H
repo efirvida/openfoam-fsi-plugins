@@ -67,6 +67,8 @@ SourceFiles
 #include "tensor.H"
 #include "MeshedSurface.H"
 #include "face.H"
+#include "vectorIOField.H"
+#include "Time.H"
 #include "fvMesh.H"
 #include "volFieldsFwd.H"
 
@@ -121,6 +123,19 @@ protected:
         //- Reference density for the SI-newton conversion of forces()
         scalar rhoRef_;
 
+        //- Optional FSI coupling layer, enabled by the 'fsi' sub-dictionary
+        bool fsiActive_;
+
+        //- FSI registry field names (surface vertices, forces, displacements)
+        word fsiCoordFieldName_;
+        word fsiForceFieldName_;
+        word fsiDispFieldName_;
+
+        //- Owning FSI registry fields; created only when the layer is active
+        autoPtr<vectorIOField> fsiCoordFieldPtr_;
+        autoPtr<vectorIOField> fsiForceFieldPtr_;
+        autoPtr<vectorIOField> fsiDispFieldPtr_;
+
 
     // Protected Member Functions
 
@@ -149,6 +164,10 @@ protected:
             const volVectorField& U,
             const scalar h
         ) const;
+
+        //- Create the optional FSI registry fields from the 'fsi' sub-dict;
+        //  no-op when the sub-dict is absent (the coupling layer stays off)
+        void createFsiFields(const dictionary& dict);
 
         //- Distribute the per-node forces onto the local cells (Eq. 18).
         //  When \c candidates is \c nullptr every local cell is visited (the
@@ -213,6 +232,20 @@ public:
 
             //- Reference density used for the SI conversion
             inline scalar rhoRef() const;
+
+            //- True when the optional FSI coupling fields are active
+            inline bool fsiActive() const;
+
+            //- FSI registry field names
+            inline const word& fsiCoordinateFieldName() const;
+            inline const word& fsiForceFieldName() const;
+            inline const word& fsiDisplacementFieldName() const;
+
+
+    // FSI coupling layer
+
+        //- Write the current surface vertices to the coordinate field
+        void writeCoordinateField();
 };
 
 

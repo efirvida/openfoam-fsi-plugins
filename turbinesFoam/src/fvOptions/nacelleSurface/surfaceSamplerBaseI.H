@@ -86,4 +86,31 @@ inline Foam::scalar Foam::fv::surfaceSamplerBase::rhoRef() const
 }
 
 
+inline bool Foam::fv::surfaceSamplerBase::fsiActive() const
+{
+    return fsiActive_;
+}
+
+
+inline const Foam::word&
+Foam::fv::surfaceSamplerBase::fsiCoordinateFieldName() const
+{
+    return fsiCoordFieldName_;
+}
+
+
+inline const Foam::word&
+Foam::fv::surfaceSamplerBase::fsiForceFieldName() const
+{
+    return fsiForceFieldName_;
+}
+
+
+inline const Foam::word&
+Foam::fv::surfaceSamplerBase::fsiDisplacementFieldName() const
+{
+    return fsiDispFieldName_;
+}
+
+
 // ************************************************************************* //

@@ -107,7 +107,14 @@ Foam::fv::surfaceSamplerBase::surfaceSamplerBase
     bodyOrigin_(dict.lookupOrDefault("bodyOrigin", vector::zero)),
     bodyToGlobal_(tensor::I),
     identityBodyFrame_(true),
-    rhoRef_(dict.lookupOrDefault<scalar>("rho", 1.0))
+    rhoRef_(dict.lookupOrDefault<scalar>("rho", 1.0)),
+    fsiActive_(false),
+    fsiCoordFieldName_(word::null),
+    fsiForceFieldName_(word::null),
+    fsiDispFieldName_(word::null),
+    fsiCoordFieldPtr_(),
+    fsiForceFieldPtr_(),
+    fsiDispFieldPtr_()
 {
     if (!dict.found(geometryKey))
     {
@@ -159,9 +166,108 @@ Foam::fv::surfaceSamplerBase::surfaceSamplerBase
 
     createBodyFrame(dict);
 
+    // Optional FSI coupling layer: registry fields for the preCICE adapter
+    createFsiFields(dict);
+
     Info<< "Surface sampler: read " << positions_.size()
         << " faces and " << surface_->points().size()
         << " vertices from " << geometryPath << endl;
+}
+
+
+void Foam::fv::surfaceSamplerBase::createFsiFields(const dictionary& dict)
+{
+    const dictionary& fsiDict = dict.subOrEmptyDict("fsi");
+
+    if (fsiDict.empty())
+    {
+        return;
+    }
+
+    fsiActive_ = true;
+
+    fsiCoordFieldName_ =
+        fsiDict.getOrDefault<word>("coordinateField", "surfaceCoords");
+    fsiForceFieldName_ =
+        fsiDict.getOrDefault<word>("forceField", "surfaceForces");
+    fsiDispFieldName_ =
+        fsiDict.getOrDefault<word>("displacementField", "surfaceDisplacement");
+
+    const Time& runTime = mesh_.time();
+
+    const label nPts = surfacePoints().size();
+
+    // Surface vertices (global frame): the preCICE point cloud. In-memory
+    // only (NO_READ/NO_WRITE); the adapter binds to it by name in the registry
+    fsiCoordFieldPtr_.reset
+    (
+        new vectorIOField
+        (
+            IOobject
+            (
+                fsiCoordFieldName_,
+                runTime.timeName(),
+                runTime,
+                IOobject::NO_READ,
+                IOobject::NO_WRITE
+            ),
+            surfacePoints()
+        )
+    );
+
+    // Per-vertex forces and displacements, zero-initialised; written/read by
+    // the sampler and the adapter through the registry
+    const Field<vector> zeroVecs(nPts, vector::zero);
+
+    fsiForceFieldPtr_.reset
+    (
+        new vectorIOField
+        (
+            IOobject
+            (
+                fsiForceFieldName_,
+                runTime.timeName(),
+                runTime,
+                IOobject::NO_READ,
+                IOobject::NO_WRITE
+            ),
+            zeroVecs
+        )
+    );
+
+    fsiDispFieldPtr_.reset
+    (
+        new vectorIOField
+        (
+            IOobject
+            (
+                fsiDispFieldName_,
+                runTime.timeName(),
+                runTime,
+                IOobject::NO_READ,
+                IOobject::NO_WRITE
+            ),
+            zeroVecs
+        )
+    );
+
+    Info<< "Surface sampler: FSI coupling active (" << nPts << " vertices)"
+        << nl
+        << "    coordinate field   : " << fsiCoordFieldName_ << nl
+        << "    force field        : " << fsiForceFieldName_ << nl
+        << "    displacement field : " << fsiDispFieldName_ << endl;
+}
+
+
+void Foam::fv::surfaceSamplerBase::writeCoordinateField()
+{
+    if (!fsiActive_)
+    {
+        return;
+    }
+
+    // Assign the current surface vertices (global frame) to the registry field
+    *fsiCoordFieldPtr_ = surfacePoints();
 }
 
 
