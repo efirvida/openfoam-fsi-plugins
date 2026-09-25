@@ -77,6 +77,10 @@
 #SBATCH -p sequana_cpu
 #SBATCH --ntasks=48
 #SBATCH --nodes=1
+# Memory: the partition default DefMemPerCPU=8000 makes 48 ranks request 375 GB
+# (the whole node, 384 GB), so each task needed a fully empty node to schedule.
+# Cap it explicitly; the fine mesh (22.5 M cells / 48 ranks) needs well under this.
+#SBATCH --mem=192G
 #SBATCH -J phaseVI-ra-campaign
 #SBATCH --time=96:00:00
 #SBATCH --array=0-6
