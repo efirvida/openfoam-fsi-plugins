@@ -271,6 +271,48 @@ void Foam::fv::surfaceSamplerBase::writeCoordinateField()
 }
 
 
+void Foam::fv::surfaceSamplerBase::writeForceField
+(
+    const List<vector>& faceForces
+)
+{
+    if (!fsiActive_)
+    {
+        return;
+    }
+
+    if (faceForces.size() != surface_->size())
+    {
+        FatalErrorInFunction
+            << "Surface sampler FSI: expected " << surface_->size()
+            << " per-face forces but received " << faceForces.size()
+            << nl << exit(FatalError);
+    }
+
+    const faceList& faces = surface_->surfFaces();
+
+    List<vector> vertexForces(surfacePoints().size(), vector::zero);
+
+    forAll(faces, f)
+    {
+        const face& fv = faces[f];
+        const vector Ff = faceForces[f];
+
+        // Equal split over the face vertices: the vertex sum preserves the
+        // total force (each face contributes Ff exactly once)
+        const scalar w = 1.0/scalar(fv.size());
+
+        forAll(fv, k)
+        {
+            vertexForces[fv[k]] += w*Ff;
+        }
+    }
+
+    // Registry the global-frame force per vertex for the preCICE adapter
+    *fsiForceFieldPtr_ = vertexForces;
+}
+
+
 // * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * * //
 
 Foam::fv::surfaceSamplerBase::~surfaceSamplerBase()

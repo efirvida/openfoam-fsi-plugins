@@ -307,6 +307,10 @@ void Foam::fv::bladeSurfaceSource::distribute
     // Eq. 18 over the bounded candidate lists
     sampler_.distributeNodeForces(bladeForceField, distributed);
 
+    // FSI layer: publish the per-vertex force to the registry (no-op when the
+    // 'fsi' sub-dictionary is absent)
+    sampler_.writeForceField(distributed);
+
     // Distributed total (global). It replaces the element-loop total so the
     // reported blade force matches the applied load; in the incompressible
     // reference partition of unity makes it equal the summed element forces

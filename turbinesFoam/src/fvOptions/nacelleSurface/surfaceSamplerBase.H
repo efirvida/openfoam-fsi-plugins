@@ -246,6 +246,11 @@ public:
 
         //- Write the current surface vertices to the coordinate field
         void writeCoordinateField();
+
+        //- Project per-face forces onto the surface vertices (equal split,
+        //  force-conserving) and write the FSI force field (global frame).
+        //  No-op when the FSI layer is off.
+        void writeForceField(const List<vector>& faceForces);
 };
 
 
