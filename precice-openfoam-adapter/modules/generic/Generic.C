@@ -38,6 +38,12 @@ bool preciceAdapter::Generic::GenericInterface::configure(const IOdictionary& ad
     }
     DEBUG(adapterInfo("    Available uniformDimensionedVectorFields: " + availableUniformVectorFields));
 
+    for (const auto& solver_name : mesh_.time().sortedNames<vectorIOField>())
+    {
+        availableVectorIOFields += solver_name + " ";
+    }
+    DEBUG(adapterInfo("    Available vectorIOFields: " + availableVectorIOFields));
+
     // Read the Generic-module specific options from the adapter's configuration file
     if (!readConfig(adapterConfig))
     {
@@ -57,11 +63,29 @@ bool preciceAdapter::Generic::GenericInterface::addWriters(const preciceAdapter:
 {
     bool found = false;
     const bool isGlobalData = interface->locationType() == LocationType::globalData;
+    const bool isPointCloud = interface->locationType() == LocationType::pointCloud;
 
     // Force to use the new schema with the Generic module
     if (fieldConfig.solver_name != "Undefined (legacy mode)")
     {
-        if (isGlobalData)
+        if (isPointCloud)
+        {
+            if (mesh_.time().foundObject<vectorIOField>(fieldConfig.solver_name))
+            {
+                found = true;
+                interface->addCouplingDataWriter(
+                    fieldConfig,
+                    new PointCloudVectorCoupler(mesh_, fieldConfig));
+            }
+            else
+            {
+                found = false;
+                std::string msg = "Generic module: pointCloud data \"" + fieldConfig.name + "\" (solver name: \"" + fieldConfig.solver_name + "\") does not exist!\n";
+                msg += "Available vectorIOFields: " + availableVectorIOFields;
+                adapterInfo(msg, "warning");
+            }
+        }
+        else if (isGlobalData)
         {
             if (mesh_.time().foundObject<uniformDimensionedScalarField>(fieldConfig.solver_name)
                 || interface->dataDimensions(fieldConfig.name) == 1)
@@ -114,11 +138,29 @@ bool preciceAdapter::Generic::GenericInterface::addReaders(const preciceAdapter:
 {
     bool found = false;
     const bool isGlobalData = interface->locationType() == LocationType::globalData;
+    const bool isPointCloud = interface->locationType() == LocationType::pointCloud;
 
     // Force to use the new schema with the Generic modul
     if (fieldConfig.solver_name != "Undefined (legacy mode)")
     {
-        if (isGlobalData)
+        if (isPointCloud)
+        {
+            if (mesh_.time().foundObject<vectorIOField>(fieldConfig.solver_name))
+            {
+                found = true;
+                interface->addCouplingDataReader(
+                    fieldConfig,
+                    new PointCloudVectorCoupler(mesh_, fieldConfig));
+            }
+            else
+            {
+                found = false;
+                std::string msg = "Generic module: pointCloud data \"" + fieldConfig.name + "\" (solver name: \"" + fieldConfig.solver_name + "\") does not exist!\n";
+                msg += "Available vectorIOFields: " + availableVectorIOFields;
+                adapterInfo(msg, "warning");
+            }
+        }
+        else if (isGlobalData)
         {
             if (mesh_.time().foundObject<uniformDimensionedScalarField>(fieldConfig.solver_name)
                 || interface->dataDimensions(fieldConfig.name) == 1)

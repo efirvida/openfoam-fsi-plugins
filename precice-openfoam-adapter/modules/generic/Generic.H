@@ -36,6 +36,7 @@ protected:
     std::string availableVolVectorFields;
     std::string availableUniformScalarFields;
     std::string availableUniformVectorFields;
+    std::string availableVectorIOFields;
 
 public:
     //- Constructor

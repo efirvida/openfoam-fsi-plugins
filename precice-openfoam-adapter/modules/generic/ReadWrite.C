@@ -573,3 +573,84 @@ std::string preciceAdapter::Generic::GlobalVectorFieldCoupler::getDataName() con
 {
     return fieldConfig_.name;
 }
+
+//----- preciceAdapter::Generic::PointCloudVectorCoupler ------------------------------
+
+preciceAdapter::Generic::PointCloudVectorCoupler::PointCloudVectorCoupler(
+    const Foam::fvMesh& mesh,
+    const preciceAdapter::FieldConfig& fieldConfig)
+: runTime_(mesh.time()),
+  fieldConfig_(fieldConfig)
+{
+    dataType_ = vector;
+}
+
+void preciceAdapter::Generic::PointCloudVectorCoupler::bindField() const
+{
+    if (vectorField_ != nullptr)
+    {
+        return;
+    }
+
+    if (!runTime_.foundObject<vectorIOField>(fieldConfig_.solver_name))
+    {
+        adapterInfo(
+            "Generic module: pointCloud data \"" + fieldConfig_.name
+                + "\" refers to registry vectorIOField \"" + fieldConfig_.solver_name
+                + "\", which does not exist. Is the actuator surface FSI layer "
+                  "enabled (the 'fsi' sub-dictionary of the surface source)?",
+            "error");
+    }
+
+    vectorField_ = &runTime_.lookupObjectRef<vectorIOField>(fieldConfig_.solver_name);
+}
+
+void preciceAdapter::Generic::PointCloudVectorCoupler::initialize()
+{
+    bindField();
+}
+
+std::size_t preciceAdapter::Generic::PointCloudVectorCoupler::write(double* buffer, bool, const unsigned int dim)
+{
+    bindField();
+
+    const vectorIOField& field = *vectorField_;
+
+    std::size_t bufferIndex = 0;
+    forAll(field, i)
+    {
+        buffer[bufferIndex++] = field[i].x();
+        buffer[bufferIndex++] = field[i].y();
+        if (dim == 3)
+        {
+            buffer[bufferIndex++] = field[i].z();
+        }
+    }
+
+    return bufferIndex;
+}
+
+void preciceAdapter::Generic::PointCloudVectorCoupler::read(double* buffer, const unsigned int dim)
+{
+    bindField();
+
+    vectorIOField& field = *vectorField_;
+
+    std::size_t bufferIndex = 0;
+    forAll(field, i)
+    {
+        field[i].x() = buffer[bufferIndex++];
+        field[i].y() = buffer[bufferIndex++];
+        field[i].z() = (dim == 3) ? buffer[bufferIndex++] : 0.0;
+    }
+}
+
+bool preciceAdapter::Generic::PointCloudVectorCoupler::isLocationTypeSupported(const bool meshConnectivity) const
+{
+    return !meshConnectivity && this->locationType_ == LocationType::pointCloud;
+}
+
+std::string preciceAdapter::Generic::PointCloudVectorCoupler::getDataName() const
+{
+    return fieldConfig_.name;
+}
