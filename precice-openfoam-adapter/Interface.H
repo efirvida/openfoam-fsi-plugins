@@ -48,6 +48,9 @@ protected:
     //- Names of the OpenFOAM cell sets to be coupled (for volume coupling)
     std::vector<std::string> cellSetNames_;
 
+    //- Name of the registry vectorIOField holding the pointCloud coordinates
+    std::string coordinateFieldName_;
+
     //- Number of data points (cell centers) on the interface (local to this rank)
     int numDataLocations_ = 0;
 
@@ -104,6 +107,7 @@ public:
         const std::string& locationsType,
         const std::vector<std::string>& patchNames,
         const std::vector<std::string>& cellSetNames,
+        const std::string& coordinateFieldName,
         bool meshConnectivity,
         bool restartFromDeformed,
         const std::string& namePointDisplacement,

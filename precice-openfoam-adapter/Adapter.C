@@ -173,18 +173,35 @@ void preciceAdapter::Adapter::configFileRead()
                     interfaceConfig.locationsType == "globalData"
                  || interfaceConfig.locationsType == "global";
 
-                DEBUG(adapterInfo("    patches      : "));
-                auto patches = interfaceDict.lookupOrDefault<wordList>("patches", wordList());
+                const bool isPointCloud =
+                    interfaceConfig.locationsType == "pointCloud";
 
-                if (!isGlobalData && patches.empty())
+                // globalData and pointCloud are patchless interfaces
+                const bool isPatchless = isGlobalData || isPointCloud;
+
+                // Point-cloud coordinate field (a registry vectorIOField)
+                interfaceConfig.coordinateFieldName =
+                    interfaceDict.lookupOrDefault<word>("coordinateField", "");
+                DEBUG(adapterInfo("    coordinateField: " + interfaceConfig.coordinateFieldName));
+
+                if (isPointCloud && interfaceConfig.coordinateFieldName.empty())
                 {
-                    adapterInfo("Interfaces with locations != globalData require a non-empty patches list.", "error");
+                    adapterInfo("The pointCloud location requires a 'coordinateField' entry naming a registry vectorIOField.", "error");
                     return;
                 }
 
-                if (isGlobalData && !patches.empty())
+                DEBUG(adapterInfo("    patches      : "));
+                auto patches = interfaceDict.lookupOrDefault<wordList>("patches", wordList());
+
+                if (!isPatchless && patches.empty())
                 {
-                    adapterInfo("The globalData location does not use OpenFOAM patches. Remove the patches entry from this interface.", "error");
+                    adapterInfo("Interfaces with locations != globalData/pointCloud require a non-empty patches list.", "error");
+                    return;
+                }
+
+                if (isPatchless && !patches.empty())
+                {
+                    adapterInfo("The globalData/pointCloud locations do not use OpenFOAM patches. Remove the patches entry from this interface.", "error");
                     return;
                 }
 
@@ -203,15 +220,15 @@ void preciceAdapter::Adapter::configFileRead()
                     DEBUG(adapterInfo("      - " + cellSet));
                 }
 
-                if (isGlobalData && !interfaceConfig.cellSetNames.empty())
+                if (isPatchless && !interfaceConfig.cellSetNames.empty())
                 {
-                    adapterInfo("The globalData location does not support cellSets.", "error");
+                    adapterInfo("The globalData/pointCloud locations do not support cellSets.", "error");
                     return;
                 }
 
-                if (isGlobalData && interfaceConfig.meshConnectivity)
+                if (isPatchless && interfaceConfig.meshConnectivity)
                 {
-                    adapterInfo("The globalData location does not support mesh connectivity.", "error");
+                    adapterInfo("The globalData/pointCloud locations do not support mesh connectivity.", "error");
                     return;
                 }
 
@@ -321,7 +338,7 @@ try
         std::string nameCellDisplacement = FSIenabled_ ? FSI_->getCellDisplacementFieldName() : "default";
         bool restartFromDeformed = FSIenabled_ ? FSI_->isRestartingFromDeformed() : false;
 
-        Interface* interface = new Interface(*precice_, mesh_, interfacesConfig_.at(i).meshName, interfacesConfig_.at(i).locationsType, interfacesConfig_.at(i).patchNames, interfacesConfig_.at(i).cellSetNames, interfacesConfig_.at(i).meshConnectivity, restartFromDeformed, namePointDisplacement, nameCellDisplacement);
+        Interface* interface = new Interface(*precice_, mesh_, interfacesConfig_.at(i).meshName, interfacesConfig_.at(i).locationsType, interfacesConfig_.at(i).patchNames, interfacesConfig_.at(i).cellSetNames, interfacesConfig_.at(i).coordinateFieldName, interfacesConfig_.at(i).meshConnectivity, restartFromDeformed, namePointDisplacement, nameCellDisplacement);
         interfaces_.push_back(interface);
         DEBUG(adapterInfo("Interface created on mesh " + interfacesConfig_.at(i).meshName));
 

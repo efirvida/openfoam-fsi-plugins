@@ -16,7 +16,8 @@ enum class LocationType
     faceCenters,
     faceNodes,
     volumeCenters,
-    globalData
+    globalData,
+    pointCloud
 };
 
 class CouplingDataUser

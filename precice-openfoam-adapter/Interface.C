@@ -5,6 +5,7 @@
 #include "Utilities.H"
 #include "faceTriangulation.H"
 #include "cellSet.H"
+#include "vectorIOField.H"
 #include "Pstream.H"
 
 #include <algorithm>
@@ -86,6 +87,7 @@ preciceAdapter::Interface::Interface(
     const std::string& locationsType,
     const std::vector<std::string>& patchNames,
     const std::vector<std::string>& cellSetNames,
+    const std::string& coordinateFieldName,
     bool meshConnectivity,
     bool restartFromDeformed,
     const std::string& namePointDisplacement,
@@ -94,6 +96,7 @@ preciceAdapter::Interface::Interface(
   meshName_(meshName),
   patchNames_(patchNames),
   cellSetNames_(cellSetNames),
+  coordinateFieldName_(coordinateFieldName),
   meshConnectivity_(meshConnectivity),
   restartFromDeformed_(restartFromDeformed)
 {
@@ -123,6 +126,10 @@ preciceAdapter::Interface::Interface(
     {
         locationType_ = LocationType::globalData;
     }
+    else if (locationsType == "pointCloud")
+    {
+        locationType_ = LocationType::pointCloud;
+    }
     else
     {
         adapterInfo("Interface points location type \""
@@ -132,8 +139,13 @@ preciceAdapter::Interface::Interface(
     }
 
 
-    // For every patch that participates in the coupling
-    for (uint j = 0; j < patchNames.size() && locationType_ != LocationType::globalData; j++)
+    // For every patch that participates in the coupling. The globalData and
+    // pointCloud locations are patchless interfaces
+    const bool patchless =
+        locationType_ == LocationType::globalData
+     || locationType_ == LocationType::pointCloud;
+
+    for (uint j = 0; j < patchNames.size() && !patchless; j++)
     {
         // Get the patchID
         int patchID = mesh.boundaryMesh().findPatchID(patchNames.at(j));
@@ -575,6 +587,56 @@ void preciceAdapter::Interface::configureMesh(const fvMesh& mesh, const std::str
             precice_.setMeshVertices(meshName_, vertices, vertexIDs_);
         }
     }
+    else if (locationType_ == LocationType::pointCloud)
+    {
+        // Replicated point cloud (e.g. the turbinesFoam actuator surface):
+        // every rank holds the full vertex list in the registry coordinate
+        // field. Rank 0 registers it once and the IDs are broadcast, so all
+        // ranks share the same vertexIDs_ and the same replicated buffer.
+        if (coordinateFieldName_.empty())
+        {
+            adapterInfo(
+                "A pointCloud interface requires a 'coordinateField' entry "
+                "naming a registry vectorIOField.",
+                "error");
+        }
+
+        const vectorIOField& coords =
+            mesh.time().lookupObject<vectorIOField>(coordinateFieldName_);
+
+        numDataLocations_ = static_cast<int>(coords.size());
+        vertexIDs_.clear();
+
+        std::vector<double> vertices(
+            static_cast<std::size_t>(dim_) *
+            static_cast<std::size_t>(numDataLocations_));
+
+        forAll(coords, i)
+        {
+            vertices[dim_*i + 0] = coords[i].x();
+            vertices[dim_*i + 1] = coords[i].y();
+            if (dim_ == 3)
+                vertices[dim_*i + 2] = coords[i].z();
+        }
+
+        if (Pstream::master())
+        {
+            vertexIDs_.resize(numDataLocations_);
+            precice_.setMeshVertices(meshName_, vertices, vertexIDs_);
+        }
+
+        // Broadcast the vertex IDs to every rank (replicated mesh)
+        if (Pstream::parRun())
+        {
+            List<int> sharedIDs(vertexIDs_.size());
+            for (std::size_t k = 0; k < vertexIDs_.size(); ++k)
+                sharedIDs[k] = vertexIDs_[k];
+            preciceAdapter::broadcast(sharedIDs);
+            vertexIDs_.assign(sharedIDs.begin(), sharedIDs.end());
+        }
+
+        globalNumDataLocations_ = numDataLocations_;
+    }
 }
 
 
@@ -641,10 +703,19 @@ void preciceAdapter::Interface::readCouplingData(double relativeReadTime)
         const int dataDim =
             static_cast<int>(precice_.getDataDimensions(meshName_, couplingDataReader->dataName()));
 
-        if (locationType_ == LocationType::globalData)
+        const bool globalLike =
+            locationType_ == LocationType::globalData
+         || locationType_ == LocationType::pointCloud;
+
+        if (globalLike)
         {
-            // Global data: master reads, broadcasts to all ranks
-            const std::size_t nGlobal = static_cast<std::size_t>(dataDim);
+            // Global or replicated-point-cloud data: the master reads, then
+            // the values are broadcast to all ranks
+            const std::size_t nGlobal =
+                static_cast<std::size_t>(dataDim) *
+                (locationType_ == LocationType::globalData
+                    ? std::size_t(1)
+                    : static_cast<std::size_t>(numDataLocations_));
             precice::span<double> dataSpan {dataBuffer_.data(), nGlobal};
             if (Pstream::master())
             {
@@ -747,9 +818,14 @@ void preciceAdapter::Interface::writeCouplingData()
         // Populate the local data buffer from OpenFOAM fields
         auto nWrittenData = couplingDataWriter->write(dataBuffer_.data(), meshConnectivity_, dim_);
 
-        if (locationType_ == LocationType::globalData)
+        const bool globalLike =
+            locationType_ == LocationType::globalData
+         || locationType_ == LocationType::pointCloud;
+
+        if (globalLike)
         {
-            // Global data: check consistency, master writes
+            // Global or replicated-point-cloud data: verify cross-rank
+            // consistency, then the master writes
             if (Pstream::parRun())
             {
                 std::vector<double> localBuffer(

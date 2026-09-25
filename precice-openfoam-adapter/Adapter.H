@@ -44,6 +44,7 @@ private:
         bool meshConnectivity;
         std::vector<std::string> patchNames;
         std::vector<std::string> cellSetNames;
+        std::string coordinateFieldName;
         std::vector<struct FieldConfig> writeData;
         std::vector<struct FieldConfig> readData;
     };
