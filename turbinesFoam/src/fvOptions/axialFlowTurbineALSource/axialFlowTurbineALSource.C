@@ -959,6 +959,63 @@ void Foam::fv::axialFlowTurbineALSource::calcTipCorrection()
             );
         }
     }
+
+    // Diagnostic dump (default off): one Info line per call on the master rank.
+    // The correction is built from replicated geometry and circulation (design
+    // D8), so the per-rank argmax is the global argmax. Reports the largest
+    // |w_corr| over the whole rotor and the full state of the tip element (the
+    // last element of the first blade).
+    if (tipCorrectionDebug_ and Pstream::master())
+    {
+        scalar maxCorr = 0.0;
+        label maxBladeI = -1;
+        label maxElemJ = -1;
+        vector maxCorrVec = vector::zero;
+
+        forAll(blades_, i)
+        {
+            forAll(blades_[i].elements(), j)
+            {
+                const vector wc =
+                    blades_[i].elements()[j].inducedVelocityCorrection();
+                const scalar wcMag = mag(wc);
+
+                if (wcMag > maxCorr)
+                {
+                    maxCorr = wcMag;
+                    maxBladeI = i;
+                    maxElemJ = j;
+                    maxCorrVec = wc;
+                }
+            }
+        }
+
+        const label tipI = 0;
+        const label tipJ = blades_[tipI].elements().size() - 1;
+        actuatorLineElement& tip = blades_[tipI].elements()[tipJ];
+
+        // phi = atan2(uX, uTheta) (paper Eq. 3), in degrees
+        const scalar phiDeg =
+            180.0/pi*Foam::atan2(uXA[tipI][tipJ], uThetaA[tipI][tipJ]);
+
+        Info<< "tipCorrectionDebug t=" << mesh_.time().value()
+            << " maxCorr=" << maxCorr
+            << " maxBlade=" << maxBladeI
+            << " maxElement=" << maxElemJ
+            << " maxVector=" << maxCorrVec
+            << " tipBlade=" << tipI
+            << " tipElement=" << tipJ
+            << " relVel=" << tip.relativeVelocity()
+            << " vel=" << tip.velocity()
+            << " uX=" << uXA[tipI][tipJ]
+            << " uTheta=" << uThetaA[tipI][tipJ]
+            << " phiDeg=" << phiDeg
+            << " CL=" << tip.liftCoefficient()
+            << " chord=" << tip.chordLength()
+            << " eps=" << tip.projectionEpsilon()
+            << " corr=" << tip.inducedVelocityCorrection()
+            << endl;
+    }
 }
 
 
@@ -984,7 +1041,8 @@ Foam::fv::axialFlowTurbineALSource::axialFlowTurbineALSource
     verticalDirection_
     (
         coeffs_.lookupOrDefault("verticalDirection", vector(0, 0, 1))
-    )
+    ),
+    tipCorrectionDebug_(false)
 {
     read(dict);
     createCoordinateSystem();
@@ -1438,6 +1496,11 @@ bool Foam::fv::axialFlowTurbineALSource::read(const dictionary& dict)
         (
             "epsilon",
             0.0
+        );
+        tipCorrectionDebug_ = tipCorrectionDict.lookupOrDefault
+        (
+            "debug",
+            false
         );
         if (tipCorrectionModel_ != "DagSorensen")
         {

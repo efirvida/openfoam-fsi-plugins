@@ -124,6 +124,10 @@ protected:
         //- Fixed nucleus width; <= 0 selects the element projection epsilon
         scalar tipCorrectionEpsilon_;
 
+        //- Switch to emit a per-call tip-correction diagnostic dump on the
+        //  master rank only (default off)
+        bool tipCorrectionDebug_;
+
 
     // Protected Member Functions
 

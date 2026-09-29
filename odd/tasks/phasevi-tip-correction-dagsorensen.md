@@ -313,3 +313,67 @@ measure the real correction magnitude and its growth across PIMPLE iterations;
 then either (a) fix the driver of the disagreement, or (b) damp/relax the
 correction. Do not relaunch the full arm until the correction magnitude is
 bounded.
+
+### 2026-09-29 — Diagnosis: the instability is the INBOARD near-field singularity, not the tip
+
+Diagnostic run: Slurm **11604142** (dev queue, 00:05:54, `COMPLETED`), the
+pre-rendered 7 m/s coarse arm-A case with `tipCorrection { debug true; }` and
+`endTime 0.30`. The new `tipCorrectionDebug` dump prints one line per
+`calcTipCorrection` call.
+
+**The tip is correct and small.** At t = 0.016 the tip element (blade 0,
+element 49) stores `corr = (−0.814, 0.149, −0.020)` m/s — exactly the offline
+replica's 0.82 m/s. The tip-region physics the feature targets is fine.
+
+**The blow-up is inboard.** `max |w_corr|` over all elements grows
+exponentially and jumps between blade/element indices:
+
+| t | max\|w_corr\| (m/s) | location |
+|---|---|---|
+| 0.008 | 0 | (ε still unset; all stations skipped) |
+| 0.016 | 15.76 | blade 1, element 7 |
+| 0.024 | 17.16 | blade 1, element 9 |
+| 0.032 | 84.09 | blade 0, element 9 |
+| 0.040 | 264.06 | blade 0, element 9 |
+| 0.088 | **1 972 755** | — |
+
+**Root cause.** With the clean state (t = 0.008, before any correction is
+applied) the bound circulation jumps from `Γ = 0` at elements 0–7 — the
+`cylinder` placeholder profile, `cl ≡ 0` — to `Γ = +5.72` at element 8, the
+first S809 element. Those elements are only ≈ 0.03 m apart in the radial
+direction (the inboard `elementData` is densely packed), so the trailing vortex
+shed at station 8, `Γ_w(8) = Γ(7) − Γ(8) = −5.72`, sits ≈ 0.015 m from the
+element-8 actuator point. The kernel then gives `|w_corr| ≈ 14 m/s` there
+(surrogate) — an order of magnitude above the correction's intended magnitude
+and enough to drive the PIMPLE feedback loop unstable.
+
+Both kernel forms diverge in this near field: the paper's point-segment
+surrogate `(d𝒍 × d)/|d|³` gives 14.0 m/s at element 8, and the exact
+finite-straight-segment Biot–Savart gives 27.2 m/s (and 66.6 m/s at the tip
+element) — the actuator point is effectively **on** the vortex line, where any
+Biot–Savart kernel is singular. The paper's own discretisation avoids this: at
+`nrAero = 11` spanwise points the nearest vortex is ≈ 0.25 m away, i.e.
+`≈ 1–2 m/s`.
+
+So the failure is a **near-field resolution/regularisation** problem created by
+our dense inboard sampling plus the non-lifting placeholder, not an error in the
+tip correction itself and not a sign error.
+
+**Options (need a decision; none applied):**
+1. **Regularise the near field** — floor `|d|` (e.g. at a fraction of the local
+   spanwise spacing or of ε), or cap `|w_corr|` at a fraction of `|U∞|`. Simple,
+   but introduces a parameter the paper does not have.
+2. **Coarsen the wake sampling** — shed the wake vortices at a coarser radial
+   resolution (≈ the paper's spacing) or merge stations closer than ~ε, so no
+   vortex sits within the near field of an actuator point.
+3. **Neutralise the placeholder jump** — exclude the wake stations that straddle
+   the non-lifting `cylinder`/first-lifting-element transition, where the jump is
+   an artefact of `cl ≡ 0` placeholders rather than real loading.
+4. **Extend the model** — make the correction the difference between the
+   inviscid induction and the induction the ALM kernel already provides (the
+   literal reading of the paper's "subtract the viscous part"), which is
+   bounded by construction but is a larger change.
+
+Option 3 + 1 look like the smallest credible fix; option 2 is the most faithful
+to the paper's demonstrated resolution. Do **not** relaunch the full arm until
+the inboard `max |w_corr|` is bounded to a few percent of `U∞`.
