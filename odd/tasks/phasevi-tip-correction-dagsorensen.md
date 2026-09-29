@@ -222,3 +222,94 @@ next column prints 3/5 and the Fig. 10 legend uses ε = 5Δ and 3Δ — the mete
 column is internally inconsistent; the design uses **ε/Δ ∈ {3,5}** as the paper's
 tested values and our own case's ε as the configured default, not the ambiguous
 meter column.
+
+### 2026-09-29 — Slices A/B implemented, verified, committed; arm A submitted
+
+**Commits** (branch `feat/dagsorensen-tip-correction`, newest first):
+- `516cf8f` `feat(phaseVI): add the prepared tip-correction arm-A submission script`
+- `a7a95be` `feat(phaseVI): render and CLI plumbing for the tip correction`
+- `1eb4fb0` `feat(turbinesFoam): add the Dag & Sorensen induced-velocity tip correction`
+
+**Implementation** — `axialFlowTurbineALSource::calcTipCorrection()` (Γ = Eq. 24,
+N+1 vortex stations closed by Eq. 25, 2 revs / 2° helical straight-segment
+wake, Eq. 23 vector accumulation), plus the per-element
+`inducedVelocityCorrection_` added to `inflowVelocity_` before the AoA in
+`actuatorLineElement::calculateForce`.
+
+**Sign convention resolved empirically** (design D4): the flow angle must use
+the `calcEndEffects` blade-motion convention (`u_θ = −(bladeDir · rel)`), and
+the sweep sign is `−sign(omega_·(axisHat · downstream))` (spin about the flow
+axis). A blade-motion-derived sweep sign was tried and **refuted** by an
+isolation experiment (it inverted the upstream rotor's tip-vortex induction and
+made the correction *increase* tip loading). Measured fixture element at
+r/R = 0.917 (`alpha_deg` / `f_ref_n`): upstream off 12.176 / 42.844 → on
+9.070 / 39.079; axis-aligned off 12.176 / 42.844 → on 8.848 / 40.837 — both
+reduce, as Fig. 10 requires.
+
+**Independent verification** (gentle-ai-verify, read-only): `./Allwmake` exit 0
+with the library newer than every source and exporting `calcTipCorrection` /
+`setInducedVelocityCorrection`; `pytest tests/test_tip_correction.py` 10 passed;
+`tests/test_phasevi_case.py` 23 passed; full `pytest tests` 166 passed,
+**2 pre-existing failures unrelated to this change**
+(`test_blade_surface.py::test_missing_empty_corrupt_stl_aborts`,
+`test_nacelle.py::test_empty_stl_aborts` — stale `"contains no triangles"`
+expectation vs the source's `"contains no faces"` in
+`nacelleSurface/surfaceSamplerBase.C`), 3 skipped. Default-off gate confirmed
+(all three twins render `active off`; `generate_case.py --check` exit 0). The
+regression/reduction tests were confirmed non-tautological.
+
+**Known limitations recorded**: MPI parallel invariance is still untested (task
+6); the sweep handedness is pinned empirically by the fixture, not symbolically
+derived; a single-element blade (`nEl == 1`) yields a zero correction.
+
+**Campaign** — arm A submitted: Slurm job **11604127** (`phaseVI-tipcorr`,
+`sequana_cpu`, 48 ranks, cores-only): 7 m/s coarse D/32, `--rotational-augmentation
+on --root-effects off --tip-effects off --tip-correction on`, default and CSU
+polars, restartable, full ~12-rev window. Verdict to be recorded in
+`campaign-results/RESULTS.md` (task 8).
+
+### 2026-09-29 — Arm A FAILED: the tip correction destabilizes the real case
+
+Slurm job **11604127** (`phaseVI-tipcorr`) ended `FAILED 1:0` at 00:11:07.
+**Both** the OSU and the CSU run diverged in the first ~11 steps:
+`kOmegaSSTBase::F2()` floating-point exception after the Courant number exploded
+(OSU max 6612, CSU max 82041; the previous tip-off arm A′ ran the full 12 revs
+from the same mesh and initialization).
+
+Evidence from the tip element (element 49, r/R = 0.999) CSV
+(`runs/alm-U7-coarse-tipcorr/postProcessing/actuatorLineElements/0/…element49.csv`):
+
+| t | rel_vel_mag | alpha_deg |
+|---|---|---|
+| 0.008 | 38.44 | 9.30 (identical to arm A′ — the correction is 0 on the first call) |
+| 0.072 | 29.61 | **24.43** |
+| 0.080 | 341.0 | −83.77 (blown up) |
+| 0.088 | 3126.1 | 57.17 |
+
+A correction that changed the tip α by ~+15° cannot be the intended small
+induction fix, and it drives the force → wake → sampled inflow feedback loop
+past its stability limit.
+
+**Offline replication (Python, faithful to the C++ geometry) says the
+correction should be small.** Using the run's own t = 0.008 element CSV and the
+rendered `fvOptions.ALM` geometry (origin, axis `(-1 0 0)`, downstream `+x`,
+TSR 5.408, R = 5.029, Ω = 7.53 rad/s, ε = 0.63, 2 revs / 2°), the reconstructed
+Eq. (23) gives at the tip `|w_corr| = 0.82 m/s` (≈ 12 % of U∞), w = (−0.81,
+0.15, −0.01); mid-span `0.04 m/s`; root `0.35 m/s`. The vector sum is dominated
+by strong cancellation (the tip vortex station alone contributes ≈ 11.8 m²/s of
+magnitude but nearly cancels). So the implemented physics *should* be stable.
+
+**Therefore the C++ computation differs from the replica by ~10× on the real
+case, and the fixture (6 elements, 2 steps, one corrector) did not expose it.**
+The instability is a real blocker for task 7.
+
+**Cleanup**: `processor*/` of both failed runs removed (quota). The run dirs
+(logs, `postProcessing/`, `system/`) are kept for the diagnosis.
+
+**Next step (needs a decision):** instrument `calcTipCorrection` with a
+`debugTipCorrection` max-|w_corr| `Info` line (default off), rebuild, and run a
+short (≈ 0.25–0.5 s) 7 m/s coarse case on the authorized development queue to
+measure the real correction magnitude and its growth across PIMPLE iterations;
+then either (a) fix the driver of the disagreement, or (b) damp/relax the
+correction. Do not relaunch the full arm until the correction magnitude is
+bounded.
