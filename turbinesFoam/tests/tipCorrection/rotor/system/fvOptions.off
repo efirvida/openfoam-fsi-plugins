@@ -1,0 +1,91 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvOptions;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Minimal one-blade axial-flow rotor for the Dag & Sorensen tip-correction
+// tests. Six elements span r = 0.05 m to r = 0.45 m of a 0.45 m rotor, chord
+// 0.04 m, zero twist, TSR 5. The rotor axis points upstream (axis -x, free
+// stream +x), matching the NREL Phase VI convention so the local flow angle
+// (paper Eq. 3) is the physical one. The default dictionary carries NO
+// `tipCorrection` block: this is the default-off baseline used by the
+// byte-identical gate. `fvOptions.on` adds the block; `fvOptions.off` is the
+// same with `active off`; `fvOptions.badmodel` requests an unregistered model.
+
+turbine
+{
+    type            axialFlowTurbineALSource;
+    active          on;
+
+    axialFlowTurbineALSourceCoeffs
+    {
+        fieldNames          (U);
+        selectionMode       cellSet;
+        cellSet             turbine;
+        origin              (0 0 0);
+        axis                (-1 0 0);
+        verticalDirection   (0 0 1);
+        freeStreamVelocity  (10 0 0);
+        tipSpeedRatio       5.0;
+        rotorRadius         0.45;
+
+        dynamicStall
+        {
+            active          off;
+            dynamicStallModel LeishmanBeddoes;
+        }
+
+        endEffects
+        {
+            active          off;
+            endEffectsModel Glauert;
+        }
+
+        tipCorrection
+        {
+            active          off;
+            model           DagSorensen;
+            wakeTurns       2;
+            wakeAzimuthalStep 2;
+            epsilon         0;
+        }
+
+        blades
+        {
+            blade1
+            {
+                writePerf           true;
+                writeElementPerf    true;
+                elementType         actuatorLineElement;
+                nElements           6;
+                elementProfiles     (S809 S809 S809 S809 S809 S809);
+                elementData
+                (
+                    (0.0  0.05  0.0  0.04  0.25  0.0)
+                    (0.0  0.45  0.0  0.04  0.25  0.0)
+                );
+            }
+        }
+
+        profileData
+        {
+            S809
+            {
+                data (#include "S809.dat");
+            }
+        }
+    }
+}
+
+// ************************************************************************* //

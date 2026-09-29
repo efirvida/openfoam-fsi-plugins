@@ -1,7 +1,9 @@
 # Feature: Dag & Sørensen tip correction for the ALM (P4)
 
 - **Status:** in progress
-- **Branch:** (cut before the first commit)
+- **Branch:** `feat/dagsorensen-tip-correction` (cut from `faad66f` on
+  `feat/nacelle-actuator-surface`; carries the Phase VI ablation switches and
+  the compare frame fix that the campaign needs — user decision 2026-09-29)
 - **Created:** 2026-09-29
 - **Reference:** Dağ, K.O. & Sørensen, J.N., *A new tip correction for actuator line
   computations*, Wind Energy 23(2):148-160, 2020
@@ -99,13 +101,29 @@ model as the committed default (the ablation decides).
 
 ## Tasks
 
-1. [ ] Re-verify Eqs. (15)–(24) and the prescribed-wake prescription (pp. 155–157).
-2. [ ] ODD design note: interfaces, the wake geometry, the iteration, MPI safety.
-3. [ ] Implement the per-element circulation Γ and the prescribed wake geometry.
-4. [ ] Implement Eq. (23) accumulation and Eq. (21) application.
-5. [ ] Config + render plumbing; default-off byte-identical gate.
+1. [x] Re-verify Eqs. (15)–(24) and the prescribed-wake prescription (pp. 155–157).
+       Verified with vision on printed pp. 150–158 (PDF pp. 3–11) — see the
+       evidence log below for the exact transcribed forms.
+2. [x] ODD design note: interfaces, the wake geometry, the iteration, MPI safety.
+       Written to `odd/tasks/phasevi-tip-correction-design.md` (D1–D9, the
+       concrete algorithm, the test plan, and three revertable slices).
+3. [x] Implement the per-element circulation Γ and the prescribed wake geometry.
+       Done in `axialFlowTurbineALSource::calcTipCorrection()` (Γ from Eq. 24,
+       N+1 vortex stations closed by Eq. 25, 2 revs / 2° helical segments).
+4. [x] Implement Eq. (23) accumulation and Eq. (21)/(26) application.
+       Done: the vector sum is stored per element and added to
+       `inflowVelocity_` in `calculateForce` before the AoA.
+5. [x] Config + render plumbing; default-off byte-identical gate.
+       C++ default-off block + Phase VI render plumbing landed
+       (`case.yaml`, `generate_case.py`, `runPhaseVI.sh --tip-correction`,
+       regenerated `fvOptions.{ALM,ASM,ASM-MESH}`). Verified: `--check` exit 0,
+       the committed default renders `active off` in all three twins, and
+       `test_phasevi_case.py` passes (23).
 6. [ ] Tests: the planar-wing limit (their Fig. 3/4), a zero-strength sanity
        check, default-off regression, parallel invariance.
+       Done: Eq. (16)/(17) reference kernel, zero-strength, right-hand-rule
+       sign, both axis conventions, default-off gate, badmodel, source pin
+       (10 passed). Pending: parallel invariance.
 7. [ ] Launch the Phase VI arm A with the correction **and the tip loss OFF** at
        7 m/s, against the measured 790 Nm / 1132 N.
 8. [ ] Record the verdict in `RESULTS.md`.
@@ -117,3 +135,90 @@ model as the committed default (the ablation decides).
   cone 0°, 7 m/s, ε/Δ = 2). Their Fig. 2 reproduces our exact symptom.
   **Their Table 1 gives root cutout 0.9 m** where the committed case uses
   0.5083 m (per NREL/TP-500-29955) — noted, not changed.
+
+### 2026-09-29 — Task 1 re-verification with vision (printed pp. 150–158)
+
+Rendered the paper pages to PNG (220 dpi) and read them with vision. The
+handoff's Eq. (15)–(24) summary is **confirmed and completed**. Exact forms:
+
+**Local kinematics (Eqs. 2–4, p. 150).** Corotating frame `(r, θ, x)`, `x`
+downstream along the rotor axis, `θ` azimuthal, `γ` = local twist + pitch:
+
+- (2) `u_θ = Ω r − (u_y cos θ + u_z sin θ)`
+- (3) `φ = tan⁻¹(u_x / u_θ)`
+- (4) `α = φ − γ`
+- `u_rel = √(u_θ² + u_x²)`; (5) `f_L = ½ ρ u_rel² c C_L`; (6) `f_D = ½ ρ u_rel² c C_D`
+- (7) `f_θ = f_L sin φ − f_D cos φ`; (8) `f_n = f_L cos φ + f_D sin φ`
+
+**Gaussian kernel (Eqs. 12–13, p. 151).** The ALM kernel is `
+η = (1/(ε³ √π³)) exp(−(d/ε)²)`; `d` = grid↔actuator-point distance.
+
+**Correction core (Eqs. 15–16, p. 153).**
+
+- (15) Lamb–Oseen: `w_i = Γ/(4πr)·[1 − exp(−(r/r_vc)²)]`
+- (16) `w_corr = Γ/(4πr)·exp(−(r/ε)²)` — the viscous part subtracted; `r_vc`→`ε`.
+
+**Planar wing (Eqs. 17–21, pp. 154–155).**
+
+- (17) `w_corr(i) = Σ_{j=1}^{N+1} Γ_w(j)/(4π d_(i,j)) · exp(−(d_(i,j)/ε)²)`
+- (18) `Γ_w(j) = Γ_(j) − Γ_(j−1)`
+- (19) `Γ_(i) = ½ c_(i) C_L(i) u_rel(i)`
+- (20) `d_(i,j) = y_(i) − y_w(j)` (planar, span = y; a note fixes `*`)
+- (21) `α_(i) = α_g − sin⁻¹((−u_x(i) + w_corr(i)) / u_rel(i))`
+
+**Rotor (Eqs. 22–27, pp. 155–156).** Vector form; `h,p,q` = wake blade,
+span, azimuth; `N,m` = actuator blade, span:
+
+- (22) `[w_xcorr,w_ycorr,w_zcorr]ᵀ = Γ/(4π) · (d𝒍 × d)/|d|³ · exp(−(|d|/ε)²)`
+- (23) `[·]^{N,m} = Σ_h Σ_p Σ_q Γ_w(h,p,q)/(4π) ·
+  (d_{h,p,q} × d^{N,m}_{h,p,q}) / |d^{N,m}_{h,p,q}|³ ·
+  exp(−(|d^{N,m}_{h,p,q}|/ε)²)`
+- (24) `Γ^{N,m} = ½ c^{N,m} C_L^{N,m} u_rel^{N,m}`
+- (25) `Γ_w(h,p,q) = Γ_(p−1,q) − Γ_(p,q)`
+- (26) `φ^{N,m} = tan⁻¹( (u_x^{N,m} + w_xcorr^{N,m}) /
+  (u_θ^{N,m} + w_θcorr^{N,m}) )`
+- (27) `w_θcorr^{N,m} = w_ycorr^{N,m} cos(θ^N) + w_zcorr^{N,m} sin(θ^N)`
+- then the new AoA is Eq. (4): `α = φ − γ`.
+
+**Correction applied to φ, not directly to α** for the rotor (Eq. 26 adds the
+correction to the axial and tangential inflow, then (4) forms the AoA). The
+planar-wing Eq. (21) is the 2-D analogue.
+
+**Prescribed-wake recipe (p. 156, verbatim facts).** "the helical pitch of each
+individual trailing vortex is assumed to be constant and equal to the relative
+flow angle at the position where the trailing vortex is released"; updated every
+time step (quasi-steady); **"the length of the helical vortex sheet is fixed at
+two full revolutions"**; **"the azimuthal discretization of the wake is made
+with 2° intervals"** (→ 180 segments/rev). The paper explicitly says the wake
+vortices are restricted to straight lines "in order to simplify the
+bookkeeping" and that "even a simple prescribed wake greatly improves the
+resulting circulation distribution". The correction is iterative within each
+time step (Fig. 1 caption / p. 155).
+
+**Sign note (must be resolved in the design).** Planar (18) has
+`Γ_w = Γ_j − Γ_{j−1}` while rotor (25) has `Γ_w = Γ_{p−1} − Γ_p`, i.e. opposite
+differences; in the vector form the sign is carried by the segment direction
+`d𝒍` in the `d𝒍 × d` cross product, so the two are consistent **only under a
+stated segment-orientation convention**. The design MUST fix the convention and
+the sign explicitly rather than copy one difference into the other case.
+
+**Comparison-case numbers (their Table 1, p. 151).** Phase VI: 2 blades, TSR
+5.39, AR 7.5, D = 10.058 m, root cutout **0.9 m**, Ω **7.50107 rad/s**, pitch
+**3°**, cone 0°, U **7 m/s**. **Their verification case (Fig. 2, p. 152): domain
+180×60×60 m, Δx=Δy=0.5, Δz=0.25, ε = 3Δ = 1.5 m, 10 points along the rotor
+radius.** Their rotor validation (Fig. 10, p. 158) uses Δ = R/5 and R/20 with
+ε/Δ = 5 and 3.
+
+**Their Fig. 10 result (p. 158) = our target behaviour.** For Phase VI, ALM
+*without* correction over-predicts the tip `F_n`/`F_t`; adding the correction
+(`ALM*`) collapses them onto the BEM curves. This matches our chain: Glauert
+OFF leaves us +19.5 % (over-predicted tip) → the Dağ & Sørensen correction must
+lower it toward the measurement. Their reported 5-MW effect: peak error 23 %→5 %
+(normal) and 77 %→17 % (tangential).
+
+**Caveats recorded, not acted on.** (a) Their root cutout 0.9 m ≠ our 0.5083 m.
+(b) Table 3's `ε, m` column prints 6/10 (coarse) and 1.5/2.5 (fine) while its
+next column prints 3/5 and the Fig. 10 legend uses ε = 5Δ and 3Δ — the meter
+column is internally inconsistent; the design uses **ε/Δ ∈ {3,5}** as the paper's
+tested values and our own case's ε as the configured default, not the ambiguous
+meter column.

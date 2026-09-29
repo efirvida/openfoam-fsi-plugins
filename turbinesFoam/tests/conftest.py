@@ -25,6 +25,7 @@ SOLVER_DRIVEN = (
     "test_libs.py",
     "test_nacelle.py",
     "test_rotational_augmentation.py",
+    "test_tip_correction.py",
 )
 
 

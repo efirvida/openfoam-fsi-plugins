@@ -473,6 +473,8 @@ Foam::scalar Foam::fv::actuatorLineElement::calcProjectionEpsilon()
         Info<< "    epsilon (" << epsilonMethod << "): " << epsilon << endl;
     }
 
+    projectionEpsilon_ = epsilon;
+
     return epsilon;
 }
 
@@ -751,6 +753,8 @@ Foam::fv::actuatorLineElement::actuatorLineElement
     projectElementForce_(true),
     rootDistance_(0.0),
     endEffectFactor_(1.0),
+    inducedVelocityCorrection_(vector::zero),
+    projectionEpsilon_(-VGREAT),
     addedMassActive_(dict.lookupOrDefault("addedMass", false)),
     addedMass_(mesh.time(), dict.lookupOrDefault("chordLength", 1.0), debugLevel_)
 {
@@ -920,6 +924,18 @@ const Foam::scalar& Foam::fv::actuatorLineElement::rootDistance()
 }
 
 
+const Foam::vector& Foam::fv::actuatorLineElement::inducedVelocityCorrection() const
+{
+    return inducedVelocityCorrection_;
+}
+
+
+Foam::scalar Foam::fv::actuatorLineElement::projectionEpsilon() const
+{
+    return projectionEpsilon_;
+}
+
+
 void Foam::fv::actuatorLineElement::calculateForce
 (
     const volVectorField& Uin
@@ -950,6 +966,9 @@ void Foam::fv::actuatorLineElement::calculateForce
                             * (inflowVelocity_ & spanDirection_)
                             / magSqr(spanDirection_);
     inflowVelocity_ -= spanwiseVelocity;
+
+    // Add the rotor-level induced-velocity correction (Dag & Sorensen 2020)
+    inflowVelocity_ += inducedVelocityCorrection_;
 
     // Calculate relative velocity and Reynolds number
     relativeVelocity_ = inflowVelocity_ - velocity_;
@@ -1420,6 +1439,15 @@ void Foam::fv::actuatorLineElement::setOmega(scalar omega)
 void Foam::fv::actuatorLineElement::setEndEffectFactor(scalar factor)
 {
     endEffectFactor_ = factor;
+}
+
+
+void Foam::fv::actuatorLineElement::setInducedVelocityCorrection
+(
+    const vector& correction
+)
+{
+    inducedVelocityCorrection_ = correction;
 }
 
 

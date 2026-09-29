@@ -681,6 +681,287 @@ void Foam::fv::axialFlowTurbineALSource::calcEndEffects()
 }
 
 
+void Foam::fv::axialFlowTurbineALSource::calcTipCorrection()
+{
+    if (!tipCorrectionActive_)
+    {
+        return;
+    }
+
+    if (debug)
+    {
+        Info<< "Calculating tip correction for " << name_ << endl;
+    }
+
+    const scalar pi = Foam::constant::mathematical::pi;
+
+    // Rotor axis and the downstream direction (both unit vectors)
+    const vector axisHat = axis_/mag(axis_);
+    const vector downstream = freeStreamDirection_;
+
+    // The prescribed-wake model is axial-flow only
+    if (mag(mag(axisHat & downstream) - 1.0) > 1.0e-3)
+    {
+        WarningInFunction
+            << "tipCorrection requires the free stream to be (anti)parallel "
+            << "to the rotor axis. Disabling the correction for " << name_
+            << endl;
+        tipCorrectionActive_ = false;
+        return;
+    }
+
+    // Wake azimuthal discretization
+    const scalar dTheta = 2.0*pi*(wakeAzimuthStepDeg_/360.0);
+    const label nSeg = label
+    (
+        Foam::max
+        (
+            scalar(1),
+            std::round(wakeTurns_*360.0/wakeAzimuthStepDeg_)
+        )
+    );
+
+    const label nB = nBlades_;
+
+    // Sample the bound circulation and the local element geometry
+    List<List<vector> > pointA(nB);
+    List<List<scalar> > gammaA(nB);
+    List<List<scalar> > epsA(nB);
+    List<List<scalar> > uXA(nB);
+    List<List<scalar> > uThetaA(nB);
+
+    forAll(blades_, i)
+    {
+        const label nEl = blades_[i].elements().size();
+
+        pointA[i].setSize(nEl);
+        gammaA[i].setSize(nEl);
+        epsA[i].setSize(nEl);
+        uXA[i].setSize(nEl);
+        uThetaA[i].setSize(nEl);
+
+        forAll(blades_[i].elements(), j)
+        {
+            actuatorLineElement& e = blades_[i].elements()[j];
+
+            const vector P = e.position();
+            const vector rel = e.relativeVelocity();
+            const vector bladeVel = e.velocity();
+            const vector bladeDir = bladeVel/max(mag(bladeVel), VSMALL);
+
+            pointA[i][j] = P;
+            gammaA[i][j] =
+                0.5*e.chordLength()*e.liftCoefficient()*mag(rel);
+            epsA[i][j] = (tipCorrectionEpsilon_ > 0.0)
+                ? tipCorrectionEpsilon_
+                : e.projectionEpsilon();
+            // Flow angle components (paper Eq. 3), in the blade-motion
+            // convention of calcEndEffects; independent of the sign of axis_
+            uXA[i][j] = rel & downstream;
+            uThetaA[i][j] = -(bladeDir & rel);
+        }
+    }
+
+    // Build the vortex stations: p = 0..N, with the geometry interpolated
+    // from the adjacent element centres and extrapolated at the two ends
+    List<List<vector> > stationPoint(nB);
+    List<List<scalar> > stationGammaW(nB);
+    List<List<scalar> > stationEps(nB);
+    List<List<scalar> > stationTanPhi(nB);
+    List<List<label> > stationValid(nB);
+
+    forAll(blades_, i)
+    {
+        const label nEl = pointA[i].size();
+        const label nSt = nEl + 1;
+
+        stationPoint[i].setSize(nSt);
+        stationGammaW[i].setSize(nSt);
+        stationEps[i].setSize(nSt);
+        stationTanPhi[i].setSize(nSt);
+        stationValid[i].setSize(nSt);
+
+        for (label p = 0; p < nSt; p++)
+        {
+            // Element j sits at station coordinate j + 0.5; interpolate, or
+            // extrapolate half a spacing at the two end stations
+            scalar w0 = 0.5;
+            scalar w1 = 0.5;
+            label j0 = 0;
+            label j1 = 0;
+            if (nEl == 1)
+            {
+                w0 = 1.0;
+                w1 = 0.0;
+                j0 = 0;
+                j1 = 0;
+            }
+            else if (p == 0)
+            {
+                w0 = 1.5;
+                w1 = -0.5;
+                j0 = 0;
+                j1 = 1;
+            }
+            else if (p == nEl)
+            {
+                w0 = 1.5;
+                w1 = -0.5;
+                j0 = nEl - 1;
+                j1 = nEl - 2;
+            }
+            else
+            {
+                w0 = 0.5;
+                w1 = 0.5;
+                j0 = p - 1;
+                j1 = p;
+            }
+
+            const vector Pv = w0*pointA[i][j0] + w1*pointA[i][j1];
+            const scalar epsV = w0*epsA[i][j0] + w1*epsA[i][j1];
+            const scalar uXv = w0*uXA[i][j0] + w1*uXA[i][j1];
+            const scalar uThv = w0*uThetaA[i][j0] + w1*uThetaA[i][j1];
+
+            const vector rvec =
+                (Pv - origin_) - ((Pv - origin_) & axisHat)*axisHat;
+            const scalar rv = mag(rvec);
+
+            const scalar phiV = Foam::atan2(uXv, uThv);
+
+            stationPoint[i][p] = Pv;
+            stationEps[i][p] = epsV;
+            stationTanPhi[i][p] = rv*Foam::tan(phiV);
+
+            // Gamma_w(p) = Gamma(p-1) - Gamma(p), closing at both ends
+            const scalar gamPrev = (p == 0) ? 0.0 : gammaA[i][p-1];
+            const scalar gamNext = (p == nEl) ? 0.0 : gammaA[i][p];
+            stationGammaW[i][p] = gamPrev - gamNext;
+
+            stationValid[i][p] = (epsV >= 0.0) and (mag(uThv) >= VSMALL);
+        }
+    }
+
+    // Pre-build the straight wake segments. The sweep sign is derived from
+    // the spin about the flow axis, NOT from the local blade motion. Empirical
+    // finding (test_tip_correction): with the blade-motion flow angle of
+    // Fix 1, the signed formula below gives the correct lag for BOTH the
+    // upstream (axis -x) and axis-aligned (axis +x) conventions, because the
+    // two rotors spin oppositely about the flow axis; the two mirrors are NOT
+    // required to match (opposite wake handedness).
+    const vector bladeVel0 = blades_[0].elements()[0].velocity();
+    if (mag(bladeVel0) < VSMALL)
+    {
+        WarningInFunction
+            << "tipCorrection: zero blade velocity; disabling for " << name_
+            << endl;
+        forAll(blades_, ib)
+        {
+            forAll(blades_[ib].elements(), jb)
+            {
+                blades_[ib].elements()[jb].setInducedVelocityCorrection
+                (
+                    vector::zero
+                );
+            }
+        }
+        tipCorrectionActive_ = false;
+        return;
+    }
+    const scalar sweepSign = -Foam::sign(omega_*(axisHat & downstream));
+
+    List<List<List<vector> > > segC(nB);
+    List<List<List<vector> > > segDl(nB);
+
+    forAll(blades_, i)
+    {
+        const label nSt = stationPoint[i].size();
+        segC[i].setSize(nSt);
+        segDl[i].setSize(nSt);
+
+        for (label p = 0; p < nSt; p++)
+        {
+            segC[i][p].setSize(nSeg);
+            segDl[i][p].setSize(nSeg);
+
+            for (label k = 0; k < nSeg; k++)
+            {
+                segC[i][p][k] = vector::zero;
+                segDl[i][p][k] = vector::zero;
+            }
+
+            if (!stationValid[i][p])
+            {
+                continue;
+            }
+
+            const vector Pv = stationPoint[i][p];
+            const scalar advance = stationTanPhi[i][p];
+
+            vector prev = Pv;
+            for (label k = 1; k <= nSeg; k++)
+            {
+                vector stepPoint = Pv + scalar(k)*advance*dTheta*downstream;
+                rotateVector
+                (
+                    stepPoint,
+                    origin_,
+                    axisHat,
+                    sweepSign*scalar(k)*dTheta
+                );
+
+                segC[i][p][k-1] = 0.5*(prev + stepPoint);
+                segDl[i][p][k-1] = stepPoint - prev;
+
+                prev = stepPoint;
+            }
+        }
+    }
+
+    // Accumulate Eq. (23) for every actuator point and store the correction
+    const scalar invFourPi = 1.0/(4.0*pi);
+
+    forAll(blades_, i2)
+    {
+        forAll(blades_[i2].elements(), j2)
+        {
+            const vector Pact = pointA[i2][j2];
+
+            vector acc = vector::zero;
+            forAll(blades_, i)
+            {
+                const label nSt = stationPoint[i].size();
+                for (label p = 0; p < nSt; p++)
+                {
+                    if (!stationValid[i][p])
+                    {
+                        continue;
+                    }
+
+                    const scalar gamW = stationGammaW[i][p];
+                    const scalar epsV = stationEps[i][p];
+
+                    for (label k = 0; k < nSeg; k++)
+                    {
+                        const vector d = Pact - segC[i][p][k];
+                        const scalar dMag = mag(d);
+
+                        acc += gamW*(segDl[i][p][k] ^ d)
+                             / max(dMag*dMag*dMag, VSMALL)
+                             * Foam::exp(-Foam::sqr(dMag/epsV));
+                    }
+                }
+            }
+
+            blades_[i2].elements()[j2].setInducedVelocityCorrection
+            (
+                invFourPi*acc
+            );
+        }
+    }
+}
+
+
 // * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * * //
 
 Foam::fv::axialFlowTurbineALSource::axialFlowTurbineALSource
@@ -695,6 +976,11 @@ Foam::fv::axialFlowTurbineALSource::axialFlowTurbineALSource
     hasHub_(false),
     hasTower_(false),
     hasNacelle_(false),
+    tipCorrectionActive_(false),
+    tipCorrectionModel_("DagSorensen"),
+    wakeTurns_(2),
+    wakeAzimuthStepDeg_(2.0),
+    tipCorrectionEpsilon_(0.0),
     verticalDirection_
     (
         coeffs_.lookupOrDefault("verticalDirection", vector(0, 0, 1))
@@ -859,6 +1145,12 @@ void Foam::fv::axialFlowTurbineALSource::addSup
         calcEndEffects();
     }
 
+    if (tipCorrectionActive_)
+    {
+        // Calculate the induced-velocity tip correction
+        calcTipCorrection();
+    }
+
     // Add source for blade actuator lines
     forAll(blades_, i)
     {
@@ -953,6 +1245,12 @@ void Foam::fv::axialFlowTurbineALSource::addSup
         calcEndEffects();
     }
 
+    if (tipCorrectionActive_)
+    {
+        // Calculate the induced-velocity tip correction
+        calcTipCorrection();
+    }
+
     // Add source for blade actuator lines
     forAll(blades_, i)
     {
@@ -1035,6 +1333,12 @@ void Foam::fv::axialFlowTurbineALSource::addSup
         calcEndEffects();
     }
 
+    if (tipCorrectionActive_)
+    {
+        // Calculate the induced-velocity tip correction
+        calcTipCorrection();
+    }
+
     // Add scalar source term from blades
     forAll(blades_, i)
     {
@@ -1108,6 +1412,41 @@ bool Foam::fv::axialFlowTurbineALSource::read(const dictionary& dict)
         endEffectsDict_ = coeffs_.subOrEmptyDict("endEffects");
         endEffectsDict_.lookup("active") >> endEffectsActive_;
         endEffectsDict_.lookup("endEffectsModel") >> endEffectsModel_;
+
+        // Read the tip correction subdictionary (additive, default off)
+        dictionary tipCorrectionDict = coeffs_.subOrEmptyDict
+        (
+            "tipCorrection"
+        );
+        tipCorrectionActive_ = tipCorrectionDict.lookupOrDefault
+        (
+            "active",
+            false
+        );
+        tipCorrectionModel_ = tipCorrectionDict.lookupOrDefault<word>
+        (
+            "model",
+            "DagSorensen"
+        );
+        wakeTurns_ = tipCorrectionDict.lookupOrDefault<label>("wakeTurns", 2);
+        wakeAzimuthStepDeg_ = tipCorrectionDict.lookupOrDefault
+        (
+            "wakeAzimuthalStep",
+            2.0
+        );
+        tipCorrectionEpsilon_ = tipCorrectionDict.lookupOrDefault
+        (
+            "epsilon",
+            0.0
+        );
+        if (tipCorrectionModel_ != "DagSorensen")
+        {
+            FatalIOErrorInFunction(tipCorrectionDict)
+                << "Unknown tipCorrection model '"
+                << tipCorrectionModel_
+                << "'; only DagSorensen is registered"
+                << exit(FatalIOError);
+        }
 
         if (debug)
         {

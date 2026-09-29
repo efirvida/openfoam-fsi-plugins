@@ -109,6 +109,21 @@ protected:
         //- End effects model name
         word endEffectsModel_;
 
+        //- Switch to activate the rotor-level induced-velocity tip correction
+        bool tipCorrectionActive_;
+
+        //- Tip correction model name (only "DagSorensen" registered)
+        word tipCorrectionModel_;
+
+        //- Number of wake revolutions in the prescribed wake
+        label wakeTurns_;
+
+        //- Wake azimuthal discretization (degrees)
+        scalar wakeAzimuthStepDeg_;
+
+        //- Fixed nucleus width; <= 0 selects the element projection epsilon
+        scalar tipCorrectionEpsilon_;
+
 
     // Protected Member Functions
 
@@ -129,6 +144,10 @@ protected:
 
         //- Calculate end end effects at rotor level
         void calcEndEffects();
+
+        //- Calculate the Dag & Sorensen induced-velocity tip correction at
+        //  rotor level
+        void calcTipCorrection();
 
         //- Use turbine base class rotate method
         using turbineALSource::rotate;

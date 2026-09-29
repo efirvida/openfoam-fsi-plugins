@@ -1170,3 +1170,50 @@ executable oracle.
 
 Reference: Yang, X. and Sotiropoulos, F., *A new class of actuator surface
 models for wind turbines*, arXiv:1702.02108v4 (2018), Sec. 2.1–2.2.
+
+### New Features (Phase VI tip correction)
+
+#### 1. Add the Dağ & Sørensen 2020 induced-velocity tip correction to the ALM
+
+**Files:**
+- `turbinesFoam/src/fvOptions/axialFlowTurbineALSource/axialFlowTurbineALSource.{H,C}` (updated)
+- `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineElement/actuatorLineElement.{H,C}` (updated)
+- `turbinesFoam/tests/test_tip_correction.py` (new)
+- `turbinesFoam/tests/tipCorrection/` (new)
+- `turbinesFoam/validation/phaseVI/config/case.yaml` (updated)
+- `turbinesFoam/validation/phaseVI/tools/generate_case.py` (updated)
+- `turbinesFoam/validation/phaseVI/scripts/runPhaseVI.sh` (updated)
+- `turbinesFoam/validation/phaseVI/scripts/slurm/tip-correction-arm.slurm` (new)
+
+**Problem:** The Phase VI campaign showed the axial-flow ALM over-predicts the
+blade tip loading, and that the BEM Glauert tip loss is too strong a remedy:
+with it on the 7 m/s torque is 7.6 % low (tip `cn`/`ct` 16-17 % low at
+r/R = 0.95), with it off the power is +19.5 %. The cause is the Gaussian
+projection kernel, which is numerically a Lamb-Oseen viscous core, so the wake
+induction at the blade is under-estimated near the tip. Dağ & Sørensen 2020
+reproduce the same case and symptom and give an implementable correction.
+
+**Solution:**
+1. A new rotor-level `tipCorrection` block (default **off**) on
+   `axialFlowTurbineALSource`, read like `endEffects`; unknown models fail
+   loudly. `calcTipCorrection()` mirrors `calcEndEffects()`'s per-element loop
+   and runs at the same three `addSup` sites.
+2. The correction builds a prescribed straight-segment helical wake per the
+   paper (two full revolutions, 2° azimuthal steps; wake pitch = the local flow
+   angle; strengths `Γ_w(p) = Γ(p−1) − Γ(p)` from `Γ = ½ c C_L u_rel`),
+   accumulates the vector form of Eq. (23) at every actuator point, and stores
+   the result per element.
+3. `actuatorLineElement` gains a global-frame `inducedVelocityCorrection_`
+   (default zero) added to `inflowVelocity_` before the relative velocity and
+   the angle of attack are formed, reproducing the paper's Eq. (26).
+4. The flow angle uses the `calcEndEffects` blade-motion convention
+   (`u_θ = −(bladeDir · rel)`), which is independent of the rotor-axis sign; the
+   helical sweep sign is derived from the spin about the flow axis. Both are
+   pinned by tests, including a mirrored-axis fixture.
+5. Additive and byte-identical when off: the element correction defaults to
+   zero, and the committed default renders `active off` in all three Phase VI
+   `fvOptions` twins. The Phase VI case gains a render-time on-switch and a
+   prepared, cores-only arm-A submission script.
+
+Reference: Dağ, K.O. and Sørensen, J.N., *A new tip correction for actuator
+line computations*, Wind Energy 23(2):148-160, 2020.

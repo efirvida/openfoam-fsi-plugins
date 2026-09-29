@@ -222,6 +222,15 @@ protected:
         //- End effect correction factor [0, 1]
         scalar endEffectFactor_;
 
+        //- Induced-velocity correction in the global frame, added to the
+        //  local inflow before the angle of attack is formed (Dag & Sorensen
+        //  Eq. 23); zero when the tip correction is inactive
+        vector inducedVelocityCorrection_;
+
+        //- Cached projection width epsilon from the most recent
+        //  calcProjectionEpsilon(); -VGREAT until first computed
+        scalar projectionEpsilon_;
+
         //- Switch for added mass correction
         bool addedMassActive_;
 
@@ -400,6 +409,12 @@ public:
             //- Return nondimensional distance from actuator line root
             const scalar& rootDistance();
 
+            //- Return the induced-velocity correction (global frame)
+            const vector& inducedVelocityCorrection() const;
+
+            //- Return the cached projection width epsilon
+            scalar projectionEpsilon() const;
+
             //- Return tangential reference coefficient
             scalar tangentialRefCoefficient();
             
@@ -462,6 +477,9 @@ public:
 
             //- Set end effect correction factor
             void setEndEffectFactor(scalar factor);
+
+            //- Set the induced-velocity correction (global frame)
+            void setInducedVelocityCorrection(const vector& correction);
 
             //- Set velocity sample radius
             void setVelocitySampleRadius(scalar radius);
