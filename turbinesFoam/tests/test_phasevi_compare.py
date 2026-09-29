@@ -178,11 +178,18 @@ def test_metric_definitions_match_f1():
 def test_spanwise_mapping_and_interpolation():
     cfg = compare.load_config(compare.DEFAULT_CONFIG)
     radius = float(cfg["turbine"]["radius"])
+    # spanwise_profile rebuilds the CHORD-referenced pair from the element's own
+    # coefficients (the experiment's reference frame, NREL/TP-500-29955
+    # Figure 25), so the fixture carries cl/cd/alpha_deg rather than the CSV's
+    # plane-of-rotation c_ref_n/c_ref_t columns. At alpha = 0 the conversion
+    # reduces exactly to cn = cl, ct = -cd.
     rows_root = [
-        {"time": "0.5", "root_dist": "0.0", "c_ref_n": "0.6", "c_ref_t": "0.08"},
+        {"time": "0.5", "root_dist": "0.0", "alpha_deg": "0.0",
+         "cl": "0.6", "cd": "0.08"},
     ]
     rows_tip = [
-        {"time": "0.5", "root_dist": "1.0", "c_ref_n": "0.2", "c_ref_t": "0.02"},
+        {"time": "0.5", "root_dist": "1.0", "alpha_deg": "0.0",
+         "cl": "0.2", "cd": "0.02"},
     ]
     profile = compare.spanwise_profile(
         [(Path("root.csv"), rows_root), (Path("tip.csv"), rows_tip)],
@@ -191,11 +198,44 @@ def test_spanwise_mapping_and_interpolation():
     # root_dist is blade-normalized: 0 maps to the root cutout, 1 to the tip
     assert profile[0][0] == pytest.approx(compare.ROOT_CUTOUT_RADIUS / radius)
     assert profile[-1][0] == pytest.approx(1.0)
+    assert profile[0][1] == pytest.approx(0.6)
+    assert profile[0][2] == pytest.approx(-0.08)
+    assert profile[-1][1] == pytest.approx(0.2)
+    assert profile[-1][2] == pytest.approx(-0.02)
 
-    simple = [(0.0, 0.6, 0.08), (1.0, 0.2, 0.02)]
-    assert compare.interpolate(simple, 0.5) == pytest.approx((0.4, 0.05))
-    assert compare.interpolate(simple, -1.0) == pytest.approx((0.6, 0.08))
-    assert compare.interpolate(simple, 2.0) == pytest.approx((0.2, 0.02))
+    simple = [(0.0, 0.6, -0.08), (1.0, 0.2, -0.02)]
+    assert compare.interpolate(simple, 0.5) == pytest.approx((0.4, -0.05))
+    assert compare.interpolate(simple, -1.0) == pytest.approx((0.6, -0.08))
+    assert compare.interpolate(simple, 2.0) == pytest.approx((0.2, -0.02))
+
+
+def test_spanwise_profile_uses_the_chord_reference_frame():
+    """The spanwise comparison must be in the experiment's reference frame.
+
+    NREL/TP-500-29955 Figure 25 references CN/CT to the chord line and
+    C_Thrust/C_Torque to the plane of rotation; the element CSV's
+    `c_ref_n`/`c_ref_t` are plane-of-rotation referenced (the code's
+    `inflowRefAngle()` is the flow angle phi). Comparing them directly was the
+    long-standing "~2x c_ref_t" mismatch. Pin the conversion: at alpha = 30 deg
+    the chord-referenced pair differs strongly from the plane-referenced one.
+    """
+    cfg = compare.load_config(compare.DEFAULT_CONFIG)
+    radius = float(cfg["turbine"]["radius"])
+    # A plane-referenced pair deliberately inconsistent with (cl, cd, alpha) so
+    # that reading the CSV columns instead of converting would fail.
+    row = {
+        "time": "0.5", "root_dist": "0.5", "alpha_deg": "30",
+        "cl": "1.0", "cd": "0.0",
+        "c_ref_n": "9.99", "c_ref_t": "9.99",
+    }
+    profile = compare.spanwise_profile(
+        [(Path("mid.csv"), [row])], start=0.0, end=1.0, allow_short=True,
+        radius=radius,
+    )
+    alpha = math.radians(30.0)
+    assert profile[0][1] == pytest.approx(math.cos(alpha))
+    assert profile[0][2] == pytest.approx(math.sin(alpha))
+    assert profile[0][2] != pytest.approx(9.99)
 
 
 def test_drift_flag_threshold():

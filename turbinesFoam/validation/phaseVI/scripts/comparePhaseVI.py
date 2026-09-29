@@ -105,6 +105,17 @@ LIMITATIONS = [
     "change adds `momentCoefficient_` to the element writer).",
     "Blockage is not simulated (uniform free box versus the NASA-Ames test "
     "section); documented, not corrected.",
+    "Spanwise CN/CT are CHORD-REFERENCED, as the experiment reports them "
+    "(NREL/TP-500-29955 Figure 25: CN/CT are '(Ref: Chord-line)' while "
+    "C_Thrust/C_Torque are '(Ref: Plane of rotation)'). The element CSV's own "
+    "`c_ref_n`/`c_ref_t` columns are PLANE-OF-ROTATION referenced, because "
+    "`inflowRefAngle()` is the flow angle phi (the code comment calls it "
+    "'AFTAL Phi'). `spanwise_profile` therefore rebuilds the chord-referenced "
+    "pair from the element's `cl,cd,alpha_deg`. Comparing the two frames "
+    "directly was the long-standing '~2x c_ref_t' mismatch (measured 1.2x-4.6x) "
+    "- a reference-frame defect in the comparison, not a model error. The "
+    "mesh-backed ASM-mesh path still reports the plane-referenced columns, so "
+    "its spanwise rows are NOT on the experiment's frame.",
 ]
 
 
@@ -288,7 +299,32 @@ def r_over_r_from_root_dist(root_dist, radius):
 
 
 def spanwise_profile(elements, start, end, allow_short, radius):
-    """Time-mean c_ref_n/c_ref_t per element mapped to r/R."""
+    """Time-mean CHORD-REFERENCE cn/ct per element mapped to r/R.
+
+    Reference-frame fix. The experiment's spanwise `CN`/`CT` are referenced to
+    the **chord line** (NREL/TP-500-29955, Figure 25: "CN = Normal force
+    coefficient, CT = Tangent force coefficient  { (Ref: Chord-line) }"),
+    while the element CSV's `c_ref_n`/`c_ref_t` are referenced to the **plane of
+    rotation**: the element's `inflowRefAngle()` is the flow angle phi
+    (`actuatorLineElement.C`, comment "Calculate inflow velocity angle in
+    degrees (AFTAL Phi)"), so `c_ref_t = cl*sin(phi) - cd*cos(phi)` is the
+    report's `C_Torque`, not its `C_T`.
+
+    Comparing the two frames directly produced the long-standing "~2x c_ref_t"
+    mismatch (measured 1.2x-4.6x, varying with span because phi varies). That was
+    a reference-frame defect in the comparison, not a model error: both frames
+    are valid, they are simply different quantities.
+
+    The chord-referenced pair is therefore rebuilt from the element's own
+    coefficients at its effective angle of attack, which IS the experiment's
+    definition:
+
+        cn = cl*cos(alpha) + cd*sin(alpha)
+        ct = cl*sin(alpha) - cd*cos(alpha)
+
+    Per row, then averaged (cn is nonlinear in alpha, so averaging the inputs
+    first would bias the result).
+    """
     profile = []
     for path, rows in elements:
         window = [row for row in rows if start <= float(row["time"]) <= end]
@@ -297,8 +333,16 @@ def spanwise_profile(elements, start, end, allow_short, radius):
                 raise ShortWindow(f"{path}: no samples in the averaging window")
             window = rows
         root_dist = mean([float(row["root_dist"]) for row in window])
-        c_ref_n = mean([float(row["c_ref_n"]) for row in window])
-        c_ref_t = mean([float(row["c_ref_t"]) for row in window])
+        cn_rows = []
+        ct_rows = []
+        for row in window:
+            alpha = math.radians(float(row["alpha_deg"]))
+            cl = float(row["cl"])
+            cd = float(row["cd"])
+            cn_rows.append(cl * math.cos(alpha) + cd * math.sin(alpha))
+            ct_rows.append(cl * math.sin(alpha) - cd * math.cos(alpha))
+        c_ref_n = mean(cn_rows)
+        c_ref_t = mean(ct_rows)
         r_over_r = r_over_r_from_root_dist(root_dist, radius)
         profile.append((r_over_r, c_ref_n, c_ref_t))
     profile.sort()
