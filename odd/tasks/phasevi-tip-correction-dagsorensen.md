@@ -377,3 +377,62 @@ tip correction itself and not a sign error.
 Option 3 + 1 look like the smallest credible fix; option 2 is the most faithful
 to the paper's demonstrated resolution. Do **not** relaunch the full arm until
 the inboard `max |w_corr|` is bounded to a few percent of `U∞`.
+
+### 2026-09-29 — Near-field parameter study: the obvious fixes do not work cleanly
+
+Offline (vectorised Python over the run's clean t = 0.008 state, ε = 0.677):
+
+| variant | max \|w_corr\| | element | tip el 49 | elements > 2 m/s |
+|---|---|---|---|---|
+| baseline | 15.72 | el 7 | 0.83 | 11 |
+| floor \|d\| ≥ 0.05 | 10.15 | el 6 | 0.83 | 11 |
+| floor \|d\| ≥ 0.10 | 4.83 | el 5 | **0.58** | 8 |
+| floor \|d\| ≥ 0.20 | 2.19 | el 4 | **0.09** | 2 |
+| floor \|d\| ≥ 0.34 | 1.05 | el 3 | **0.03** | 0 |
+| exclude station 8 | 4.22 | **el 47** | 0.83 | — |
+| coarse wake nW = 10 | 17.03 | el 7 | **2.89** | 10 |
+| coarse wake nW = 20 | 15.71 | el 8 | **3.77** | 11 |
+
+Conclusions:
+
+1. **Flooring `|d|` works only by killing the correction.** Any floor large
+   enough to bound the inboard spike (≥ 0.2ε) collapses the tip correction to
+   ≈ 0.03–0.09 m/s, i.e. it destroys the very signal the feature exists to add.
+2. **Excluding the placeholder-transition station is not sufficient.** It removes
+   the worst station but leaves a 4.2 m/s spike at element 47 (near the tip).
+3. **Coarsening the wake does not help — it makes it worse.** The mid-point sum
+   of point vortices converges to `(dΓ/ds)/(2π)`, which does not shrink with
+   spacing; coarsening just enlarges each `Γ_w`, so the tip correction grows to
+   2.9–3.8 m/s while the inboard spike stays.
+
+**The mechanism, stated properly.** Our wake is a sum of *point* trailing
+vortices evaluated with the surrogate `(d𝒍 × d)/|d|³`. As the spanwise spacing
+shrinks, `Γ_w ≈ (dΓ/ds)·Δs` and `|d| ≈ Δs/2`, so each term contributes
+`≈ (dΓ/ds)/(2π)` — **independent of Δs**. The sum therefore converges to the
+physical downwash `(dΓ/ds)/(2π)`, which is large wherever `Γ` rises steeply.
+The inboard `cylinder → S809` jump makes `dΓ/ds` enormous; even a purely
+physical root loading would still give several m/s. The paper never sees this
+because its discretisation is coarse enough that the sampled `dΓ/ds` stays
+modest, and it reports only BEM comparisons, whose own root loading is smooth.
+
+So this is not a bug in the tip correction; it is the **resolution/continuum
+behaviour of a discrete point-vortex wake with a steep bound-circulation
+gradient**. The credible fixes are structural, not parametric:
+
+- **A. Sheet formulation** — integrate the trailing vorticity along the span (or
+  use the exact finite-segment Biot–Savart *and* a spanwise sheet quadrature), so
+  the near field is the bounded sheet induction rather than a sum of point
+  vortices.
+- **B. Smooth the bound circulation** — remove the placeholder discontinuity and
+  smooth `Γ(s)` before differencing, so `dΓ/ds` is physical everywhere. Cheap,
+  but only reduces the spike, it does not bound a genuinely steep root.
+- **C. Local limiter** — cap `|w_corr|` at a fraction of the local relative
+  velocity (e.g. 0.1·u_rel). Pragmatic and preserves the tip signal, but adds a
+  non-physical clamp and needs its own justification.
+- **D. Restrict the correction to the outer span** (where the paper targets the
+  tip over-prediction), blended in over the outer ~30 %. Ad hoc but matches the
+  feature's actual purpose.
+
+Recommendation: **A (or A+B) for correctness**, with **D** as the minimal,
+defensible scope reduction if a quick validation arm is wanted first. Do not
+relaunch the full arm on the current formulation.
