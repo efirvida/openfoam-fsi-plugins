@@ -1143,6 +1143,9 @@ void preciceAdapter::Adapter::readCheckpoint()
     for (uint i = 0; i < volScalarFields_.size(); i++)
     {
         // Load the volume field
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        volScalarFields_.at(i)->dimensions().reset(volScalarFieldCopies_.at(i)->dimensions());
         *(volScalarFields_.at(i)) == *(volScalarFieldCopies_.at(i));
         // TODO: Do we need this?
         // *(volScalarFields_.at(i))->boundaryField() = *(volScalarFieldCopies_.at(i))->boundaryField();
@@ -1162,6 +1165,9 @@ void preciceAdapter::Adapter::readCheckpoint()
     for (uint i = 0; i < volVectorFields_.size(); i++)
     {
         // Load the volume field
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        volVectorFields_.at(i)->dimensions().reset(volVectorFieldCopies_.at(i)->dimensions());
         *(volVectorFields_.at(i)) == *(volVectorFieldCopies_.at(i));
 
         int nOldTimes(volVectorFields_.at(i)->nOldTimes());
@@ -1178,6 +1184,9 @@ void preciceAdapter::Adapter::readCheckpoint()
     // Reload all the fields of type surfaceScalarField
     for (uint i = 0; i < surfaceScalarFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        surfaceScalarFields_.at(i)->dimensions().reset(surfaceScalarFieldCopies_.at(i)->dimensions());
         *(surfaceScalarFields_.at(i)) == *(surfaceScalarFieldCopies_.at(i));
 
         int nOldTimes(surfaceScalarFields_.at(i)->nOldTimes());
@@ -1194,6 +1203,9 @@ void preciceAdapter::Adapter::readCheckpoint()
     // Reload all the fields of type surfaceVectorField
     for (uint i = 0; i < surfaceVectorFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        surfaceVectorFields_.at(i)->dimensions().reset(surfaceVectorFieldCopies_.at(i)->dimensions());
         *(surfaceVectorFields_.at(i)) == *(surfaceVectorFieldCopies_.at(i));
 
         int nOldTimes(surfaceVectorFields_.at(i)->nOldTimes());
@@ -1210,6 +1222,9 @@ void preciceAdapter::Adapter::readCheckpoint()
     // Reload all the fields of type pointScalarField
     for (uint i = 0; i < pointScalarFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        pointScalarFields_.at(i)->dimensions().reset(pointScalarFieldCopies_.at(i)->dimensions());
         *(pointScalarFields_.at(i)) == *(pointScalarFieldCopies_.at(i));
 
         int nOldTimes(pointScalarFields_.at(i)->nOldTimes());
@@ -1227,6 +1242,9 @@ void preciceAdapter::Adapter::readCheckpoint()
     for (uint i = 0; i < pointVectorFields_.size(); i++)
     {
         // Load the volume field
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        pointVectorFields_.at(i)->dimensions().reset(pointVectorFieldCopies_.at(i)->dimensions());
         *(pointVectorFields_.at(i)) == *(pointVectorFieldCopies_.at(i));
 
         int nOldTimes(pointVectorFields_.at(i)->nOldTimes());
@@ -1244,6 +1262,9 @@ void preciceAdapter::Adapter::readCheckpoint()
     // Reload all the fields of type volTensorField
     for (uint i = 0; i < volTensorFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        volTensorFields_.at(i)->dimensions().reset(volTensorFieldCopies_.at(i)->dimensions());
         *(volTensorFields_.at(i)) == *(volTensorFieldCopies_.at(i));
 
         int nOldTimes(volTensorFields_.at(i)->nOldTimes());
@@ -1260,6 +1281,9 @@ void preciceAdapter::Adapter::readCheckpoint()
     // Reload all the fields of type surfaceTensorField
     for (uint i = 0; i < surfaceTensorFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        surfaceTensorFields_.at(i)->dimensions().reset(surfaceTensorFieldCopies_.at(i)->dimensions());
         *(surfaceTensorFields_.at(i)) == *(surfaceTensorFieldCopies_.at(i));
 
         int nOldTimes(surfaceTensorFields_.at(i)->nOldTimes());
@@ -1276,6 +1300,9 @@ void preciceAdapter::Adapter::readCheckpoint()
     // Reload all the fields of type pointTensorField
     for (uint i = 0; i < pointTensorFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        pointTensorFields_.at(i)->dimensions().reset(pointTensorFieldCopies_.at(i)->dimensions());
         *(pointTensorFields_.at(i)) == *(pointTensorFieldCopies_.at(i));
 
         int nOldTimes(pointTensorFields_.at(i)->nOldTimes());
@@ -1293,6 +1320,9 @@ void preciceAdapter::Adapter::readCheckpoint()
     // Reload all the fields of type volSymmTensorField
     for (uint i = 0; i < volSymmTensorFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        volSymmTensorFields_.at(i)->dimensions().reset(volSymmTensorFieldCopies_.at(i)->dimensions());
         *(volSymmTensorFields_.at(i)) == *(volSymmTensorFieldCopies_.at(i));
 
         int nOldTimes(volSymmTensorFields_.at(i)->nOldTimes());
@@ -1334,60 +1364,90 @@ void preciceAdapter::Adapter::writeCheckpoint()
     // Store all the fields of type volScalarField
     for (uint i = 0; i < volScalarFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        volScalarFieldCopies_.at(i)->dimensions().reset(volScalarFields_.at(i)->dimensions());
         *(volScalarFieldCopies_.at(i)) == *(volScalarFields_.at(i));
     }
 
     // Store all the fields of type volVectorField
     for (uint i = 0; i < volVectorFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        volVectorFieldCopies_.at(i)->dimensions().reset(volVectorFields_.at(i)->dimensions());
         *(volVectorFieldCopies_.at(i)) == *(volVectorFields_.at(i));
     }
 
     // Store all the fields of type volTensorField
     for (uint i = 0; i < volTensorFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        volTensorFieldCopies_.at(i)->dimensions().reset(volTensorFields_.at(i)->dimensions());
         *(volTensorFieldCopies_.at(i)) == *(volTensorFields_.at(i));
     }
 
     // Store all the fields of type volSymmTensorField
     for (uint i = 0; i < volSymmTensorFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        volSymmTensorFieldCopies_.at(i)->dimensions().reset(volSymmTensorFields_.at(i)->dimensions());
         *(volSymmTensorFieldCopies_.at(i)) == *(volSymmTensorFields_.at(i));
     }
 
     // Store all the fields of type surfaceScalarField
     for (uint i = 0; i < surfaceScalarFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        surfaceScalarFieldCopies_.at(i)->dimensions().reset(surfaceScalarFields_.at(i)->dimensions());
         *(surfaceScalarFieldCopies_.at(i)) == *(surfaceScalarFields_.at(i));
     }
 
     // Store all the fields of type surfaceVectorField
     for (uint i = 0; i < surfaceVectorFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        surfaceVectorFieldCopies_.at(i)->dimensions().reset(surfaceVectorFields_.at(i)->dimensions());
         *(surfaceVectorFieldCopies_.at(i)) == *(surfaceVectorFields_.at(i));
     }
 
     // Store all the fields of type surfaceTensorField
     for (uint i = 0; i < surfaceTensorFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        surfaceTensorFieldCopies_.at(i)->dimensions().reset(surfaceTensorFields_.at(i)->dimensions());
         *(surfaceTensorFieldCopies_.at(i)) == *(surfaceTensorFields_.at(i));
     }
 
     // Store all the fields of type pointScalarField
     for (uint i = 0; i < pointScalarFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        pointScalarFieldCopies_.at(i)->dimensions().reset(pointScalarFields_.at(i)->dimensions());
         *(pointScalarFieldCopies_.at(i)) == *(pointScalarFields_.at(i));
     }
 
     // Store all the fields of type pointVectorField
     for (uint i = 0; i < pointVectorFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        pointVectorFieldCopies_.at(i)->dimensions().reset(pointVectorFields_.at(i)->dimensions());
         *(pointVectorFieldCopies_.at(i)) == *(pointVectorFields_.at(i));
     }
 
     // Store all the fields of type pointTensorField
     for (uint i = 0; i < pointTensorFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        pointTensorFieldCopies_.at(i)->dimensions().reset(pointTensorFields_.at(i)->dimensions());
         *(pointTensorFieldCopies_.at(i)) == *(pointTensorFields_.at(i));
     }
     // NOTE: Add here other types to write, if needed.
@@ -1406,6 +1466,9 @@ void preciceAdapter::Adapter::readMeshCheckpoint()
     // Only the meshPhi field is here, which is a surfaceScalarField.
     for (uint i = 0; i < meshSurfaceScalarFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        meshSurfaceScalarFields_.at(i)->dimensions().reset(meshSurfaceScalarFieldCopies_.at(i)->dimensions());
         *(meshSurfaceScalarFields_.at(i)) == *(meshSurfaceScalarFieldCopies_.at(i));
 
         int nOldTimes(meshSurfaceScalarFields_.at(i)->nOldTimes());
@@ -1431,6 +1494,9 @@ void preciceAdapter::Adapter::writeMeshCheckpoint()
     // Store all the fields of type mesh surfaceScalar (phi)
     for (uint i = 0; i < meshSurfaceScalarFields_.size(); i++)
     {
+        // Restore the field dimensions too: some sources (e.g. the
+        // turbinesFoam force fields) resize them at runtime
+        meshSurfaceScalarFieldCopies_.at(i)->dimensions().reset(meshSurfaceScalarFields_.at(i)->dimensions());
         *(meshSurfaceScalarFieldCopies_.at(i)) == *(meshSurfaceScalarFields_.at(i));
     }
 
