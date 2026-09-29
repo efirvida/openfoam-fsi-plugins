@@ -26,3 +26,7 @@ turbinesFoam/validation/phaseVI/campaign-results/tmp*/
 
 # External reference codes (not vendored)
 refs/
+
+# Slurm output logs
+slurm-*.out
+**/slurm-*.out
