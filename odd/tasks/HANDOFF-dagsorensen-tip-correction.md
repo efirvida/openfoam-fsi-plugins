@@ -148,38 +148,34 @@ the correction vs BEM, at Δ = R/5 and R/20, ε = 5Δ and 3Δ.
 - Heavy work goes on the Slurm queue, not the login node. The paper's own grid
   (ε/Δ = 2, ours) matches.
 
-## 9. Working tree state — READ BEFORE WRITING ANY CODE
+## 9. Working tree state — CLEAN (committed 2026-09-29)
 
-**This session's work is UNCOMMITTED.** `git status --short` at handoff time:
+**Everything from the diagnosis session is committed; the tree is clean and the
+suite passes (42 tests).** The seven commits, newest first:
 
-- **Branch: `feat/nacelle-actuator-surface`**, HEAD `a68b5e9`. This session's
-  work sits on top of the S1 nacelle branch — an unrelated line.
-- **19 modified files, +555/−91**, including:
-  - `turbinesFoam/validation/phaseVI/scripts/comparePhaseVI.py` (the **frame
-    fix**)
-  - `turbinesFoam/validation/phaseVI/tools/generate_case.py` (`--div-phi-u`,
-    `--polar`, `--tip-effects`)
-  - `turbinesFoam/validation/phaseVI/scripts/runPhaseVI.sh` (the MPI fix, the
-    `render_args` **array** refactor, the new flags)
-  - `turbinesFoam/validation/phaseVI/scripts/buildPolars.py` (CSU variant)
-  - all six `scripts/slurm/*.slurm` (SBATCH policy: `--nodes` removed)
-  - `turbinesFoam/tests/test_phasevi_case.py`, `test_phasevi_compare.py`
-  - `config/case.yaml`, `case/system/controlDict`
-- **Untracked**: `odd/` (this handoff + the two task docs),
-  `turbinesFoam/validation/phaseVI/campaign-results/` (all four analysis
-  documents), `data/polars/S809_CSU_Re0.65M_total.dat`, `openspec/`,
-  `.codegraph/`, `.pi/`.
+| commit | scope |
+|---|---|
+| `d50da74` | `chore: ignore Slurm output logs` |
+| `a2c401a` | `docs(sdd): track the OpenSpec artefact store` |
+| `4d4fecf` | `chore: ignore local tool state and derived campaign artefacts` |
+| `614b435` | `docs(phaseVI): campaign results, formulation review, SOWFA and NREL cross-checks` |
+| `cf2caa0` | `fix(phaseVI): compare spanwise coefficients in the experiment's reference frame` |
+| `9ed7580` | `feat(phaseVI): render-time ablation switches, Re-sensitivity polar and cores-only Slurm policy` |
+| `c4d2693` | `fix(fsi): restore field dimensions on checkpoint read and use serial-implicit coupling` |
 
-**Consequence**: a new session must **not** start writing the tip correction on
-this dirty tree. Recommended first step, with the user's explicit go-ahead:
+Total: 106 files, +23875/−91. **Nothing pushed, no PR opened.**
 
-1. Cut a branch off `main` for the tip correction, **or** commit this session's
-   work as its own work unit(s) on its own branch first.
-2. Do not commit without the user saying so — but surface this immediately.
+**Branch: `feat/nacelle-actuator-surface`**, HEAD `d50da74`. This work still
+sits on the S1 nacelle branch — an unrelated line. **Before starting the tip
+correction, cut a branch off `main`** (the tip correction is a self-contained
+feature and should not ride the nacelle branch), or at least agree with the user
+where this lands. Do **not** rebase or reset the existing commits without an
+explicit instruction: they are verified working state.
 
-The changes above are **verified working** (10/10 compare tests pass;
-`generate_case.py --check` exit 0; the campaign ran with them), so they are a
-reviewable unit rather than half-finished work.
+Ignored and therefore not committed: `.codegraph/`, `.pi/` (local tool state),
+the Phase VI per-run comparison outputs under `campaign-results/<arm>-*/`
+(derived, regenerable), `slurm-*.out`, and `turbinesFoam/articles/` (local-only
+bibliographic PDFs whose formulation was extracted into the tracked docs).
 
 ## 10. The exact prompt to paste in a new session
 
