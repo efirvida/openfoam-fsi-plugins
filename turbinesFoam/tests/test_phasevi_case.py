@@ -598,6 +598,83 @@ def test_tip_effect_ablation_rendered(cfg, tmp_path):
     assert "tipEffects off;" in block(rendered, "GlauertCoeffs")
 
 
+def test_tip_correction_rendered(cfg, tmp_path):
+    """The Dag & Sorensen tip correction renders beside `endEffects`, off.
+
+    Mirrors the `endEffects`/`rotationalAugmentation` contract: the committed
+    YAML default is off, the block always renders with the keys AFTAL reads,
+    and the `--tip-correction` flag overrides the default in both directions.
+    """
+    def render(element_type, **kwargs):
+        return generate_case.render_fv_options(
+            cfg, "7", "coarse", PACKAGE / "case", element_type, **kwargs
+        )
+
+    default = block(render(generate_case.ALM_ELEMENT), "tipCorrection")
+    assert default == block(render(generate_case.ASM_ELEMENT), "tipCorrection")
+    assert default == block(
+        render(
+            generate_case.ASM_ELEMENT,
+            surface_geometry=generate_case.SURFACE_GEOMETRY,
+        ),
+        "tipCorrection",
+    )
+    assert "active off;" in default
+    for key in (
+        "model DagSorensen;",
+        "wakeTurns 2;",
+        "wakeAzimuthalStep 2;",
+        "epsilon 0;",
+    ):
+        assert key in default
+
+    # The block sits at the rotor-coeffs level, beside `endEffects`, never
+    # inside a blade subdict (AFTAL reads it from `coeffs_`).
+    coeffs = block(
+        render(generate_case.ALM_ELEMENT), "axialFlowTurbineALSourceCoeffs"
+    )
+    assert "tipCorrection" in coeffs
+    assert "tipCorrection" not in block(coeffs, "blade1")
+
+    # The committed default is `active off;`.
+    committed = (PACKAGE / "case" / "system" / "fvOptions.ALM").read_text()
+    assert "active off;" in block(committed, "tipCorrection")
+
+    # The CLI toggle reaches every rendered twin.
+    case_dir = tmp_path / "case-on"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE / "tools" / "generate_case.py"),
+            "--tip-correction", "on",
+            "--case-dir", str(case_dir),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    for name in ("ALM", "ASM", "ASM-MESH"):
+        rendered = (case_dir / "system" / f"fvOptions.{name}").read_text()
+        assert "active on;" in block(rendered, "tipCorrection")
+
+    # An explicit `off` keeps it off as well.
+    off_dir = tmp_path / "case-off"
+    off = subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE / "tools" / "generate_case.py"),
+            "--tip-correction", "off",
+            "--case-dir", str(off_dir),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert off.returncode == 0, off.stderr
+    for name in ("ALM", "ASM", "ASM-MESH"):
+        rendered = (off_dir / "system" / f"fvOptions.{name}").read_text()
+        assert "active off;" in block(rendered, "tipCorrection")
+
+
 def test_asm_mesh_selection(cfg, tmp_path):
     """`asm-mesh` is selectable end-to-end and its runs are prepared-only."""
     selected = subprocess.run(

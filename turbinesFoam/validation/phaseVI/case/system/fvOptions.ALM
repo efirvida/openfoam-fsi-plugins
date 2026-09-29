@@ -58,6 +58,15 @@ turbine
             }
         }
 
+        tipCorrection
+        {
+            active off;
+            model DagSorensen;
+            wakeTurns 2;
+            wakeAzimuthalStep 2;
+            epsilon 0;
+        }
+
         blades
         {
             blade1

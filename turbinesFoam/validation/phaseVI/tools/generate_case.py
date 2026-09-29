@@ -502,6 +502,7 @@ def render_fv_options(
     rotational_augmentation: dict[str, Any] | None = None,
     root_effects: bool | None = None,
     tip_effects: bool | None = None,
+    tip_correction: bool | None = None,
     polar: str | None = None,
 ) -> str:
     """ALM/ASM/ASM-mesh twins rendered from one function.
@@ -524,7 +525,9 @@ def render_fv_options(
     radial geometry the element needs. `root_effects` defaults to
     `actuator.end_effects.root` and is the render-time ablation toggle (design
     D5, §6.2). `tip_effects` mirrors it and defaults to
-    `actuator.end_effects.tip`.
+    `actuator.end_effects.tip`. `tip_correction` renders the Dag & Sorensen
+    `tipCorrection` block beside `endEffects` and defaults to
+    `actuator.tip_correction.active` (off for the committed case).
     """
     values = kinematics(cfg, speed, mesh, sequence)
     turbine = cfg["turbine"]
@@ -583,6 +586,32 @@ def render_fv_options(
         )
     root = bool(end_effects["root"]) if root_effects is None else bool(root_effects)
     tip = bool(end_effects["tip"]) if tip_effects is None else bool(tip_effects)
+    # Mirror `endEffects`: render the tip-correction switch at the rotor-coeffs
+    # level (AFTAL reads it from `coeffs_`). Absent from the config, the block
+    # falls back to the paper defaults with the switch off.
+    correction = actuator.get("tip_correction") or {
+        "active": False,
+        "model": "DagSorensen",
+        "wake_turns": 2,
+        "wake_azimuthal_step": 2,
+        "epsilon": 0,
+    }
+    correction_active = (
+        bool(correction["active"])
+        if tip_correction is None
+        else bool(tip_correction)
+    )
+    tip_correction_block = (
+        "\n\n        tipCorrection\n"
+        "        {\n"
+        f"            active {'on' if correction_active else 'off'};\n"
+        f"            model {correction['model']};\n"
+        f"            wakeTurns {int(correction['wake_turns'])};\n"
+        "            wakeAzimuthalStep "
+        f"{float(correction['wake_azimuthal_step']):.8g};\n"
+        f"            epsilon {float(correction['epsilon']):.8g};\n"
+        "        }"
+    )
     hub_rows = "\n".join(
         "                (" + " ".join(f"{value:.9g}" for value in row) + ")"
         for row in hub_element_rows()
@@ -620,7 +649,7 @@ def render_fv_options(
                 tipEffects {'on' if tip else 'off'};
                 rootEffects {'on' if root else 'off'};
             }}
-        }}
+        }}{tip_correction_block}
 
         blades
         {{
@@ -696,6 +725,7 @@ def outputs(
     rotational_augmentation: dict[str, Any] | None = None,
     root_effects: bool | None = None,
     tip_effects: bool | None = None,
+    tip_correction: bool | None = None,
     polar: str | None = None,
 ) -> dict[Path, str]:
     system = case_dir / "system"
@@ -715,6 +745,7 @@ def outputs(
             rotational_augmentation=rotational_augmentation,
             root_effects=root_effects,
             tip_effects=tip_effects,
+            tip_correction=tip_correction,
             polar=polar,
         ),
         system / "fvOptions.ASM": render_fv_options(
@@ -722,6 +753,7 @@ def outputs(
             rotational_augmentation=rotational_augmentation,
             root_effects=root_effects,
             tip_effects=tip_effects,
+            tip_correction=tip_correction,
             polar=polar,
         ),
         system / "fvOptions.ASM-MESH": render_fv_options(
@@ -737,6 +769,7 @@ def outputs(
             rotational_augmentation=rotational_augmentation,
             root_effects=root_effects,
             tip_effects=tip_effects,
+            tip_correction=tip_correction,
         ),
         constant / "transportProperties": render_transport_properties(cfg),
         constant / "turbulenceProperties": render_turbulence_properties(cfg, solver),
@@ -858,6 +891,13 @@ def main(argv: list[str] | None = None) -> int:
         help="render the Glauert tip-effect setting; default from "
              "config/case.yaml (on). `off` is the render-time ablation",
     )
+    parser.add_argument(
+        "--tip-correction",
+        choices=("on", "off"),
+        default=None,
+        help="render the Dag & Sorensen tip-correction switch; default from "
+             "config/case.yaml (off). `on` is the campaign arm",
+    )
     parser.add_argument("--case-dir", type=Path, default=DEFAULT_CASE_DIR)
     parser.add_argument("--end-revs", type=float, default=None)
     parser.add_argument("--start-from", choices=START_FROM_CHOICES, default="startTime")
@@ -880,6 +920,9 @@ def main(argv: list[str] | None = None) -> int:
         tip_effects = (
             None if args.tip_effects is None else args.tip_effects == "on"
         )
+        tip_correction = (
+            None if args.tip_correction is None else args.tip_correction == "on"
+        )
         rendered = outputs(
             cfg,
             args.mesh,
@@ -898,6 +941,7 @@ def main(argv: list[str] | None = None) -> int:
             rotational_augmentation=augmentation,
             root_effects=root_effects,
             tip_effects=tip_effects,
+            tip_correction=tip_correction,
             polar=args.polar,
         )
     except (KeyError, ValueError) as exc:

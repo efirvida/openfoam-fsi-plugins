@@ -219,6 +219,18 @@ actuator:
     model: Glauert
     tip: true
     root: true
+  # Dağ & Sørensen 2020 tip correction (prescribed helical wake), rendered into
+  # every `fvOptions` twin beside `endEffects`. The committed default is off;
+  # the Phase VI proxy turns it on as a render-time variant
+  # (`--tip-correction on`). `model` is the only registered name,
+  # `wake_turns`/`wake_azimuthal_step` are the paper's 2 revolutions at 2
+  # degrees, and `epsilon` 0 selects the local element projection width.
+  tip_correction:
+    active: false
+    model: DagSorensen
+    wake_turns: 2
+    wake_azimuthal_step: 2
+    epsilon: 0
   dynamic_stall:
     active: false
     model: LeishmanBeddoes

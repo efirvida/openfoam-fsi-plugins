@@ -69,6 +69,7 @@ ranks_override=""
 rotational_augmentation=""
 root_effects=""
 tip_effects=""
+tip_correction=""
 div_phi_u=""
 polar=""
 run_label=""
@@ -89,6 +90,7 @@ while [ $# -gt 0 ]; do
         --rotational-augmentation) rotational_augmentation="$2"; shift ;;
         --root-effects) root_effects="$2"; shift ;;
         --tip-effects) tip_effects="$2"; shift ;;
+        --tip-correction) tip_correction="$2"; shift ;;
         --div-phi-u) div_phi_u="$2"; shift ;;
         --polar) polar="$2"; shift ;;
         --run-label) run_label="$2"; shift ;;
@@ -166,6 +168,12 @@ if [ -n "$tip_effects" ]; then
     case "$tip_effects" in
         on|off) ;;
         *) echo "ERROR: --tip-effects must be on or off" >&2; exit 2 ;;
+    esac
+fi
+if [ -n "$tip_correction" ]; then
+    case "$tip_correction" in
+        on|off) ;;
+        *) echo "ERROR: --tip-correction must be on or off" >&2; exit 2 ;;
     esac
 fi
 if [ -n "$div_phi_u" ]; then
@@ -278,6 +286,9 @@ if [ -n "$root_effects" ]; then
 fi
 if [ -n "$tip_effects" ]; then
     render_args+=(--tip-effects "$tip_effects")
+fi
+if [ -n "$tip_correction" ]; then
+    render_args+=(--tip-correction "$tip_correction")
 fi
 if [ -n "$div_phi_u" ]; then
     render_args+=(--div-phi-u "$div_phi_u")
@@ -494,6 +505,9 @@ else
     fi
     if [ -n "$tip_effects" ]; then
         suggestion="$suggestion --tip-effects $tip_effects"
+    fi
+    if [ -n "$tip_correction" ]; then
+        suggestion="$suggestion --tip-correction $tip_correction"
     fi
     if [ -n "$div_phi_u" ]; then
         suggestion="$suggestion --div-phi-u \"$div_phi_u\""
