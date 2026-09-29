@@ -1,0 +1,72 @@
+schema: spec-driven
+
+context: |
+  Monorepo of OpenFOAM plugins (C++, wmake build, OpenFOAM v2506 toolchain).
+  SDD target for upcoming work: turbinesFoam/ (actuator line model library).
+  Other plugins: precice-openfoam-adapter, fsiOmega, solidBodyDisplacementLaplacianZone, dynamicOversetZoneDisplacementFvMesh.
+  No workspace-wide test command; only turbinesFoam has a local pytest integration suite (no C++ unit framework).
+
+projects:
+  - path: turbinesFoam/
+    stack: OpenFOAM C++ (wmake), libturbinesFoam
+    test_command: pytest            # from turbinesFoam/; or ./Alltest (build + pytest)
+    framework: pytest (integration/E2E, no C++ unit framework)
+    coverage: none
+    linter: none                    # upstream foamStyleCheck dropped
+    formatter: none
+  - path: precice-openfoam-adapter/
+    stack: OpenFOAM C++ (wmake), libpreciceAdapterFunctionObject
+    test_command: ""                # system tests external, label-triggered only
+    framework: none
+    coverage: none
+    linter: shellcheck (pre-commit)
+    formatter: clang-format v11 (.clang-format, tools/format-code.sh)
+  - path: fsiOmega/
+    stack: OpenFOAM C++ (wmake), libfsiOmega
+    test_command: ""
+    framework: none
+    coverage: none
+    linter: none
+    formatter: none
+  - path: solidBodyDisplacementLaplacianZone/
+    stack: OpenFOAM C++ (wmake), libsolidBodyDisplacementLaplacianZoneFvMotionSolver
+    test_command: ""
+    framework: none
+    coverage: none
+    linter: none
+    formatter: none
+  - path: dynamicOversetZoneDisplacementFvMesh/
+    stack: OpenFOAM C++ (wmake), libdynamicOversetZoneDisplacementFvMesh
+    test_command: ""
+    framework: none
+    coverage: none
+    linter: none
+    formatter: none
+
+strict_tdd: false
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Document architecture decisions with rationale
+    - Map model equations to code paths (paper -> code table)
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    guidelines:
+      - Follow existing OpenFOAM coding conventions (repo AGENTS.md)
+      - Do not modify source or tutorials outside the authorized change scope
+    tdd: false                    # strict_tdd resolved false (see preflight)
+    test_command: "cd turbinesFoam && pytest"
+    build_command: "cd turbinesFoam && ./Allwmake"
+  verify:
+    test_command: "cd turbinesFoam && pytest"
+    build_command: "cd turbinesFoam && ./Allwmake"
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
