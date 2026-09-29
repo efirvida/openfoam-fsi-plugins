@@ -118,7 +118,13 @@ solver:
   end_revolutions: 12
   discard_revolutions: 4
   write_interval_rev: 0.5
-  purge_write: 8
+  # Keep only the latest field time directory on disk.  The validation reads
+  # the rotor power/torque/thrust history (and the element loads) from
+  # postProcessing/, which is written every time step and is never purged, so
+  # the fields are only needed for a restart from the latest time.  purgeWrite 8
+  # accumulated ~16 GB (coarse) / ~53 GB (fine) per run and exhausted the group
+  # quota; 1 keeps a single checkpoint (~3-6 GB of decomposed mesh + one time).
+  purge_write: 1
 
 # Stage 3 IDDES confirmation variant (`--solver iddes`). kOmegaSSTIDDES is an
 # LES model whose IDDESDelta-based delta function is mandatory:

@@ -41,7 +41,6 @@
 #   sbatch scripts/slurm/asm-mesh.slurm
 #SBATCH -p sequana_cpu
 #SBATCH --ntasks=48
-#SBATCH --nodes=1
 #SBATCH -J phaseVI-asm-mesh
 #SBATCH --time=24:00:00
 #SBATCH --array=0-1

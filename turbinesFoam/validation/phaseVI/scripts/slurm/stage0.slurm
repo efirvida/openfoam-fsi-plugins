@@ -12,7 +12,6 @@
 # or, equivalently, scripts/stage0.sh --submit.
 #SBATCH -p sequana_cpu_dev
 #SBATCH --ntasks=48
-#SBATCH --nodes=1
 #SBATCH -J phaseVI-stage0
 #SBATCH --time=00:20:00
 #SBATCH -e %j.err

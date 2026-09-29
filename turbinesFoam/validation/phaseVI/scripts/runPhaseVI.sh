@@ -5,6 +5,7 @@
 # Usage:
 #   runPhaseVI.sh -m alm|asm|asm-mesh -u <wind-speed> [-mesh coarse|fine|ultra]
 #                 [--domain long|squat] [-s H|S] [--solver urans|iddes]
+#                 [--div-phi-u "bounded Gauss linear"] [--polar FILE.dat]
 #                 [--nchordwise N] [--ranks N] [--run-label WORD] [--stage0]
 #                 [--restart] [--rotational-augmentation on|off]
 #                 [--root-effects on|off] [--run] [--submit]
@@ -67,6 +68,9 @@ nchordwise=""
 ranks_override=""
 rotational_augmentation=""
 root_effects=""
+tip_effects=""
+div_phi_u=""
+polar=""
 run_label=""
 stage0=0
 restart=0
@@ -84,6 +88,9 @@ while [ $# -gt 0 ]; do
         --ranks) ranks_override="$2"; shift ;;
         --rotational-augmentation) rotational_augmentation="$2"; shift ;;
         --root-effects) root_effects="$2"; shift ;;
+        --tip-effects) tip_effects="$2"; shift ;;
+        --div-phi-u) div_phi_u="$2"; shift ;;
+        --polar) polar="$2"; shift ;;
         --run-label) run_label="$2"; shift ;;
         --stage0) stage0=1 ;;
         --restart) restart=1 ;;
@@ -154,6 +161,32 @@ if [ -n "$root_effects" ]; then
         on|off) ;;
         *) echo "ERROR: --root-effects must be on or off" >&2; exit 2 ;;
     esac
+fi
+if [ -n "$tip_effects" ]; then
+    case "$tip_effects" in
+        on|off) ;;
+        *) echo "ERROR: --tip-effects must be on or off" >&2; exit 2 ;;
+    esac
+fi
+if [ -n "$div_phi_u" ]; then
+    # Scheme-sensitivity ablation: must be a div(phi,U) scheme token, never an
+    # arbitrary string (it is rendered into fvSchemes).
+    case "$div_phi_u" in
+        *Gauss*linear*) ;;
+        *) echo "ERROR: --div-phi-u must be a Gauss-linear scheme (e.g. 'bounded Gauss linear')" >&2; exit 2 ;;
+    esac
+fi
+if [ -n "$polar" ]; then
+    # Reynolds-sensitivity ablation: a bare committed filename in data/polars/,
+    # never a path (it is rendered into the fvOptions #include).
+    case "$polar" in
+        */*|.*|*" ") echo "ERROR: --polar must be a bare filename in data/polars/ (e.g. S809_CSU_Re0.65M_total.dat)" >&2; exit 2 ;;
+        *.dat) ;;
+        *) echo "ERROR: --polar must end in .dat" >&2; exit 2 ;;
+    esac
+    if [ ! -f "$root/data/polars/$polar" ]; then
+        echo "ERROR: --polar file not found: data/polars/$polar" >&2; exit 2
+    fi
 fi
 if [ -n "$run_label" ]; then
     # A path-safe token: letters, digits, dot, underscore, hyphen; no leading
@@ -233,18 +266,27 @@ fi
 run_dir="$root/runs/$run_id"
 
 echo "Preparing $run_id in $run_dir"
-render_args="--mesh $mesh --speed $speed --domain $domain --sequence $sequence --case-dir $run_dir --solver $solver --ranks $ranks"
+render_args=(--mesh "$mesh" --speed "$speed" --domain "$domain" --sequence "$sequence" --case-dir "$run_dir" --solver "$solver" --ranks "$ranks")
 if [ -n "$nchordwise" ]; then
-    render_args="$render_args --n-chordwise $nchordwise"
+    render_args+=(--n-chordwise "$nchordwise")
 fi
 if [ -n "$rotational_augmentation" ]; then
-    render_args="$render_args --rotational-augmentation $rotational_augmentation"
+    render_args+=(--rotational-augmentation "$rotational_augmentation")
 fi
 if [ -n "$root_effects" ]; then
-    render_args="$render_args --root-effects $root_effects"
+    render_args+=(--root-effects "$root_effects")
+fi
+if [ -n "$tip_effects" ]; then
+    render_args+=(--tip-effects "$tip_effects")
+fi
+if [ -n "$div_phi_u" ]; then
+    render_args+=(--div-phi-u "$div_phi_u")
+fi
+if [ -n "$polar" ]; then
+    render_args+=(--polar "$polar")
 fi
 if [ "$stage0" -eq 1 ]; then
-    render_args="$render_args --end-revs 0.25"
+    render_args+=(--end-revs 0.25)
 fi
 if [ "$restart" -eq 1 ]; then
     written_time=""
@@ -256,13 +298,13 @@ if [ "$restart" -eq 1 ]; then
             2>/dev/null | awk -F/ '$NF + 0 > 0 {print; exit}')
     fi
     if [ -n "$written_time" ]; then
-        render_args="$render_args --start-from latestTime"
+        render_args+=(--start-from latestTime)
     else
         echo "WARNING: --restart requested but no written time exists; using startTime" >&2
     fi
 fi
 # shellcheck disable=SC2086
-python3 "$root/tools/generate_case.py" $render_args
+python3 "$root/tools/generate_case.py" "${render_args[@]}"
 
 # Initial condition: the committed skeleton keeps 0.org so that `--check`
 # stays clean; the run directory gets a real 0/ time directory.
@@ -377,7 +419,22 @@ if [ "$run" -eq 1 ]; then
         exit 3
     fi
     echo "Running pimpleFoam on $ranks ranks"
-    if ! mpirun -np "$ranks" pimpleFoam -parallel > log.pimpleFoam 2>&1; then
+    # OpenMPI 4.1.4 on SDumont can segfault inside MPI_Init_thread when the ranks
+    # span many nodes: the trace is
+    #   MPI_Init_thread -> ompi_mpi_init -> mca_bml_base_init
+    #     -> btl_openib_component_init -> btl_openib_connect_udcm
+    #     -> ibv_create_comp_channel -> ibv_cmd_reg_dm_mr  (signal 11)
+    # i.e. the LEGACY openib BTL, selected by the ob1 PML, races in its device-
+    # memory registration. The fabric transport on this cluster is UCX, so force
+    # the UCX PML and exclude the openib BTL. A 7-node, 48-rank probe (job
+    # 11603591) ran all three of {baseline, pml ucx, btl ^openib} successfully,
+    # which is why the failure is intermittent rather than node-count
+    # deterministic -- but excluding the crashing BTL removes the possibility.
+    # Override with PHASEVI_MPI_MCA (space-separated --mca flags); set it empty
+    # to fall back to the site default.
+    mpi_mca="${PHASEVI_MPI_MCA---mca pml ucx --mca btl ^openib}"
+    # shellcheck disable=SC2086
+    if ! mpirun $mpi_mca -np "$ranks" pimpleFoam -parallel > log.pimpleFoam 2>&1; then
         tail -40 log.pimpleFoam >&2
         echo "ERROR: pimpleFoam failed; inspect $run_dir/log.pimpleFoam" >&2
         exit 3
@@ -434,6 +491,15 @@ else
     fi
     if [ -n "$root_effects" ]; then
         suggestion="$suggestion --root-effects $root_effects"
+    fi
+    if [ -n "$tip_effects" ]; then
+        suggestion="$suggestion --tip-effects $tip_effects"
+    fi
+    if [ -n "$div_phi_u" ]; then
+        suggestion="$suggestion --div-phi-u \"$div_phi_u\""
+    fi
+    if [ -n "$polar" ]; then
+        suggestion="$suggestion --polar $polar"
     fi
     echo "Prepared $run_id. Run the solver with:"
     echo "  $suggestion --run"

@@ -14,7 +14,6 @@
 #   sbatch scripts/slurm/stage3.slurm
 #SBATCH -p sequana_cpu
 #SBATCH --ntasks=192
-#SBATCH --nodes=4
 #SBATCH -J phaseVI-stage3
 #SBATCH --time=96:00:00
 #SBATCH --array=0-5

@@ -228,20 +228,29 @@ libs
 """
 
 
-def render_fv_schemes(cfg: dict[str, Any], solver: str = "urans") -> str:
+def render_fv_schemes(
+    cfg: dict[str, Any], solver: str = "urans", div_phi_u: str | None = None
+) -> str:
     """Cartesian-mesh schemes; backward ddt, linearUpwind for U.
 
     The IDDES variant switches U convection to the configured (non-dissipative)
     scheme and asks `wallDist` for the wall-normal vectors up front, because
     `IDDESDelta` reads `wallDist::n()`.
+
+    `div_phi_u` overrides the convection scheme for a scheme-sensitivity
+    ablation (e.g. `bounded Gauss linear`). Absent, the committed default
+    `bounded Gauss linearUpwind grad(U)` is used. It is an ablation switch, not
+    a physics default: the committed case never sets it.
     """
-    div_phi_u = "bounded Gauss linearUpwind grad(U)"
+    scheme = "bounded Gauss linearUpwind grad(U)"
     wall_dist = "    method          meshWave;"
     if solver == "iddes":
         iddes = cfg["iddes"]
-        div_phi_u = str(iddes["div_phi_U"])
+        scheme = str(iddes["div_phi_U"])
         if bool(iddes["wall_dist_n_required"]):
             wall_dist = "    method          meshWave;\n    nRequired       true;"
+    if div_phi_u is not None:
+        scheme = div_phi_u
     return foam_header("fvSchemes") + f"""ddtSchemes
 {{
     default         backward;
@@ -256,7 +265,7 @@ gradSchemes
 divSchemes
 {{
     default         none;
-    div(phi,U)      {div_phi_u};
+    div(phi,U)      {scheme};
     div(phi,k)      bounded Gauss upwind;
     div(phi,omega)  bounded Gauss upwind;
     div((nuEff*dev2(T(grad(U))))) Gauss linear;
@@ -492,6 +501,8 @@ def render_fv_options(
     surface_kernel: str | None = None,
     rotational_augmentation: dict[str, Any] | None = None,
     root_effects: bool | None = None,
+    tip_effects: bool | None = None,
+    polar: str | None = None,
 ) -> str:
     """ALM/ASM/ASM-mesh twins rendered from one function.
 
@@ -512,13 +523,18 @@ def render_fv_options(
     identical except for the blade keys and AFTAL forwards the block with the
     radial geometry the element needs. `root_effects` defaults to
     `actuator.end_effects.root` and is the render-time ablation toggle (design
-    D5, §6.2).
+    D5, §6.2). `tip_effects` mirrors it and defaults to
+    `actuator.end_effects.tip`.
     """
     values = kinematics(cfg, speed, mesh, sequence)
     turbine = cfg["turbine"]
     actuator = cfg["actuator"]
     origin = turbine_origin(cfg)
-    polars = os.path.relpath(POLARS_DIR / "S809_OSU_Re1M_total.dat", case_dir / "system")
+    # Reynolds-sensitivity ablation: `polar` selects another committed polar in
+    # data/polars/ (e.g. S809_CSU_Re0.65M_total.dat). Absent, the committed
+    # single-Re OSU Re = 1e6 baseline is used.
+    polar_name = polar or "S809_OSU_Re1M_total.dat"
+    polars = os.path.relpath(POLARS_DIR / polar_name, case_dir / "system")
     profiles = " ".join(blade_element_profiles(cfg))
     if n_chordwise is None:
         n_chordwise = int(actuator["n_chordwise"])
@@ -566,6 +582,7 @@ def render_fv_options(
             "        }"
         )
     root = bool(end_effects["root"]) if root_effects is None else bool(root_effects)
+    tip = bool(end_effects["tip"]) if tip_effects is None else bool(tip_effects)
     hub_rows = "\n".join(
         "                (" + " ".join(f"{value:.9g}" for value in row) + ")"
         for row in hub_element_rows()
@@ -600,7 +617,7 @@ def render_fv_options(
             endEffectsModel {end_effects['model']};
             GlauertCoeffs
             {{
-                tipEffects {'on' if end_effects['tip'] else 'off'};
+                tipEffects {'on' if tip else 'off'};
                 rootEffects {'on' if root else 'off'};
             }}
         }}
@@ -672,11 +689,14 @@ def outputs(
     start_from: str,
     sequence: str = "H",
     solver: str = "urans",
+    div_phi_u: str | None = None,
     n_chordwise: int | None = None,
     ranks: int | None = None,
     surface_kernel: str = "cosine",
     rotational_augmentation: dict[str, Any] | None = None,
     root_effects: bool | None = None,
+    tip_effects: bool | None = None,
+    polar: str | None = None,
 ) -> dict[Path, str]:
     system = case_dir / "system"
     constant = case_dir / "constant"
@@ -688,17 +708,21 @@ def outputs(
             cfg, speed, mesh, profile, end_revs, start_from, sequence, solver
         ),
         system / "decomposeParDict": render_decompose_par(cfg, ranks),
-        system / "fvSchemes": render_fv_schemes(cfg, solver),
+        system / "fvSchemes": render_fv_schemes(cfg, solver, div_phi_u),
         system / "fvSolution": render_fv_solution(cfg),
         system / "fvOptions.ALM": render_fv_options(
             cfg, speed, mesh, case_dir, ALM_ELEMENT, sequence, n_chordwise,
             rotational_augmentation=rotational_augmentation,
             root_effects=root_effects,
+            tip_effects=tip_effects,
+            polar=polar,
         ),
         system / "fvOptions.ASM": render_fv_options(
             cfg, speed, mesh, case_dir, ASM_ELEMENT, sequence, n_chordwise,
             rotational_augmentation=rotational_augmentation,
             root_effects=root_effects,
+            tip_effects=tip_effects,
+            polar=polar,
         ),
         system / "fvOptions.ASM-MESH": render_fv_options(
             cfg,
@@ -712,6 +736,7 @@ def outputs(
             surface_kernel=surface_kernel,
             rotational_augmentation=rotational_augmentation,
             root_effects=root_effects,
+            tip_effects=tip_effects,
         ),
         constant / "transportProperties": render_transport_properties(cfg),
         constant / "turbulenceProperties": render_turbulence_properties(cfg, solver),
@@ -774,6 +799,23 @@ def main(argv: list[str] | None = None) -> int:
              "kOmegaSSTIDDES variant with its own fixed time step",
     )
     parser.add_argument(
+        "--polar",
+        default=None,
+        metavar="FILE",
+        help="override the data/polars/ polar file for a Reynolds-sensitivity "
+             "ablation (e.g. S809_CSU_Re0.65M_total.dat). Absent, the committed "
+             "S809_OSU_Re1M_total.dat baseline is used",
+    )
+    parser.add_argument(
+        "--div-phi-u",
+        default=None,
+        metavar="SCHEME",
+        help="override the div(phi,U) convection scheme for a scheme-sensitivity "
+             "ablation (e.g. 'bounded Gauss linear'). Absent, the committed "
+             "'bounded Gauss linearUpwind grad(U)' is used; for --solver iddes "
+             "the configured iddes.div_phi_U applies unless overridden",
+    )
+    parser.add_argument(
         "--n-chordwise",
         type=_positive_int,
         default=None,
@@ -809,6 +851,13 @@ def main(argv: list[str] | None = None) -> int:
         help="render the Glauert root-effect setting; default from "
              "config/case.yaml (on). `off` is the render-time ablation",
     )
+    parser.add_argument(
+        "--tip-effects",
+        choices=("on", "off"),
+        default=None,
+        help="render the Glauert tip-effect setting; default from "
+             "config/case.yaml (on). `off` is the render-time ablation",
+    )
     parser.add_argument("--case-dir", type=Path, default=DEFAULT_CASE_DIR)
     parser.add_argument("--end-revs", type=float, default=None)
     parser.add_argument("--start-from", choices=START_FROM_CHOICES, default="startTime")
@@ -828,6 +877,9 @@ def main(argv: list[str] | None = None) -> int:
         root_effects = (
             None if args.root_effects is None else args.root_effects == "on"
         )
+        tip_effects = (
+            None if args.tip_effects is None else args.tip_effects == "on"
+        )
         rendered = outputs(
             cfg,
             args.mesh,
@@ -839,11 +891,14 @@ def main(argv: list[str] | None = None) -> int:
             args.start_from,
             args.sequence,
             solver=args.solver,
+            div_phi_u=args.div_phi_u,
             n_chordwise=args.n_chordwise,
             ranks=args.ranks,
             surface_kernel=args.surface_kernel,
             rotational_augmentation=augmentation,
             root_effects=root_effects,
+            tip_effects=tip_effects,
+            polar=args.polar,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)

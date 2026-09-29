@@ -11,7 +11,6 @@
 # the same gate.
 #SBATCH -p sequana_cpu
 #SBATCH --ntasks=48
-#SBATCH --nodes=1
 #SBATCH -J phaseVI-prod
 #SBATCH --time=96:00:00
 #SBATCH --array=0-13

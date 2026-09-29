@@ -564,6 +564,40 @@ def test_root_effect_ablation_rendered(cfg, tmp_path):
     assert "rootEffects off;" in block(rendered, "GlauertCoeffs")
 
 
+def test_tip_effect_ablation_rendered(cfg, tmp_path):
+    """The tip-effect ablation is render-time; the committed default keeps on."""
+    committed = (PACKAGE / "case" / "system" / "fvOptions.ALM").read_text()
+    assert "tipEffects on;" in block(committed, "GlauertCoeffs")
+
+    ablation = generate_case.render_fv_options(
+        cfg,
+        "7",
+        "coarse",
+        PACKAGE / "case",
+        generate_case.ALM_ELEMENT,
+        tip_effects=False,
+    )
+    assert "tipEffects off;" in block(ablation, "GlauertCoeffs")
+    assert "tipEffects on;" not in ablation
+    # The root effect is not part of the ablation.
+    assert "rootEffects on;" in ablation
+
+    case_dir = tmp_path / "case"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE / "tools" / "generate_case.py"),
+            "--tip-effects", "off",
+            "--case-dir", str(case_dir),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    rendered = (case_dir / "system" / "fvOptions.ALM").read_text()
+    assert "tipEffects off;" in block(rendered, "GlauertCoeffs")
+
+
 def test_asm_mesh_selection(cfg, tmp_path):
     """`asm-mesh` is selectable end-to-end and its runs are prepared-only."""
     selected = subprocess.run(

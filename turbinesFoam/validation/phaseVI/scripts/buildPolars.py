@@ -37,6 +37,11 @@ POLARS_DIR = ROOT / "data" / "polars"
 
 BASELINE = POLARS_DIR / "S809_OSU_Re1M_total.dat"
 MULTI_RE = POLARS_DIR / "S809_multiRe.dat"
+# Reynolds-sensitivity variant: the CSU Re = 0.65e6 level (TP-500-29955 Table
+# A-5). The simulated Phase VI Re at 7 m/s spans ~0.43e6 (inboard) to ~0.94e6
+# (at r/R = 0.7), so the single-Re Re = 1e6 baseline is an upper bound; this
+# variant is the ablation that tests that choice. Not blended into the baseline.
+CSU_LOW_RE = POLARS_DIR / "S809_CSU_Re0.65M_total.dat"
 
 # Multi-Re set: nominal Reynolds levels of TP-442-7817 Tables B1..B4.
 MULTI_RE_LEVELS = [0.75e6, 1.0e6, 1.25e6, 1.5e6]
@@ -100,19 +105,44 @@ def extension_rows(core: list[tuple[float, float, float, float]]):
     return rows
 
 
-def render_single_re(rows) -> str:
-    lines = [
-        "// S809 polar, OSU Re = 1e6, TOTAL drag (NREL/TP-500-29955 Table A-7;",
-        "// cross-checked against NREL/TP-442-7817 Table B2, which is the same",
-        "// OSU clean series). `Cdw` (wake traverse) is used where reported; rows",
-        "// where the report leaves the wake column blank fall back to `Cdp`",
-        "// (pressure drag) -- verified by scripts/buildPolars.py from the raw",
-        "// table transcription in data/polars/raw/table_A7.csv.",
-        "// Rows with |alpha| beyond the measured OSU range are a STATIC EXTENSION",
-        "// from CSU Table A-3 (Re = 0.3e6, mirrored for negative alpha) plus a",
-        "// flat-plate closure, added so profileData never reads outside the table.",
-        "// (alpha_deg Cl Cd Cm)",
+def csu_low_re_rows() -> list[tuple[float, float, float, float]]:
+    """CSU Re = 0.65e6 level (Table A-5); same Cdw->Cdp fallback as the baseline."""
+    table = read_raw(RAW_DIR / "table_A5.csv")
+    return [
+        (float(row["alpha_deg"]), float(row["cl"]), drag(row), 0.0)
+        for row in table
     ]
+
+
+BASELINE_HEADER = [
+    "// S809 polar, OSU Re = 1e6, TOTAL drag (NREL/TP-500-29955 Table A-7;",
+    "// cross-checked against NREL/TP-442-7817 Table B2, which is the same",
+    "// OSU clean series). `Cdw` (wake traverse) is used where reported; rows",
+    "// where the report leaves the wake column blank fall back to `Cdp`",
+    "// (pressure drag) -- verified by scripts/buildPolars.py from the raw",
+    "// table transcription in data/polars/raw/table_A7.csv.",
+    "// Rows with |alpha| beyond the measured OSU range are a STATIC EXTENSION",
+    "// from CSU Table A-3 (Re = 0.3e6, mirrored for negative alpha) plus a",
+    "// flat-plate closure, added so profileData never reads outside the table.",
+    "// (alpha_deg Cl Cd Cm)",
+]
+
+CSU_HEADER = [
+    "// S809 polar, CSU Re = 0.65e6 (NREL/TP-500-29955 Table A-5); pressure drag",
+    "// `Cdp` (the CSU series reports no wake traverse), transcribed in",
+    "// data/polars/raw/table_A5.csv and emitted by scripts/buildPolars.py.",
+    "// REYNOLDS-SENSITIVITY VARIANT, not the committed baseline: the baseline is",
+    "// S809_OSU_Re1M_total.dat. The simulated Phase VI Re at 7 m/s is ~0.43e6",
+    "// inboard to ~0.94e6 at r/R = 0.7, so this lower-Re level brackets it from",
+    "// below. Rows with |alpha| beyond the measured CSU range are a STATIC",
+    "// EXTENSION from the same table (mirrored for negative alpha) plus a",
+    "// flat-plate closure, so profileData never reads outside the table.",
+    "// (alpha_deg Cl Cd Cm)",
+]
+
+
+def render_single_re(rows, header: list[str] | None = None) -> str:
+    lines = list(header) if header is not None else list(BASELINE_HEADER)
     for alpha, cl, cd, cm in rows:
         lines.append(f"({alpha:.4g} {cl:.6g} {cd:.6g} {cm:.6g})")
     return "\n".join(lines) + "\n"
@@ -221,9 +251,13 @@ def main(argv: list[str] | None = None) -> int:
     core = baseline_rows()
     rows = core + extension_rows(core)
     rows.sort(key=lambda row: row[0])
+    csu_core = csu_low_re_rows()
+    csu_rows = csu_core + extension_rows(csu_core)
+    csu_rows.sort(key=lambda row: row[0])
     rendered = {
         BASELINE: render_single_re(rows),
         MULTI_RE: render_multi_re(),
+        CSU_LOW_RE: render_single_re(csu_rows, CSU_HEADER),
     }
 
     stale = False
