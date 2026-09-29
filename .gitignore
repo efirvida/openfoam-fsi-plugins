@@ -12,3 +12,17 @@ platforms/
 # Nacelle ASN validation run artefacts
 turbinesFoam/validation/nacelle-asn/runs/
 turbinesFoam/validation/nacelle-asn/results/
+# Local Pi runtime state
+.atl/
+.codegraph/
+.pi/
+
+# Phase VI campaign artefacts: the per-run comparison outputs are derived
+# (regenerable from runs/ + comparePhaseVI.py). The analysis documents stay
+# tracked; only the per-run directories are ignored.
+turbinesFoam/validation/phaseVI/campaign-results/alm-*/
+turbinesFoam/validation/phaseVI/campaign-results/asm-*/
+turbinesFoam/validation/phaseVI/campaign-results/tmp*/
+
+# External reference codes (not vendored)
+refs/

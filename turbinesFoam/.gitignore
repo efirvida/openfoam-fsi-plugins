@@ -8,3 +8,7 @@ callgrind*
 tests/.noseids
 **darwin64Clang**
 .vscode
+
+# Bibliographic references (PDFs/PPTX). Local-only reading material, never
+# committed; only the formulation extracted from them is used.
+/articles/
