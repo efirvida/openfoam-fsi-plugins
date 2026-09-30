@@ -503,3 +503,33 @@ matching the measured `EAEROTH`):
 +4.4 / −29.2 / −44.0 % at 7/10/13/15 m/s — i.e. good at 7 and 10, and still far
 at the deep-stall points, where (Ouakki & Arbaoui 2023) no 1-D stall-delay model
 is validated.
+
+### Lindenburg is worse than Du-Selig at every speed — NO-GO
+
+Full windows, coarse D/32, %T span-matched (`--match-eaeroth-span`):
+
+| U (m/s) | Du-Selig (%P) | **Lindenburg (%P)** | aug OFF (%P) | tip cn @0.95 (exp 0.5175) |
+|---:|---:|---:|---:|---:|
+| 7 | +6.24 | +7.24 | +0.45 | 0.9159 (Lindenburg) vs 0.7950 (Du-Selig) |
+| 10 | +4.43 | **−18.20** | −26.08 | 0.9823 vs 0.9087 |
+| 13 | −29.22 | **−73.12** | −82.31 | 1.0185 vs 0.9664 |
+| 15 | −43.99 | **−105.39** | −115.31 | 0.8378 vs 0.7771 |
+
+**The bounded model under-delivers at every speed**, sitting between Du-Selig and
+aug-off and much closer to the latter. It is a clear **NO-GO as a Du-Selig
+replacement.**
+
+**The uncomfortable but important reading**: the physically-defensible bounded
+model performs *worse* than the physically-questionable unbounded one, because
+the extra lift Du-Selig adds toward `CL,p` is **empirically needed** in the
+stalled regime. That is evidence that Du-Selig's augmentation is **compensating
+for a different deficit** — most plausibly the 3-D separation physics that no 1-D
+model captures there (Ouakki & Arbaoui 2023) — rather than supplying correct
+physics. It also explains why removing it (aug OFF) is catastrophic at 10/13/15:
+whatever the mechanism, that lift is load-bearing for the integral torque.
+
+**Consequence for the plan**: the "replace Du-Selig with a bounded model" route is
+closed. The remaining honest options for the deep-stall points are a **rotating
+3-D polar from CFD/experiment** (the accuracy ceiling) or recording the limit —
+and the primary effort shifts to the **IEA 15 MW case**, whose attached regime
+avoids this entirely.
