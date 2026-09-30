@@ -436,3 +436,45 @@ gradient**. The credible fixes are structural, not parametric:
 Recommendation: **A (or A+B) for correctness**, with **D** as the minimal,
 defensible scope reduction if a quick validation arm is wanted first. Do not
 relaunch the full arm on the current formulation.
+
+### 2026-09-29 — Option A (sheet quadrature) does not bound it either
+
+Tested the sheet formulation offline by smearing each station's trailing vortex
+over its span window into `M` sub-lines (the midpoint quadrature of the sheet
+integral), and separately by smoothing `Γ(s)`:
+
+| M (sheet sub-lines) | max \|w_corr\| | el 8 | el 9 | tip el 49 |
+|---|---|---|---|---|
+| 1 (point vortex) | 15.72 | 14.04 | 9.72 | 0.83 |
+| 4 | 12.98 | 11.23 | 9.81 | 0.82 |
+| 16 | 12.85 | 11.09 | 9.82 | 0.82 |
+| 64 | 12.84 | 11.08 | 9.82 | 0.82 |
+
+The sheet quadrature **converges to ≈ 12.8 m/s** — i.e. it does not bound the
+inboard value; ~13 m/s *is* the model's answer for this circulation
+distribution. (The Cauchy principal value `(1/4π)∫(dΓ/ds)/(y−s) ds` is finite
+for a smooth `Γ` but log-divergent at a discontinuity, and the placeholder jump
+is effectively one.)
+
+Smoothing `Γ(s)` with a moving average of half-width `win`:
+
+| win | max \|w_corr\| | el 8 | el 47 | tip el 49 |
+|---|---|---|---|---|
+| 0 | 15.72 (el 7) | 14.04 | 4.22 | 0.83 |
+| 1 | 10.66 (el 6) | 2.97 | 4.24 | 0.84 |
+| 2 | 6.98 (el 5) | 1.50 | 4.26 | 0.85 |
+| 3 | 4.27 (**el 47**) | 0.98 | 4.27 | 0.86 |
+| 5 | 4.30 (**el 47**) | 0.36 | 4.30 | 0.88 |
+
+So smoothing removes the placeholder spike (14.0 → 0.36) but a **≈ 4.3 m/s
+correction remains at element 47** (r/R ≈ 0.96) — the tip region itself, where
+`Γ` also drops steeply. That is not smoothing-dependent.
+
+**Conclusion.** The Dağ & Sørensen correction, evaluated at our actuator/wake
+resolution, produces corrections of order `U∞` wherever `dΓ/ds` is steep —
+inboard (up to 14 m/s) and at the tip (≈ 4.3 m/s). The paper reports ≈ 0.5 m/s
+because at `nrAero = 11` its sampled `dΓ/ds` is several times smaller than ours
+at `nElements = 50`. Neither the sheet quadrature (A) nor smoothing (B) alone
+makes the formulation usable here; the remaining viable paths are a documented
+limiter (C) or restricting the correction to the outer span (D), or accepting
+that the model needs the paper's much coarser resolution. No path is applied.
