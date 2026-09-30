@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -324,3 +325,326 @@ class TestExternalCrossChecks:
         var_b = sum((b - mean_b) ** 2 for _, b in pairs)
         correlation = cov / math.sqrt(var_a * var_b)
         assert correlation > 0.99
+
+
+# ---------------------------------------------------------------------------
+# P2 — case assembly (rendered skeleton, fvOptions, mesh arithmetic)
+# ---------------------------------------------------------------------------
+generate_case = _load(
+    "iea15mw_generate_case", PACKAGE / "tools" / "generate_case.py"
+)
+
+CASE_DIR = PACKAGE / "case"
+EXPECTED_CELL_COUNT = 6_674_304
+RATED_TSR = 8.913185552348528
+RATED_RADIUS = 120.67532316
+EXPECTED_FILES = (
+    "system/blockMeshDict",
+    "system/topoSetDict",
+    "system/controlDict",
+    "system/decomposeParDict",
+    "system/fvSchemes",
+    "system/fvSolution",
+    "system/fvOptions",
+    "constant/transportProperties",
+    "constant/turbulenceProperties",
+    "0.org/U",
+    "0.org/p",
+    "0.org/k",
+    "0.org/omega",
+    "0.org/nut",
+)
+
+
+def _strip_foam_comments(text: str) -> str:
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    return re.sub(r"//[^\n]*", "", text)
+
+
+def _parse_foam(text: str) -> dict:
+    """Minimal OpenFOAM dictionary reader for the rendered files.
+
+    Handles nested ``{}`` dictionaries, ``(...)`` lists (including nested
+    lists), ``key value;`` entries, ``$dict;`` inheritance and ``#include``
+    directives. It is deliberately not a full OpenFOAM parser: it only has to
+    survive the generated dictionaries so the tests can inspect structure.
+    """
+    tokens = re.findall(r"[{}();]|\"[^\"]*\"|[^\s{}();]+", _strip_foam_comments(text))
+    pos = 0
+
+    def parse_list() -> list:
+        nonlocal pos
+        items: list = []
+        while pos < len(tokens):
+            token = tokens[pos]
+            if token == ")":
+                pos += 1
+                return items
+            if token == "(":
+                pos += 1
+                items.append(parse_list())
+            elif token == ";":
+                pos += 1
+            elif token.startswith("#"):
+                pos += 1
+                if pos < len(tokens) and tokens[pos].startswith('"'):
+                    pos += 1
+            else:
+                items.append(token)
+                pos += 1
+        return items
+
+    def parse_block() -> dict:
+        nonlocal pos
+        result: dict = {}
+        while pos < len(tokens):
+            token = tokens[pos]
+            if token == "}":
+                pos += 1
+                return result
+            if token in (";", "{"):
+                pos += 1
+                continue
+            if token.startswith("#"):
+                pos += 1
+                if pos < len(tokens) and tokens[pos].startswith('"'):
+                    pos += 1
+                continue
+            if token.startswith("$"):
+                pos += 1
+                if pos < len(tokens) and tokens[pos] == ";":
+                    pos += 1
+                continue
+            key = token
+            pos += 1
+            if pos >= len(tokens):
+                result[key] = None
+                break
+            nxt = tokens[pos]
+            if nxt == "{":
+                pos += 1
+                result[key] = parse_block()
+            elif nxt == "(":
+                pos += 1
+                result[key] = parse_list()
+            else:
+                result[key] = nxt
+                pos += 1
+                if pos < len(tokens) and tokens[pos] == ";":
+                    pos += 1
+        return result
+
+    return parse_block()
+
+
+def _coeffs(fvoptions: dict) -> dict:
+    return fvoptions["turbine"]["axialFlowTurbineALSourceCoeffs"]
+
+
+@pytest.fixture(scope="module")
+def fvoptions() -> dict:
+    return _parse_foam((CASE_DIR / "system" / "fvOptions").read_text(encoding="utf-8"))
+
+
+class TestRatedOperatingPoint:
+    def test_tip_speed_ratio_is_computed(self):
+        tsr = generate_case.tip_speed_ratio(10.659, 7.518)
+        assert tsr == pytest.approx(RATED_TSR, abs=1e-9)
+        # The frozen anchor is the analytic Omega*R/V, not a table lookup.
+        assert tsr == pytest.approx(
+            generate_case.omega_from_rpm(7.518) * RATED_RADIUS / 10.659, abs=1e-12
+        )
+
+    def test_readiness_proposal_9_0786_is_not_reproduced(self):
+        # 9.0786 implies 7.6575 rpm, not the rated 7.518 rpm.
+        implied_rpm = 9.0786 * 10.659 / RATED_RADIUS * 60.0 / (2.0 * math.pi)
+        assert implied_rpm == pytest.approx(7.6575, abs=1e-3)
+        assert abs(implied_rpm - 7.518) > 0.1
+
+    def test_omega_and_revolution_period(self):
+        omega = generate_case.omega_from_rpm(7.518)
+        assert omega == pytest.approx(0.7872831189896021, abs=1e-15)
+        assert generate_case.revolution_period(7.518) == pytest.approx(
+            7.980845969672786, abs=1e-12
+        )
+
+
+class TestFvOptions:
+    def test_parses_and_carries_rotor_keys(self, fvoptions):
+        coeffs = _coeffs(fvoptions)
+        assert fvoptions["turbine"]["type"] == "axialFlowTurbineALSource"
+        assert fvoptions["turbine"]["active"] == "on"
+        assert float(coeffs["tipSpeedRatio"]) == pytest.approx(RATED_TSR, abs=1e-6)
+        assert float(coeffs["rotorRadius"]) == pytest.approx(RATED_RADIUS, abs=1e-4)
+        assert [float(v) for v in coeffs["freeStreamVelocity"]] == [10.659, 0.0, 0.0]
+        assert [float(v) for v in coeffs["origin"]] == [0.0, 0.0, 150.0]
+        assert [float(v) for v in coeffs["axis"]] == [-1.0, 0.0, 0.0]
+        assert [float(v) for v in coeffs["verticalDirection"]] == [0.0, 0.0, 1.0]
+
+    def test_three_blades_120_apart(self, fvoptions):
+        blades = _coeffs(fvoptions)["blades"]
+        assert list(blades) == ["blade1", "blade2", "blade3"]
+        assert float(blades["blade2"]["azimuthalOffset"]) == 120.0
+        assert float(blades["blade3"]["azimuthalOffset"]) == 240.0
+        assert "azimuthalOffset" not in blades["blade1"]
+
+    def test_nelements_is_a_multiple_of_49(self, fvoptions):
+        blades = _coeffs(fvoptions)["blades"]
+        n_elements = int(blades["blade1"]["nElements"])
+        assert n_elements == 147
+        assert n_elements % 49 == 0
+
+    def test_neutral_baseline(self, fvoptions):
+        coeffs = _coeffs(fvoptions)
+        assert coeffs["dynamicStall"]["active"] == "off"
+        assert coeffs["rotationalAugmentation"]["active"] == "off"
+        assert coeffs["endEffects"]["active"] == "off"
+        assert coeffs["endEffects"]["GlauertCoeffs"]["tipEffects"] == "off"
+        assert coeffs["endEffects"]["GlauertCoeffs"]["rootEffects"] == "off"
+        # No tipCorrection block anywhere in the rendered dictionary.
+        text = (CASE_DIR / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "tipCorrection" not in text
+
+    def test_element_data_matches_csv(self, fvoptions):
+        rows = _coeffs(fvoptions)["blades"]["blade1"]["elementData"]
+        geometry = blade_geometry.read_geometry(GEOMETRY)
+        assert len(rows) == len(geometry) == 50
+        for element, row in zip(rows, geometry):
+            assert len(element) == 6
+            assert float(element[0]) == 0.0
+            assert float(element[1]) == pytest.approx(row["radius_m"], abs=1e-6)
+            assert float(element[2]) == 0.0
+            assert float(element[3]) == pytest.approx(row["chord_m"], abs=1e-6)
+            assert float(element[4]) == pytest.approx(row["chord_mount"], abs=1e-6)
+            assert float(element[5]) == pytest.approx(row["pitch_deg"], abs=1e-6)
+
+    def test_element_twist_sign(self, fvoptions):
+        rows = _coeffs(fvoptions)["blades"]["blade1"]["elementData"]
+        geometry = blade_geometry.read_geometry(GEOMETRY)
+        for element, row in zip(rows, geometry):
+            if row["twist_deg"] > 0:
+                assert float(element[5]) < 0
+            elif row["twist_deg"] < 0:
+                assert float(element[5]) > 0
+
+    def test_physical_radius_with_cone_projects_to_rotor_radius(self, fvoptions):
+        coeffs = _coeffs(fvoptions)
+        rows = coeffs["blades"]["blade1"]["elementData"]
+        tip = float(rows[-1][1])
+        # Option (b): the physical along-blade radius, coned by 4 deg.
+        assert tip == pytest.approx(120.9699, abs=1e-3)
+        assert tip > float(coeffs["rotorRadius"])
+        assert float(coeffs["coneAngle"]) == pytest.approx(4.0)
+        projected = tip * math.cos(math.radians(4.0))
+        assert projected == pytest.approx(float(coeffs["rotorRadius"]), abs=1e-3)
+
+    def test_polar_mapping_by_airfoil_id(self, fvoptions):
+        coeffs = _coeffs(fvoptions)
+        profiles = coeffs["blades"]["blade1"]["elementProfiles"]
+        profile_data = coeffs["profileData"]
+        geometry = blade_geometry.read_geometry(GEOMETRY)
+        assert profiles == generate_case.blade_profile_names()
+        assert len(profiles) == 50
+        for row in geometry:
+            name = f"polar_{int(row['airfoil_id']) - 1:02d}"
+            assert name in profiles
+            assert name in profile_data
+            assert (POLARS / f"{name}.dat").exists()
+        assert "cylinder" in profile_data
+        # The rendered include path resolves to the committed P1 polars.
+        text = (CASE_DIR / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert '#include "../../data/polars/polar_00.dat"' in text
+
+    def test_hub_is_rendered(self, fvoptions):
+        hub = _coeffs(fvoptions)["hub"]
+        assert int(hub["nElements"]) == 4
+        rows = hub["elementData"]
+        assert len(rows) == 2
+        assert float(rows[0][1]) == pytest.approx(3.97, abs=1e-9)
+        assert float(rows[0][2]) == pytest.approx(7.94, abs=1e-9)
+
+
+class TestCaseSkeleton:
+    def test_all_expected_files_rendered(self):
+        for relative in EXPECTED_FILES:
+            assert (CASE_DIR / relative).exists(), relative
+
+    def test_decompose_par_48_ranks(self):
+        text = (CASE_DIR / "system" / "decomposeParDict").read_text(encoding="utf-8")
+        assert "numberOfSubdomains 48;" in text
+        assert generate_case.NUMBER_OF_SUBDOMAINS == 48
+
+    def test_control_dict_time_step_and_end_time(self):
+        text = (CASE_DIR / "system" / "controlDict").read_text(encoding="utf-8")
+        assert "deltaT 0.075;" in text
+        assert "endTime 23.942538;" in text
+        assert "libturbinesFoam.so" in text
+        # The tip displacement per step stays below the hub-adjacent cell.
+        tip_speed = generate_case.omega_from_rpm(7.518) * RATED_RADIUS
+        assert tip_speed * 0.075 < generate_case.hub_cell_size("coarse")
+
+    def test_u_field_prescribes_rated_speed(self):
+        text = (CASE_DIR / "0.org" / "U").read_text(encoding="utf-8")
+        assert "uniform (10.659 0 0)" in text
+
+    def test_inflow_k_and_omega_consistent(self):
+        fields = generate_case.inflow_fields(10.659)
+        assert fields["k"] == pytest.approx(0.0042605355375, abs=1e-12)
+        assert fields["omega"] == pytest.approx(0.007053829573451254, abs=1e-15)
+
+
+class TestMesh:
+    def test_recorded_cell_count(self):
+        assert generate_case.cell_count("coarse") == EXPECTED_CELL_COUNT
+        assert generate_case.EXPECTED_CELL_COUNT == EXPECTED_CELL_COUNT
+
+    def test_block_mesh_dict_18_hex_blocks(self):
+        text = (CASE_DIR / "system" / "blockMeshDict").read_text(encoding="utf-8")
+        pattern = re.compile(
+            r"^\s+hex \(([^)]*)\) \((\d+) (\d+) (\d+)\) simpleGrading \(",
+            re.MULTILINE,
+        )
+        blocks = pattern.findall(text)
+        assert len(blocks) == 18
+        total = sum(int(nx) * int(ny) * int(nz) for _, nx, ny, nz in blocks)
+        assert total == EXPECTED_CELL_COUNT
+        for name in ("inlet", "outlet", "bottom", "top", "sideMinus", "sidePlus"):
+            assert f"    {name}\n" in text
+        assert text.count("type symmetryPlane;") == 4
+
+    def test_hub_adjacent_cell_is_d_over_32(self):
+        hub = generate_case.hub_cell_size("coarse")
+        assert hub == pytest.approx(generate_case.ROTOR_DIAMETER / 32.0, rel=0.01)
+
+
+class TestCheckMode:
+    def test_check_passes_for_committed_case(self):
+        assert generate_case.main(["--check", "--case-dir", str(CASE_DIR)]) == 0
+
+    def test_check_fails_when_stale(self, tmp_path):
+        case_dir = tmp_path / "case"
+        assert generate_case.main(["--case-dir", str(case_dir)]) == 0
+        assert generate_case.main(["--check", "--case-dir", str(case_dir)]) == 0
+        stale = case_dir / "system" / "fvOptions"
+        stale.write_text(
+            stale.read_text(encoding="utf-8") + "// tampered\n", encoding="utf-8"
+        )
+        assert generate_case.main(["--check", "--case-dir", str(case_dir)]) == 1
+
+    def test_check_fails_when_missing(self, tmp_path):
+        assert (
+            generate_case.main(["--check", "--case-dir", str(tmp_path / "nope")]) == 1
+        )
+
+    def test_operating_point_is_a_parameter(self, tmp_path):
+        case_dir = tmp_path / "case"
+        assert (
+            generate_case.main(
+                ["--speed", "9.0", "--rpm", "6.0", "--case-dir", str(case_dir)]
+            )
+            == 0
+        )
+        text = (case_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+        expected = generate_case.tip_speed_ratio(9.0, 6.0)
+        assert f"tipSpeedRatio {expected:.8g};" in text
+        assert "freeStreamVelocity (9 0 0);" in text
