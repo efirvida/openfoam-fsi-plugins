@@ -253,3 +253,24 @@ them on Phase VI.
 **Do not adopt Snel/SD-ALM** (§6.1) — same unbounded class as the model being
 replaced. **`aug OFF` remains a diagnostic, not a fix**: it under-loads the
 inboard to −32 % (§ thrust diagnosis).
+
+### 6.5 The two unknowns pin down (from the paper's reference list)
+
+- **`f(α)` is the Beddoes–Leishman trailing-edge separation factor** — Ouakki's
+  ref 44 is *Leishman & Beddoes, "A generalised model for airfoil unsteady
+  aerodynamic behaviour…"*. That is the standard `f(α)` (the familiar
+  `f = 1 − 0.3·exp((α − α₁)/α₂)` family, or the Kirchhoff form), i.e. a
+  **decreasing** function once the section separates — which is exactly what
+  makes the Lindenburg increment self-limiting.
+- **The Lindenburg source is Ouakki's ref 37**: Lindenburg,
+  *"Modelling of rotational augmentation based on engineering considerations
+  and …"* (the EWEC-era ECN work). That report is the one still worth retrieving
+  **for the calibration of `f(α)` and any constants**; the functional form is
+  already pinned above.
+
+**Implementation note (in-repo).** `turbinesFoam` already ships a
+Leishman–Beddoes dynamic-stall model
+(`.../dynamicStallModels/LeishmanBeddoes/LeishmanBeddoes.{H,C}`), so the `f(α)`
+separation factor is either already computed there or available from the same
+literature — the Lindenburg increment would not need a new physical closure,
+only the `(c/r)(cos φ)²` scaling and the two extra terms of Eqs. (7)–(8).
