@@ -178,3 +178,78 @@ All three variants already exist in
 
 **Cost**: 3 variants × 3 speeds = 9 coarse runs (same class as those already
 run: 48 ranks, ≈ 1.5–5 h each). Note the standing group quota (2 T).
+
+---
+
+## 6. UPDATE — formulations retrieved (files supplied by the maintainer)
+
+The maintainer supplied the paper PDFs. Verified **with vision** from those files:
+
+### 6.1 Snel, as implemented inside an actuator-line model (SD-ALM, *Energies* 2026, §2.3, p. 5)
+
+Matsuoka et al. integrate the **Snel** stall delay into an ALM, and state the
+motivation is that there is "a paucity of research incorporating stall delay
+models specifically into the ALM framework":
+
+    ΔC_l = (∂C_l/∂α)(α − α0) − C_l                                (15)
+    C_L  = C_l + 3 (c/r)² ΔC_l                                     (16)
+
+and — relevant to our own design — "the Snel model is applied **exclusively to
+the lift coefficient**, while the 2D static values are retained for the drag
+coefficient as a preliminary study".
+
+**This is the same unbounded class as Du-Selig**: the reference is the linear
+extrapolation `(∂C_l/∂α)(α−α0)`, which grows with α, so `C_L` still inflates
+without limit in deep stall. **Not the model to adopt for our defect** (their
+drag asymmetry is also worth noting: they deliberately leave `C_D` uncorrected).
+
+### 6.2 Lindenburg — the bounded model, exact equations (Ouakki & Arbaoui 2023, §I.2, p. 6, Eqs. 5–9)
+
+    ΔC_n   = 1.6 (c/r)(rΩ/V_eff)² f(α)²                            (5)
+    ΔC_p   = −2 · 1.6 (c/r)(rΩ/V_eff)² (1 − x/c)                   (6)
+    ΔC_L   = 1.6 (c/r)(cos φ)² [ f(α)² cos(α_rot)
+                                 + 0.25 cos(α_rot − α_0) ]         (7)
+    ΔC_D   = 1.6 (c/r)(cos φ)² f(α)² sin(α_rot)                    (8)
+    α_rot  = α + (0.25/2π) · 1.6 (c/r)(cos φ)²                     (9)
+
+with `f(α)` the **trailing-edge separation factor** (Kirchhoff/Helmholtz), `φ`
+the inflow angle, `rΩ/V_eff ≈ cos φ`, `x/c` the chordwise position, `α_0` the
+zero-lift angle.
+
+**Why this is the right class for our defect:** it produces **bounded increments**
+`ΔC_L`, `ΔC_D` added to the 2-D values — there is no blend toward an unbounded
+potential reference. Its magnitude is governed by `(c/r)(cos φ)² f(α)²`, and
+`f(α)` *decreases* as the section separates, so the correction self-limits in deep
+stall instead of inflating. This is the concrete replacement for
+`correctRotationalAugmentation()`'s `CL,p = 2π(α−α0)` blend.
+
+### 6.3 The limit the literature itself states (Ouakki & Arbaoui 2023, conclusions, p. 42)
+
+The single most important sentence for our case — their calibrated/modified
+stall-delay models:
+
+> "give accurate predictions of the pressure reduction inside the separated
+> boundary layer **if the blade has only a trailing edge separation type like the
+> MEXICO rotor**. While for the **NREL rotor, these models show good agreement
+> only at medium angles of attack** … At **high angles of attack toward the
+> maximum flow separation, further work is needed** to account for the complex 3D
+> flow near the hub. … the **lack of generality of current stall delay models is
+> due to the centrifugal pumping assumption**."
+
+Our 7 m/s inboard sits at `α ≈ 27–35°` — "toward the maximum flow separation".
+So **no 1-D stall-delay model (Lindenburg included) is validated in our failing
+region**, and this is stated by the very paper whose purpose was to calibrate
+them on Phase VI.
+
+### 6.4 Revised recommendation
+
+| Priority | Action | Basis |
+|---|---|---|
+| 1 | Replace the unbounded `CL,p` blend in `correctRotationalAugmentation()` with the **Lindenburg** incremental form (§6.2), applied to **both** `C_L` and `C_D` | It is the bounded member of the family; exact equations now verified |
+| 2 | Keep a **physical post-stall polar** (§2; the Viterna files already built, with the deep-stall drag reconciled) | The deep-stall branch is not a stall-delay question |
+| 3 | Accept, and *record*, that the inboard `α > 25°` region is **outside the validated range of any 1-D model** (Ouakki §6.3); do not tune to it | Prevents fitting a model where the literature says none generalises |
+| 4 | The accurate option for that region is a **rotating 3-D polar from CFD or experiment** (Guntur–Sørensen, Mauro et al. — both supplied), i.e. a data/CFD project, not a 1-D model change | The accuracy ceiling |
+
+**Do not adopt Snel/SD-ALM** (§6.1) — same unbounded class as the model being
+replaced. **`aug OFF` remains a diagnostic, not a fix**: it under-loads the
+inboard to −32 % (§ thrust diagnosis).
