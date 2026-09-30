@@ -463,3 +463,43 @@ points at every speed over the Glauert tip loss, lands within ±6 % at 7 and
 10 m/s, and still leaves 13/15 m/s far from the measurement — those are the
 deep-stall points where the polar/stall branch dominates, consistent with the
 Viterna work. At 25 m/s it overshoots to +74 %.
+
+### Du-Selig off is a 7 m/s over-fit; Lindenburg does not help at 7 m/s
+
+Full windows, coarse D/32, thrust with `--match-eaeroth-span` (r/R >= 0.25,
+matching the measured `EAEROTH`):
+
+| speed | config | %P | %T* | tip `c_ref_n` @0.95 (exp 0.5175) |
+|---|---|---:|---:|---:|
+| 7 | D&S + **Du-Selig**, root ON | **+6.24** | −9.39 | 0.7950 (+53.6 %) |
+| 7 | D&S + **aug OFF**, root ON | **+0.45** | −12.74 | 0.7951 (+53.6 %) |
+| 7 | D&S + **Lindenburg**, root ON | +7.24 | +7.89 | 0.9159 (+77.0 %) |
+| 7 | D&S + Viterna polar, Du-Selig | +6.22 | −9.36 | 0.7950 (+53.6 %) |
+| 10 | D&S + **Du-Selig**, root ON | **+4.43** | −20.9 | — |
+| 10 | D&S + **aug OFF**, root ON | **−26.08** | −31.14 | 0.9137 (+22.1 %) |
+| 13 | D&S + **Du-Selig**, root ON | **−29.22** | −29.7 | — |
+| 13 | D&S + **aug OFF**, root ON | **−82.31** | −41.52 | 0.9799 (+7.6 %) |
+| 15 | D&S + **Du-Selig**, root ON | **−43.99** | −30.3 | — |
+| 15 | D&S + **aug OFF**, root ON | **−115.31** | −42.51 | 0.8059 (−5.0 %) |
+
+**Three conclusions.**
+
+1. **Removing Du-Selig only helps at 7 m/s.** At 10/13/15 it is catastrophic
+   (−26 % / −82 % / −115 % vs +4.4 % / −29 % / −44 %). The rotational
+   augmentation is *essential* in the stalled regime; the "+0.45 %" at 7 m/s was
+   an **over-fit to a single operating point**, not a fix.
+
+2. **The Lindenburg bounded model, as implemented, does not help at 7 m/s**
+   (+7.24 % vs +6.24 %) and *raises* the tip load (0.9159 vs 0.7950). Its
+   increment is `ΔC_L = 1.6(c/r)cos²φ[f²cos α_rot + 0.25cos(α_rot−α_0)]` — the
+   second, always-positive term adds lift even when the section is separated.
+   Running it at 10/13/15 is the outstanding test.
+
+3. **The Viterna post-stall branch alone changes nothing** (+6.22 vs +6.24, tip
+   identical): with Du-Selig active the augmentation compensates the polar
+   change, which is exactly the coupling Papi et al. (2022) is about.
+
+**Overall best across the speed range remains D&S + Du-Selig + root ON**: +6.2 /
++4.4 / −29.2 / −44.0 % at 7/10/13/15 m/s — i.e. good at 7 and 10, and still far
+at the deep-stall points, where (Ouakki & Arbaoui 2023) no 1-D stall-delay model
+is validated.
