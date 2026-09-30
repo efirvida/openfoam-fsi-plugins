@@ -22,8 +22,9 @@
 
 set -eu
 
-variant="${1:?usage: sbatch tip-correction-variants.slurm <multire|rooton|csu|n25> [speed]}"
+variant="${1:?usage: sbatch tip-correction-variants.slurm <variant> [speed]}"
 speed="${2:-7}"
+aug="on"
 
 case "$variant" in
     multire) label="tipcorr-multire"; polar="S809_multiRe.dat";  root="off"; n_elems="" ;;
@@ -33,6 +34,14 @@ case "$variant" in
     # 25 is the coarsest valid arm -- the paper's nrAero = 11 needs a geometry
     # resample, a separate change. n25 halves the spanwise resolution.
     n25)     label="tipcorr-n25";     polar="";                   root="off"; n_elems="--n-elements 25" ;;
+    # Du-Selig ablation under the tip correction: isolates how much of the
+    # residual power excess is the deep-stall lift inflation (measured at
+    # 7 m/s without the tip correction: aug OFF moves the power by -5.17 pts).
+    augoff-rooton)  label="tipcorr-augoff-rooton";  polar=""; root="on";  aug="off"; n_elems="" ;;
+    augoff-rootoff) label="tipcorr-augoff-rootoff"; polar=""; root="off"; aug="off"; n_elems="" ;;
+    # Viterna-Corrigan post-stall branch (a NEW file; the committed polars are
+    # untouched) replacing the Re=0.3e6 pasted stall rows / flat-plate closure.
+    viterna-rooton) label="tipcorr-viterna-rooton"; polar="S809_OSU_Re1M_viterna.dat"; root="on"; n_elems="" ;;
     *) echo "ERROR: unknown variant '$variant'" >&2; exit 2 ;;
 esac
 
@@ -70,7 +79,7 @@ echo "Tip-correction variant '${variant}' (label ${label}) at U${speed} m/s on $
 
 # shellcheck disable=SC2086
 scripts/runPhaseVI.sh -m alm -u "$speed" -mesh coarse -s H \
-    --rotational-augmentation on --root-effects "$root" \
+    --rotational-augmentation "$aug" --root-effects "$root" \
     --tip-effects off --tip-correction on \
     ${polar:+--polar "$polar"} ${n_elems:-} \
     --run-label "$label" --restart --run

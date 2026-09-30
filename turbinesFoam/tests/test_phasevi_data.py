@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import math
 import os
 import re
 import sys
@@ -22,6 +23,7 @@ TURBINESFOAM = TESTS_DIR.parent
 PACKAGE = TURBINESFOAM / "validation" / "phaseVI"
 DATA = PACKAGE / "data"
 sys.path.insert(0, str(PACKAGE / "tools"))
+sys.path.insert(0, str(PACKAGE / "scripts"))
 
 from case_config import (  # noqa: E402
     assert_tsr_matches_experiment,
@@ -29,6 +31,7 @@ from case_config import (  # noqa: E402
     read_blade,
 )
 from element_data import blade_element_rows  # noqa: E402
+import buildPolars  # noqa: E402
 
 CONFIG = PACKAGE / "config" / "case.yaml"
 GEOMETRY_SHA256 = (
@@ -39,6 +42,22 @@ H_PERFORMANCE_ANCHORS = {
     "25.0": ("h2500000", 11.9507, 1580.4082, 4028.6306),
 }
 NO_ARTEFACT_SUFFIXES = {".pdf", ".xls", ".xlsx", ".xlsm", ".doc", ".docx"}
+
+POLARS = DATA / "polars"
+OSU_TOTAL = POLARS / "S809_OSU_Re1M_total.dat"
+CSU_TOTAL = POLARS / "S809_CSU_Re0.65M_total.dat"
+OSU_VITERNA = POLARS / "S809_OSU_Re1M_viterna.dat"
+CSU_VITERNA = POLARS / "S809_CSU_Re0.65M_viterna.dat"
+# sha256 of the committed polars that the RUNNING Phase VI jobs read live. The
+# Viterna work adds NEW files (`*_viterna.dat`) and must never touch these.
+ORIGINAL_POLAR_SHA256 = {
+    "S809_OSU_Re1M_total.dat": (
+        "139292f572e2fd1e4f48dd078294ba87d408d4909d47c107901fc6e14dabe9be"
+    ),
+    "S809_CSU_Re0.65M_total.dat": (
+        "d797ad960b7afa807c2d7e1c3c184a40e36b84cf14be26769726558b88561601"
+    ),
+}
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
@@ -187,6 +206,118 @@ def test_polar_multire():
     provenance = (DATA / "polars" / "PROVENANCE.md").read_text(encoding="utf-8")
     assert "S809_Re1M_extended" in provenance
     assert "is **not** used" in provenance
+
+
+def _polar_line_rows(text: str) -> list[str]:
+    """Raw `(a cl cd cm)` lines, stripped, preserving byte content."""
+    return [
+        line.strip()
+        for line in text.splitlines()
+        if re.match(r"^\([-0-9.eE ]+\)$", line.strip())
+    ]
+
+
+def _line_by_alpha(text: str) -> dict[float, str]:
+    lines = _polar_line_rows(text)
+    return {float(line[1:-1].split()[0]): line for line in lines}
+
+
+def test_original_polars_byte_unchanged():
+    # These two files are read live by running Phase VI jobs; the Viterna task
+    # only adds sibling `*_viterna.dat` files.
+    for name, digest in ORIGINAL_POLAR_SHA256.items():
+        path = POLARS / name
+        assert path.exists(), path
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == digest, (
+            f"{name} was modified; the running Phase VI jobs read it live"
+        )
+
+
+def test_polar_viterna_measured_rows_preserved():
+    pairs = (
+        (OSU_TOTAL, OSU_VITERNA, buildPolars.baseline_rows()),
+        (CSU_TOTAL, CSU_VITERNA, buildPolars.csu_low_re_rows()),
+    )
+    for total, viterna, core in pairs:
+        total_lines = _line_by_alpha(total.read_text(encoding="utf-8"))
+        viterna_lines = _line_by_alpha(viterna.read_text(encoding="utf-8"))
+        # only the beyond-measurement values change; the grid is identical
+        assert len(total_lines) == len(viterna_lines)
+        assert set(total_lines) == set(viterna_lines)
+        for alpha, cl, cd, cm in core:
+            assert viterna_lines[alpha] == total_lines[alpha], alpha
+
+
+def test_polar_viterna_continuity_at_blend_point():
+    # the branch is anchored at the outermost measured sample on each side, so
+    # the measured table and the Viterna branch agree exactly at the blend point
+    for core in (buildPolars.baseline_rows(), buildPolars.csu_low_re_rows()):
+        pos = max(core, key=lambda row: row[0])
+        cl, cd = buildPolars.viterna_extrapolation(pos[0], pos[1], pos[2], pos[0])
+        assert cl == pytest.approx(pos[1], abs=1e-9)
+        assert cd == pytest.approx(pos[2], abs=1e-9)
+        neg = min(core, key=lambda row: row[0])
+        cl, cd = buildPolars.viterna_extrapolation(-neg[0], -neg[1], neg[2], -neg[0])
+        assert -cl == pytest.approx(neg[1], abs=1e-9)
+        assert cd == pytest.approx(neg[2], abs=1e-9)
+
+
+def test_viterna_limits_and_drag_monotone():
+    # CL(+-90) = 0 by construction; CD is finite and reaches the flat-plate
+    # value B1 at 90. CD is non-decreasing through the separated range; the
+    # shallow maximum just short of 90 deg is a known Viterna feature, so the
+    # monotonicity check stops at 80 deg and only finiteness is asked at 90.
+    for core in (buildPolars.baseline_rows(), buildPolars.csu_low_re_rows()):
+        pos = max(core, key=lambda row: row[0])
+        neg = min(core, key=lambda row: row[0])
+        anchors = (
+            (pos[0], pos[1], pos[2]),
+            (-neg[0], -neg[1], neg[2]),
+        )
+        for anchor in anchors:
+            cl90, cd90 = buildPolars.viterna_extrapolation(*anchor, 90.0)
+            assert cl90 == pytest.approx(0.0, abs=1e-12)
+            assert math.isfinite(cd90)
+            assert cd90 == pytest.approx(buildPolars.VITERNA_B1_2D)
+            previous = -math.inf
+            for alpha in range(math.ceil(anchor[0]), 81):
+                _, cd = buildPolars.viterna_extrapolation(*anchor, float(alpha))
+                assert cd >= previous - 1e-12, (anchor, alpha)
+                previous = cd
+
+
+def test_polar_viterna_negative_branch_is_mirrored():
+    # the emitted negative-alpha rows are the odd/even mirror of the branch
+    # anchored at the mirrored outermost measured sample
+    for path, core in (
+        (OSU_VITERNA, buildPolars.baseline_rows()),
+        (CSU_VITERNA, buildPolars.csu_low_re_rows()),
+    ):
+        neg = min(core, key=lambda row: row[0])
+        anchor = (-neg[0], -neg[1], neg[2])
+        for alpha, cl, cd, _ in polar_rows(path.read_text(encoding="utf-8")):
+            if -90.0001 < alpha < neg[0]:
+                cl_pos, cd_pos = buildPolars.viterna_extrapolation(*anchor, -alpha)
+                # the file stores 6 significant figures, so allow the rounding
+                assert cl == pytest.approx(-cl_pos, abs=1e-5)
+                assert cd == pytest.approx(cd_pos, abs=1e-5)
+
+
+def test_polar_viterna_format_and_sorting():
+    for path, reference in ((OSU_VITERNA, OSU_TOTAL), (CSU_VITERNA, CSU_TOTAL)):
+        text = path.read_text(encoding="utf-8")
+        assert "Viterna" in text
+        rows = polar_rows(text)
+        reference_rows = polar_rows(reference.read_text(encoding="utf-8"))
+        assert len(rows) == len(reference_rows)
+        alpha = [row[0] for row in rows]
+        assert alpha == sorted(alpha)
+        assert len(set(alpha)) == len(alpha)
+        assert alpha[0] == pytest.approx(-180.0)
+        assert alpha[-1] == pytest.approx(180.0)
+        assert all(-180.0 <= value <= 180.0 for value in alpha)
+        assert all(len(row) == 4 for row in rows)
+        assert all(row[2] >= 0.0 for row in rows)
 
 
 def test_provenance_fields():

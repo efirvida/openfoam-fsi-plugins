@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import sys
 from pathlib import Path
 
@@ -42,6 +43,18 @@ MULTI_RE = POLARS_DIR / "S809_multiRe.dat"
 # (at r/R = 0.7), so the single-Re Re = 1e6 baseline is an upper bound; this
 # variant is the ablation that tests that choice. Not blended into the baseline.
 CSU_LOW_RE = POLARS_DIR / "S809_CSU_Re0.65M_total.dat"
+# Viterna-Corrigan post-stall variants. These are NEW files: the measured rows
+# are byte-identical to the `*_total.dat` files above and only the
+# beyond-measurement rows are replaced by an empirical post-stall branch. The
+# running Phase VI jobs read the committed `*_total.dat` files, never these.
+BASELINE_VITERNA = POLARS_DIR / "S809_OSU_Re1M_viterna.dat"
+CSU_LOW_RE_VITERNA = POLARS_DIR / "S809_CSU_Re0.65M_viterna.dat"
+
+# Viterna & Corrigan (1982) flat-plate term `B1 = 1.11 + 0.018*AR`. The polar
+# is a 2-D airfoil section consumed by `profileData`, so the finite-aspect-ratio
+# correction does not apply and the AR term is dropped (B1 = 1.11). See
+# odd/tasks/phasevi-polar-viterna-design.md for the justification.
+VITERNA_B1_2D = 1.11
 
 # Multi-Re set: nominal Reynolds levels of TP-442-7817 Tables B1..B4.
 MULTI_RE_LEVELS = [0.75e6, 1.0e6, 1.25e6, 1.5e6]
@@ -83,6 +96,22 @@ def baseline_rows() -> list[tuple[float, float, float, float]]:
     return rows
 
 
+def extension_alphas(core: list[tuple[float, float, float, float]]) -> list[float]:
+    """CSU Table A-3 abscissae carried beyond the measured core range.
+
+    Mirrored for negative alpha. Returned unsorted; the caller sorts. This is
+    the exact angle grid the committed `*_total.dat` extension uses, so the
+    Viterna variant keeps the same row abscissae and only changes the values.
+    """
+    csu = read_raw(RAW_DIR / "table_A3.csv")
+    high = [float(row["alpha_deg"]) for row in csu]
+    core_high = max(alpha for alpha, _, _, _ in core)
+    core_low = min(alpha for alpha, _, _, _ in core)
+    alphas = [alpha for alpha in high if alpha > core_high]
+    alphas += [-alpha for alpha in high if alpha > -core_low]
+    return alphas
+
+
 def extension_rows(core: list[tuple[float, float, float, float]]):
     """CSU Table A-3 measured extension, mirrored for negative alpha."""
     csu = read_raw(RAW_DIR / "table_A3.csv")
@@ -90,14 +119,76 @@ def extension_rows(core: list[tuple[float, float, float, float]]):
         (float(row["alpha_deg"]), float(row["cl"]), drag(row), 0.0)
         for row in csu
     ]
-    core_high = max(alpha for alpha, _, _, _ in core)
-    core_low = min(alpha for alpha, _, _, _ in core)
-    rows = [(alpha, cl, cd, cm) for alpha, cl, cd, cm in high if alpha > core_high]
-    mirrored = [
-        (-alpha, -cl, cd, cm) for alpha, cl, cd, cm in high if alpha > -core_low
-    ]
-    mirrored.sort()
+    wanted = set(extension_alphas(core))
+    rows = [(alpha, cl, cd, cm) for alpha, cl, cd, cm in high if alpha in wanted]
+    mirrored = [(-alpha, -cl, cd, cm) for alpha, cl, cd, cm in high if -alpha in wanted]
     rows = mirrored + rows
+    for alpha, (cl, cd, cm) in FLAT_PLATE.items():
+        rows.append((alpha, cl, cd, cm))
+        rows.append((-alpha, -cl, cd, cm))
+    rows.sort()
+    return rows
+
+
+def viterna_extrapolation(
+    alpha_s_deg: float,
+    cl_s: float,
+    cd_s: float,
+    alpha_deg: float,
+    aspect_ratio: float = 0.0,
+) -> tuple[float, float]:
+    """Viterna & Corrigan (1982) post-stall branch at `alpha_deg`.
+
+    Reference relations (angles in degrees, converted internally):
+
+        B1 = 1.11 + 0.018*AR          (flat-plate max-drag term)
+        A1 = B1 / 2
+        A2 = (CL_s - B1*sin(a_s)*cos(a_s)) * sin(a_s) / cos^2(a_s)
+        B2 = (CD_s - B1*sin^2(a_s)) / cos(a_s)
+
+        CL(a) = A1*sin(2a) + A2*cos^2(a)/sin(a)
+        CD(a) = B1*sin^2(a) + B2*cos(a)
+
+    The form `A2 = (CL_s - A1*sin(2 a_s))*sin(a_s)/cos^2(a_s)` is identical
+    because `A1*sin(2 a_s) = B1*sin(a_s)*cos(a_s)`. The default `aspect_ratio=0`
+    drops the finite-aspect-ratio term: this is a 2-D section polar, so the
+    finite-wing correction does not apply. Valid for `a_s <= alpha <= 90`.
+    """
+    a_s = math.radians(alpha_s_deg)
+    a = math.radians(alpha_deg)
+    b1 = VITERNA_B1_2D + 0.018 * aspect_ratio
+    a1 = b1 / 2.0
+    a2 = (cl_s - b1 * math.sin(a_s) * math.cos(a_s)) * math.sin(a_s) / (
+        math.cos(a_s) ** 2
+    )
+    b2 = (cd_s - b1 * math.sin(a_s) ** 2) / math.cos(a_s)
+    cl = a1 * math.sin(2.0 * a) + a2 * math.cos(a) ** 2 / math.sin(a)
+    cd = b1 * math.sin(a) ** 2 + b2 * math.cos(a)
+    return cl, cd
+
+
+def viterna_extension_rows(core: list[tuple[float, float, float, float]]):
+    """Viterna post-stall branch beyond the measured core, plus the closure.
+
+    One anchor per side, re-anchored at the outermost measured sample (the
+    blend point) so the emitted table is continuous there: anchoring at the
+    interior max-CL stall point would leave the near-edge abscissae undefined
+    (CSU negative) or introduce a discontinuity (OSU positive). Negative alpha
+    mirrors the branch (CL odd, CD even). The same flat-plate closure as the
+    committed `*_total.dat` files is retained beyond the +-90 deg Viterna range.
+    """
+    pos_edge = max(core, key=lambda row: row[0])
+    neg_edge = min(core, key=lambda row: row[0])
+    pos_anchor = (pos_edge[0], pos_edge[1], pos_edge[2])
+    neg_anchor = (-neg_edge[0], -neg_edge[1], neg_edge[2])
+    rows: list[tuple[float, float, float, float]] = []
+    for alpha in extension_alphas(core):
+        if alpha > pos_anchor[0]:
+            cl, cd = viterna_extrapolation(*pos_anchor, alpha)
+            rows.append((alpha, cl, cd, 0.0))
+        elif alpha < neg_edge[0]:
+            cl, cd = viterna_extrapolation(*neg_anchor, -alpha)
+            rows.append((alpha, -cl, cd, 0.0))
     for alpha, (cl, cd, cm) in FLAT_PLATE.items():
         rows.append((alpha, cl, cd, cm))
         rows.append((-alpha, -cl, cd, cm))
@@ -137,6 +228,45 @@ CSU_HEADER = [
     "// below. Rows with |alpha| beyond the measured CSU range are a STATIC",
     "// EXTENSION from the same table (mirrored for negative alpha) plus a",
     "// flat-plate closure, so profileData never reads outside the table.",
+    "// (alpha_deg Cl Cd Cm)",
+]
+
+VITERNA_LIMITATION = [
+    "// Viterna & Corrigan (1982) is an EMPIRICAL post-stall engineering model,",
+    "// NOT measured data. B1 = 1.11 (2-D flat-plate baseline); the finite",
+    "// aspect-ratio term 0.018*AR is dropped because this is a 2-D section polar.",
+    "// Beyond +-90 deg the Viterna range ends and the flat-plate closure is kept.",
+]
+
+BASELINE_VITERNA_HEADER = [
+    "// S809 polar, OSU Re = 1e6, TOTAL drag (NREL/TP-500-29955 Table A-7) with a",
+    "// Viterna-Corrigan post-stall branch. Rows inside the measured range",
+    "// (alpha in [-20.1, +26.1] deg) are byte-identical to",
+    "// S809_OSU_Re1M_total.dat; rows beyond it are re-anchored at the outermost",
+    "// measured sample (the blend point) so the branch is continuous there, and",
+    "// mirrored for negative alpha:",
+    "//   CL(a) = A1*sin(2a) + A2*cos^2(a)/sin(a)",
+    "//   CD(a) = B1*sin^2(a) + B2*cos(a)",
+    "//   A1 = B1/2, B1 = 1.11",
+    "//   A2 = (CL_s - B1*sin(a_s)*cos(a_s))*sin(a_s)/cos^2(a_s)",
+    "//   B2 = (CD_s - B1*sin^2(a_s))/cos(a_s)",
+] + VITERNA_LIMITATION + [
+    "// (alpha_deg Cl Cd Cm)",
+]
+
+CSU_VITERNA_HEADER = [
+    "// S809 polar, CSU Re = 0.65e6 (NREL/TP-500-29955 Table A-5) with a",
+    "// Viterna-Corrigan post-stall branch. Rows inside the measured range",
+    "// (alpha in [-0.25, +90.2] deg) are byte-identical to",
+    "// S809_CSU_Re0.65M_total.dat; rows beyond it (the negative alpha branch,",
+    "// which this table does not measure) are the mirrored Viterna branch",
+    "// re-anchored at the outermost measured sample.",
+    "//   CL(a) = A1*sin(2a) + A2*cos^2(a)/sin(a)",
+    "//   CD(a) = B1*sin^2(a) + B2*cos(a)",
+    "//   A1 = B1/2, B1 = 1.11",
+    "//   A2 = (CL_s - B1*sin(a_s)*cos(a_s))*sin(a_s)/cos^2(a_s)",
+    "//   B2 = (CD_s - B1*sin^2(a_s))/cos(a_s)",
+] + VITERNA_LIMITATION + [
     "// (alpha_deg Cl Cd Cm)",
 ]
 
@@ -246,6 +376,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="fail (exit 1) if the committed polar files are missing or stale",
     )
+    parser.add_argument(
+        "--viterna-only",
+        action="store_true",
+        help="write/check only the two Viterna post-stall variants; never touch "
+        "the committed `*_total.dat` files (running Phase VI jobs read them)",
+    )
     args = parser.parse_args(argv)
 
     core = baseline_rows()
@@ -254,11 +390,24 @@ def main(argv: list[str] | None = None) -> int:
     csu_core = csu_low_re_rows()
     csu_rows = csu_core + extension_rows(csu_core)
     csu_rows.sort(key=lambda row: row[0])
+    osu_viterna_rows = core + viterna_extension_rows(core)
+    osu_viterna_rows.sort(key=lambda row: row[0])
+    csu_viterna_rows = csu_core + viterna_extension_rows(csu_core)
+    csu_viterna_rows.sort(key=lambda row: row[0])
     rendered = {
         BASELINE: render_single_re(rows),
         MULTI_RE: render_multi_re(),
         CSU_LOW_RE: render_single_re(csu_rows, CSU_HEADER),
+        BASELINE_VITERNA: render_single_re(osu_viterna_rows, BASELINE_VITERNA_HEADER),
+        CSU_LOW_RE_VITERNA: render_single_re(
+            csu_viterna_rows, CSU_VITERNA_HEADER
+        ),
     }
+    if args.viterna_only:
+        rendered = {
+            BASELINE_VITERNA: rendered[BASELINE_VITERNA],
+            CSU_LOW_RE_VITERNA: rendered[CSU_LOW_RE_VITERNA],
+        }
 
     stale = False
     for path, content in rendered.items():
