@@ -204,6 +204,15 @@ def on_case(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
+def on_parallel_case(tmp_path_factory):
+    """The tip correction on, decomposed over the fixture's 2 ranks."""
+    case_dir = str(tmp_path_factory.mktemp("tc-on-parallel") / "case")
+    _copy_case(case_dir)
+    _run_case(case_dir, "-on", "-parallel")
+    return case_dir
+
+
+@pytest.fixture(scope="module")
 def axisdown_off_case(tmp_path_factory):
     case_dir = str(tmp_path_factory.mktemp("tc-axisdown-off") / "case")
     _copy_case(case_dir)
@@ -383,6 +392,27 @@ def test_on_completes_and_reduces_tip_loading(off_case, on_case):
     # The tip normal loading falls (the required physical direction).
     assert on_row["f_ref_n"] < off_row["f_ref_n"]
     assert on_row["c_ref_n"] < off_row["c_ref_n"]
+
+
+def test_parallel_invariance(on_case, on_parallel_case):
+    """The correction is rank-independent.
+
+    ``calcTipCorrection`` is built only from replicated element geometry and
+    circulation -- no halo exchange, no rank-local accumulation -- so a
+    decomposed run must reproduce the serial element output. Measured here: the
+    1-rank and 2-rank element CSVs are bit-identical, so the assertion is exact
+    up to the CSV's printed precision; a rank dependence would show up at the
+    percent level.
+    """
+    for element in range(N_ELEMENTS):
+        serial = _last_row(on_case, element)
+        parallel = _last_row(on_parallel_case, element)
+        for column in (
+            "alpha_deg", "cl", "c_ref_n", "c_ref_t", "f_ref_n", "f_ref_t"
+        ):
+            assert parallel[column] == pytest.approx(
+                serial[column], rel=1.0e-9, abs=1.0e-12
+            ), "element {} column {}".format(element, column)
 
 
 def test_unknown_model_rejected(tmp_path):

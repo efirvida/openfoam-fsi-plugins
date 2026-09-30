@@ -119,11 +119,13 @@ model as the committed default (the ablation decides).
        regenerated `fvOptions.{ALM,ASM,ASM-MESH}`). Verified: `--check` exit 0,
        the committed default renders `active off` in all three twins, and
        `test_phasevi_case.py` passes (23).
-6. [ ] Tests: the planar-wing limit (their Fig. 3/4), a zero-strength sanity
+6. [x] Tests: the planar-wing limit (their Fig. 3/4), a zero-strength sanity
        check, default-off regression, parallel invariance.
-       Done: Eq. (16)/(17) reference kernel, zero-strength, right-hand-rule
-       sign, both axis conventions, default-off gate, badmodel, source pin
-       (10 passed). Pending: parallel invariance.
+       DONE (11 tests, were 10): Eq. (16)/(17) reference kernel, zero-strength,
+       right-hand-rule sign, both axis conventions, default-off gate, badmodel,
+       source pin, and **parallel invariance** — the fixture run with `-on`
+       serially and on 2 ranks produces bit-identical element CSVs (no halo
+       exchange, no rank-local accumulation).
 7. [x] Launch the Phase VI arm A with the correction **and the tip loss OFF** at
        7 m/s, against the measured 790 Nm / 1132 N.
        DONE: Slurm `11604168` completed the full ~12-rev window for both polars.
