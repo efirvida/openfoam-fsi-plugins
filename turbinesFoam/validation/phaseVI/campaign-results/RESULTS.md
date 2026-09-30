@@ -394,3 +394,32 @@ experiment.
    −7 % power with −16 % tip for Glauert): the integrated torque is insensitive
    to the last few percent of span, so the tip-only diagnostic alone does not
    carry the validation.
+
+### Tip-correction follow-up variants (7 m/s, Sequence H, coarse D/32)
+
+| arm (config) | %P | %Q | %T | tip `c_ref_n` @ r/R=0.95 (exp 0.5175) |
+|---|---|---|---|---|
+| A: Glauert tip ON, root off | −7.19 | −7.19 | +2.63 | 0.4349 (−16.0 %) |
+| A′: tip loss OFF, root off | +19.45 | +19.45 | +23.98 | 0.8836 (+70.7 %) |
+| D&S correction, root off (n50) | +9.64 | +9.65 | +18.4 | 0.7948 (+53.6 %) |
+| **D&S correction, root ON (n50)** | **+6.24** | +6.24 | +13.7 | 0.7950 (+53.6 %) |
+| D&S correction, root off (n25) | +12.6 | +12.6 | +20.4 | 0.8091 (+56.4 %) |
+
+Slurm 11604296 (root ON) and 11604298 (n25), both full ~12-revolution windows,
+drift flag false; 11604298 completed normally, 11604296's shell wrapper exited 2
+after the solver had finished (the runner was edited while the job was reading
+it -- the data is valid).
+
+**Reading.**
+1. **D&S with the Glauert root effect back ON is the best result so far
+   (+6.24 %)**: better than the Glauert tip loss (−7.19 %) in absolute error and
+   better than D&S with root off (+9.64 %). The root effect acts inboard (at
+   r/R=0.30 it moves `c_ref_n` from 1.006 with root off to 0.712, against the
+   measured 0.814), so it reduces the integrated torque without touching the tip.
+2. **n25 confirms the resolution dependence**: the coarser arm gives a weaker
+   correction (+12.6 %, closer to the tip-off +19.45 %). The correction scales
+   with the sampled `dΓ/ds`, so its magnitude -- and therefore its effect -- is a
+   property of the spanwise resolution, not only of the physics.
+3. Neither the tip nor the inboard is right in any corrected arm: at r/R=0.95
+   every corrected arm sits at ≈ +54 %, while at r/R=0.30 root-on is −12.5 % and
+   root-off +23.6 %.
