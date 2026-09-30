@@ -10,7 +10,8 @@ stale, without writing anything.
 Usage:
     generate_case.py [--mesh coarse|fine|ultra] [--speed 7|10|13|15|20|25]
                      [--domain long|squat] [--profile production|smoke]
-                     [--solver urans|iddes] [--n-chordwise N] [--ranks N]
+                     [--solver urans|iddes] [--n-chordwise N] [--n-elements N]
+                     [--ranks N]
                      [--surface-kernel cosine|gaussian]
                      [--rotational-augmentation on|off] [--root-effects on|off]
                      [--case-dir DIR] [--end-revs FLOAT]
@@ -497,6 +498,7 @@ def render_fv_options(
     element_type: str,
     sequence: str = "H",
     n_chordwise: int | None = None,
+    n_elements: int | None = None,
     surface_geometry: str | None = None,
     surface_kernel: str | None = None,
     rotational_augmentation: dict[str, Any] | None = None,
@@ -512,9 +514,10 @@ def render_fv_options(
     surface keys `surfaceGeometry` and, for the Gaussian ablation only,
     `kernel`. Path targets are found by
     `test_twins_differ_only_in_blade_keys`. `n_chordwise` overrides the
-    configured ASM strip count (the ALM has no such key). `surface_kernel`
-    defaults to the paper cosine kernel and only `gaussian` renders a `kernel`
-    key. `projectElementForce` is never rendered: the blade source injects it
+    configured ASM strip count (the ALM has no such key). `n_elements` overrides
+    the configured blade spanwise element count (`nElements`) in every twin.
+    `surface_kernel` defaults to the paper cosine kernel and only `gaussian`
+    renders a `kernel` key. `projectElementForce` is never rendered: the blade source injects it
     into the element dicts when a surface is configured (design D3).
 
     `rotational_augmentation` defaults to the `actuator.rotational_augmentation`
@@ -545,6 +548,12 @@ def render_fv_options(
         raise ValueError("nChordwise must be a positive integer")
     else:
         n_chordwise = int(n_chordwise)
+    if n_elements is None:
+        n_elements = int(actuator["n_elements"])
+    elif int(n_elements) <= 0:
+        raise ValueError("nElements must be a positive integer")
+    else:
+        n_elements = int(n_elements)
     if surface_kernel is not None and surface_kernel not in SURFACE_KERNELS:
         raise ValueError(
             f"unknown surface kernel {surface_kernel!r}; choose from "
@@ -658,7 +667,7 @@ def render_fv_options(
                 writePerf true;
                 writeElementPerf true;
 {blade_keys.rstrip()}
-                nElements {int(turbine['n_elements'])};
+                nElements {n_elements};
                 elementProfiles
                 (
                     {profiles}
@@ -720,6 +729,7 @@ def outputs(
     solver: str = "urans",
     div_phi_u: str | None = None,
     n_chordwise: int | None = None,
+    n_elements: int | None = None,
     ranks: int | None = None,
     surface_kernel: str = "cosine",
     rotational_augmentation: dict[str, Any] | None = None,
@@ -742,6 +752,7 @@ def outputs(
         system / "fvSolution": render_fv_solution(cfg),
         system / "fvOptions.ALM": render_fv_options(
             cfg, speed, mesh, case_dir, ALM_ELEMENT, sequence, n_chordwise,
+            n_elements=n_elements,
             rotational_augmentation=rotational_augmentation,
             root_effects=root_effects,
             tip_effects=tip_effects,
@@ -750,6 +761,7 @@ def outputs(
         ),
         system / "fvOptions.ASM": render_fv_options(
             cfg, speed, mesh, case_dir, ASM_ELEMENT, sequence, n_chordwise,
+            n_elements=n_elements,
             rotational_augmentation=rotational_augmentation,
             root_effects=root_effects,
             tip_effects=tip_effects,
@@ -764,6 +776,7 @@ def outputs(
             ASM_ELEMENT,
             sequence,
             n_chordwise,
+            n_elements=n_elements,
             surface_geometry=SURFACE_GEOMETRY,
             surface_kernel=surface_kernel,
             rotational_augmentation=rotational_augmentation,
@@ -856,6 +869,13 @@ def main(argv: list[str] | None = None) -> int:
         help="override the configured ASM chordwise strip count (ASM twin only)",
     )
     parser.add_argument(
+        "--n-elements",
+        type=_positive_int,
+        default=None,
+        metavar="N",
+        help="override the configured blade spanwise element count (all twins)",
+    )
+    parser.add_argument(
         "--ranks",
         type=_positive_int,
         default=None,
@@ -936,6 +956,7 @@ def main(argv: list[str] | None = None) -> int:
             solver=args.solver,
             div_phi_u=args.div_phi_u,
             n_chordwise=args.n_chordwise,
+            n_elements=args.n_elements,
             ranks=args.ranks,
             surface_kernel=args.surface_kernel,
             rotational_augmentation=augmentation,

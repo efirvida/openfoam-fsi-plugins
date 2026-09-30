@@ -957,6 +957,70 @@ def test_n_chordwise_override(cfg):
         )
 
 
+def test_n_elements_override(cfg, tmp_path):
+    """The spanwise element count defaults to 50 and is render-time overridable.
+
+    The committed default is 50, so the committed twins are unchanged; the Dag
+    & Sorensen `nrAero = 11` ablation renders `nElements 11;` through the same
+    `actuator.n_elements` plumbing as `--n-chordwise`.
+    """
+    # The committed default renders `nElements 50` in every twin's blade1.
+    for name in ("ALM", "ASM", "ASM-MESH"):
+        committed = (
+            PACKAGE / "case" / "system" / f"fvOptions.{name}"
+        ).read_text()
+        assert "nElements 50;" in block(committed, "blade1")
+
+    overridden = generate_case.render_fv_options(
+        cfg, "7", "coarse", PACKAGE / "case", generate_case.ALM_ELEMENT,
+        n_elements=11,
+    )
+    assert "nElements 11;" in block(overridden, "blade1")
+    assert "nElements 50;" not in overridden
+    # The override reaches the other twins through the shared render function.
+    asm = generate_case.render_fv_options(
+        cfg, "7", "coarse", PACKAGE / "case", generate_case.ASM_ELEMENT,
+        n_elements=11,
+    )
+    assert "nElements 11;" in block(asm, "blade1")
+
+    # The CLI flag renders every twin at the coarser resolution.
+    case_dir = tmp_path / "case"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE / "tools" / "generate_case.py"),
+            "--n-elements", "11",
+            "--case-dir", str(case_dir),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    for name in ("ALM", "ASM", "ASM-MESH"):
+        rendered = (case_dir / "system" / f"fvOptions.{name}").read_text()
+        assert "nElements 11;" in block(rendered, "blade1")
+
+    with pytest.raises(ValueError, match="positive"):
+        generate_case.render_fv_options(
+            cfg, "7", "coarse", PACKAGE / "case", generate_case.ALM_ELEMENT,
+            n_elements=0,
+        )
+
+    # The CLI rejects a zero/negative value before writing anything.
+    rejected = subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE / "tools" / "generate_case.py"),
+            "--n-elements", "0",
+            "--case-dir", str(tmp_path / "rejected"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert rejected.returncode == 2
+
+
 def test_cli_variant_render(cfg, tmp_path):
     """The CLI renders IDDES + nChordwise/ranks overrides in one pass."""
     case_dir = tmp_path / "case"

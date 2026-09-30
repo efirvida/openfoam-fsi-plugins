@@ -235,4 +235,5 @@ actuator:
     active: false
     model: LeishmanBeddoes
   n_chordwise: 5
+  n_elements: 50
   n_chordwise_sweep: [1, 3, 5]

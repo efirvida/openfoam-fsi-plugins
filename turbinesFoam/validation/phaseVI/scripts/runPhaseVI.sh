@@ -6,7 +6,8 @@
 #   runPhaseVI.sh -m alm|asm|asm-mesh -u <wind-speed> [-mesh coarse|fine|ultra]
 #                 [--domain long|squat] [-s H|S] [--solver urans|iddes]
 #                 [--div-phi-u "bounded Gauss linear"] [--polar FILE.dat]
-#                 [--nchordwise N] [--ranks N] [--run-label WORD] [--stage0]
+#                 [--nchordwise N] [--n-elements N] [--ranks N]
+#                 [--run-label WORD] [--stage0]
 #                 [--restart] [--rotational-augmentation on|off]
 #                 [--root-effects on|off] [--run] [--submit]
 #
@@ -28,6 +29,9 @@
 # chordwise strip count (ASM family only; appends -ncN) and --ranks N overrides
 # the configured decomposition (rendered into decomposeParDict and used for
 # mpirun); inside a Slurm allocation --ranks must match SLURM_NTASKS.
+# --n-elements N overrides the configured blade spanwise element count (every
+# model; rendered as `nElements` in the blade subdicts). It is validated as a
+# positive integer (exit 2 otherwise) and forwarded to the renderer when set.
 # --run-label WORD appends -WORD to the run id (`runs/<id>-WORD`) and records it
 # in run.json, so two render variants of the same (model, speed, mesh) live in
 # separate, independently restartable directories (the two-arm campaign uses it
@@ -65,6 +69,7 @@ domain=long
 sequence=H
 solver=urans
 nchordwise=""
+n_elements=""
 ranks_override=""
 rotational_augmentation=""
 root_effects=""
@@ -86,6 +91,7 @@ while [ $# -gt 0 ]; do
         -s|--sequence) sequence="$2"; shift ;;
         --solver) solver="$2"; shift ;;
         --nchordwise) nchordwise="$2"; shift ;;
+        --n-elements) n_elements="$2"; shift ;;
         --ranks) ranks_override="$2"; shift ;;
         --rotational-augmentation) rotational_augmentation="$2"; shift ;;
         --root-effects) root_effects="$2"; shift ;;
@@ -140,6 +146,15 @@ if [ -n "$nchordwise" ]; then
     esac
     if [ "$nchordwise" -le 0 ]; then
         echo "ERROR: --nchordwise must be a positive integer" >&2
+        exit 2
+    fi
+fi
+if [ -n "$n_elements" ]; then
+    case "$n_elements" in
+        *[!0-9]*) echo "ERROR: --n-elements must be a positive integer" >&2; exit 2 ;;
+    esac
+    if [ "$n_elements" -le 0 ]; then
+        echo "ERROR: --n-elements must be a positive integer" >&2
         exit 2
     fi
 fi
@@ -207,9 +222,10 @@ if [ -n "$run_label" ]; then
     esac
 fi
 if [ "$submit" -eq 1 ] && { [ "$solver" = "iddes" ] || [ -n "$nchordwise" ] \
-        || [ -n "$ranks_override" ] || [ -n "$run_label" ]; }; then
-    echo "ERROR: --submit cannot carry --solver iddes, --nchordwise, --ranks" >&2
-    echo "  or --run-label;" >&2
+        || [ -n "$n_elements" ] || [ -n "$ranks_override" ] \
+        || [ -n "$run_label" ]; }; then
+    echo "ERROR: --submit cannot carry --solver iddes, --nchordwise, --n-elements," >&2
+    echo "  --ranks or --run-label;" >&2
     echo "  Stage 3 is submitted through its prepared arrays:" >&2
     echo "  scripts/slurm/stage3.slurm and scripts/slurm/stage3-d64.slurm." >&2
     exit 2
@@ -277,6 +293,9 @@ echo "Preparing $run_id in $run_dir"
 render_args=(--mesh "$mesh" --speed "$speed" --domain "$domain" --sequence "$sequence" --case-dir "$run_dir" --solver "$solver" --ranks "$ranks")
 if [ -n "$nchordwise" ]; then
     render_args+=(--n-chordwise "$nchordwise")
+fi
+if [ -n "$n_elements" ]; then
+    render_args+=(--n-elements "$n_elements")
 fi
 if [ -n "$rotational_augmentation" ]; then
     render_args+=(--rotational-augmentation "$rotational_augmentation")
@@ -493,6 +512,9 @@ else
     suggestion="$0 -m $model -u $speed_token -mesh $mesh --sequence $sequence --solver $solver --ranks $ranks"
     if [ -n "$nchordwise" ]; then
         suggestion="$suggestion --nchordwise $nchordwise"
+    fi
+    if [ -n "$n_elements" ]; then
+        suggestion="$suggestion --n-elements $n_elements"
     fi
     if [ -n "$run_label" ]; then
         suggestion="$suggestion --run-label $run_label"
