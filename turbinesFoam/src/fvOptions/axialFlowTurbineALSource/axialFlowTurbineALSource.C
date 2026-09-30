@@ -762,6 +762,52 @@ void Foam::fv::axialFlowTurbineALSource::calcTipCorrection()
         }
     }
 
+    // The ALM cannot resolve loading structure finer than its own projection
+    // width epsilon, so the trailing-vorticity derivative must be taken on the
+    // kernel-filtered bound circulation: smooth Gamma(s) with a Gaussian of
+    // width epsilon (the model's own resolution, not a case-specific choice).
+    // Without this the discrete wake strengths jump wherever the sampled
+    // circulation is discontinuous (e.g. a non-lifting hub placeholder or the
+    // tip), and the mid-point sum of point vortices yields an unphysical
+    // O(U-inf) near-field induction there.
+    forAll(blades_, i)
+    {
+        const label nEl = gammaA[i].size();
+
+        if (nEl < 2)
+        {
+            continue;
+        }
+
+        List<scalar> gammaSmooth(nEl, 0.0);
+
+        for (label j = 0; j < nEl; j++)
+        {
+            const scalar eps = mag(epsA[i][j]);
+
+            if (eps < VSMALL)
+            {
+                gammaSmooth[j] = gammaA[i][j];
+                continue;
+            }
+
+            scalar wSum = 0.0;
+            scalar gSum = 0.0;
+
+            for (label k = 0; k < nEl; k++)
+            {
+                const scalar ds = mag(pointA[i][k] - pointA[i][j]);
+                const scalar w = Foam::exp(-0.5*Foam::sqr(ds/eps));
+                wSum += w;
+                gSum += w*gammaA[i][k];
+            }
+
+            gammaSmooth[j] = gSum/max(wSum, VSMALL);
+        }
+
+        gammaA[i] = gammaSmooth;
+    }
+
     // Build the vortex stations: p = 0..N, with the geometry interpolated
     // from the adjacent element centres and extrapolated at the two ends
     List<List<vector> > stationPoint(nB);
