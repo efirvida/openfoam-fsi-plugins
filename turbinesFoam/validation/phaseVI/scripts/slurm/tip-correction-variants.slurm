@@ -22,7 +22,8 @@
 
 set -eu
 
-variant="${1:?usage: sbatch tip-correction-variants.slurm <multire|rooton|csu|n25>}"
+variant="${1:?usage: sbatch tip-correction-variants.slurm <multire|rooton|csu|n25> [speed]}"
+speed="${2:-7}"
 
 case "$variant" in
     multire) label="tipcorr-multire"; polar="S809_multiRe.dat";  root="off"; n_elems="" ;;
@@ -65,14 +66,14 @@ if [ ! -x "${pkg_dir}/scripts/runPhaseVI.sh" ]; then
 fi
 cd "$pkg_dir"
 
-echo "Tip-correction variant '${variant}' (label ${label}) on $(hostname)"
+echo "Tip-correction variant '${variant}' (label ${label}) at U${speed} m/s on $(hostname)"
 
 # shellcheck disable=SC2086
-scripts/runPhaseVI.sh -m alm -u 7 -mesh coarse -s H \
+scripts/runPhaseVI.sh -m alm -u "$speed" -mesh coarse -s H \
     --rotational-augmentation on --root-effects "$root" \
     --tip-effects off --tip-correction on \
     ${polar:+--polar "$polar"} ${n_elems:-} \
     --run-label "$label" --restart --run
 
-rm -rf "runs/alm-U7-coarse-${label}/processor"*
+rm -rf "runs/alm-U${speed}-coarse-${label}/processor"*
 echo "Variant ${variant} finished"
