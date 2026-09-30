@@ -124,9 +124,17 @@ model as the committed default (the ablation decides).
        Done: Eq. (16)/(17) reference kernel, zero-strength, right-hand-rule
        sign, both axis conventions, default-off gate, badmodel, source pin
        (10 passed). Pending: parallel invariance.
-7. [ ] Launch the Phase VI arm A with the correction **and the tip loss OFF** at
+7. [x] Launch the Phase VI arm A with the correction **and the tip loss OFF** at
        7 m/s, against the measured 790 Nm / 1132 N.
-8. [ ] Record the verdict in `RESULTS.md`.
+       DONE: Slurm `11604168` completed the full ~12-rev window for both polars.
+       Verdict: OSU `+9.64 %` power (was `+19.45 %` tip-off, `−7.19 %` Glauert),
+       CSU `+8.76 %` (was `+16.76 %` / `−7.61 %`). The correction improves the
+       tip-off baseline by ~10 points but does not close the gap; the Glauert
+       tip loss stays closer in absolute error.
+8. [x] Record the verdict in `RESULTS.md`.
+       DONE: a "Dağ & Sørensen 2020 tip correction" section with the full table,
+       the verdict, and the two carry-forward findings (resolution dependence
+       of the sampled `dΓ/ds`; the integrated torque's insensitivity to the tip).
 
 ## Evidence log
 

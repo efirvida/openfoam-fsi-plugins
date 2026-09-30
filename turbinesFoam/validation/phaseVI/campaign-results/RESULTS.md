@@ -347,3 +347,50 @@ and mesh-insensitivity claims.
   reaches `endTime` (`PHASEVI_KEEP_FIELDS=1` disables the deletion).
 - The shared `leahk` group quota (2 T) was exhausted repeatedly and caused
   `EDQUOT` failures; the above two measures keep the footprint bounded.
+
+---
+
+## Dağ & Sørensen 2020 tip correction (arm A, 7 m/s, Sequence H, coarse D/32)
+
+Slurm `11604168` (48 ranks, cores-only, 4:48:35, `COMPLETED`). Arm A physics:
+rotational augmentation on, Glauert **root off**, Glauert **tip off**, and the
+Dağ & Sørensen induced-velocity tip correction **on**. Both runs reached the full
+~12-revolution window; the drift flag is false for both.
+
+| polar | arm | P (kW) | %P | %Q | %T | tip `c_ref_n` at r/R=0.95 (exp 0.5175) |
+|---|---|---|---|---|---|---|
+| OSU Re=1e6 | A (Glauert tip ON) | 5.519 | **−7.19** | −7.19 | +2.63 | 0.4349 (**−16.0 %**) |
+| OSU Re=1e6 | A′ (tip OFF) | 7.102 | **+19.45** | +19.45 | +23.98 | 0.8836 (**+70.7 %**) |
+| OSU Re=1e6 | **A + D&S correction** | 6.519 | **+9.64** | +9.65 | +18.4 | 0.7948 (**+53.6 %**) |
+| CSU Re=0.65e6 | A (Glauert tip ON) | 5.49 | **−7.61** | — | −2.38 | 0.4349 (−16.0 %) |
+| CSU Re=0.65e6 | A′ (tip OFF) | 6.94 | **+16.76** | — | +18.40 | — |
+| CSU Re=0.65e6 | **A + D&S correction** | 6.467 | **+8.76** | +8.76 | +14.1 | 0.7799 (**+50.7 %**) |
+
+(Measured reference: 5.946 kW / 789.9 Nm / 1132 N.)
+
+**Verdict — the correction works as intended but is too weak to close the gap.**
+It moves the result in the right direction and by a substantial amount: power
+`+19.45 % → +9.64 %` (OSU) and `+16.76 % → +8.76 %` (CSU); tip `c_ref_n`
+`+70.7 % → +53.6 %`. But it does **not** reach the measurement, and the BEM
+Glauert tip loss — the model it was meant to replace — remains closer in
+absolute error (`−7.2 %` / `−7.6 %`) despite over-correcting the tip to `−16 %`.
+
+**Why the correction is small here.** At the tip the correction is a stable
+≈ 0.78 m/s (the offline replica agrees: 0.82 m/s). It is intrinsically of that
+order at `nElements = 50`, and the ε-smoothing added for stability does not
+change it (0.81 before, 0.78 after). Dağ & Sørensen report usable results at
+`nrAero = 11`, where the sampled `dΓ/ds` — and therefore the correction — is
+several times smaller; their own Phase VI comparison is against BEM, not the
+experiment.
+
+**Two findings worth carrying forward:**
+1. The correction is **strongly resolution-dependent** through the sampled
+   bound-circulation gradient: the mid-point sum of point trailing vortices
+   converges to `(dΓ/ds)/(2π)`. At `nElements = 50` this is O(U∞) at the
+   non-lifting hub transition, which is what diverged the first arm-A attempt;
+   it is now controlled by filtering `Γ` at the model's own kernel width ε
+   (commit `3437e17`).
+2. Near-zero power error and a +50 % tip loading coexist here (and symmetrically
+   −7 % power with −16 % tip for Glauert): the integrated torque is insensitive
+   to the last few percent of span, so the tip-only diagnostic alone does not
+   carry the validation.
