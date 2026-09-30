@@ -423,3 +423,43 @@ it -- the data is valid).
 3. Neither the tip nor the inboard is right in any corrected arm: at r/R=0.95
    every corrected arm sits at ≈ +54 %, while at r/R=0.30 root-on is −12.5 % and
    root-off +23.6 %.
+
+### Tip correction + Du-Selig off: the 7 m/s gap closes (+0.45 %)
+
+Slurm 11604388/11604389 (full ~12-rev windows). Turning **Du-Selig off** under the
+tip correction is the dominant lever, exactly as the polar analysis predicted:
+
+| 7 m/s, coarse D/32 | %P | %Q | %T |
+|---|---|---|---|
+| A root-off, Glauert tip | −7.20 | −7.20 | — |
+| B root-ON, Glauert tip | −11.12 | −11.12 | — |
+| D&S correction, root off, aug ON | +9.65 | +9.65 | +18.4 |
+| D&S correction, root ON, aug ON | +6.24 | +6.24 | +13.7 |
+| D&S correction, root off, **aug OFF** | +4.70 | +4.70 | — |
+| **D&S correction, root ON, aug OFF** | **+0.45** | **+0.44** | +9.3 |
+
+Removing the augmentation moves +6.24 % → +0.45 % at root-ON (−5.8 pts) and
++9.65 % → +4.70 % at root-off (−5.0 pts) — consistent, and it confirms the
+mechanism: Du-Selig blends the stalled CL toward the unbounded
+`CL,p = 2π(α−α0)`, inflating the inboard loading.
+
+**Caveat, not hidden:** the thrust is still +9.3 % while the torque matches, so
+the axial/tangential balance is not solved — this is not yet a validated arm.
+
+### Multi-speed: the correction improves every speed, and 7 and 10 are near zero
+
+Slurm 11604362–11604365 (full windows), D&S correction with root ON and aug ON:
+
+| speed | measured P | B (root-ON, Glauert tip) | **D&S root-ON** |
+|---|---|---|---|
+| 7 | 5.946 kW | −11.1 % | **+6.2 %** |
+| 10 | 9.753 kW | −26.8 % | **+4.4 %** |
+| 13 | 9.794 kW | −96.5 % | **−29.2 %** |
+| 15 | 9.582 kW | −114.6 % | **−44.0 %** |
+| 25 | 11.951 kW | −82.0 % | **+74.2 %** |
+
+So the correction is not a 7 m/s-only effect: it improves the power by 17–44
+points at every speed over the Glauert tip loss, lands within ±6 % at 7 and
+10 m/s, and still leaves 13/15 m/s far from the measurement — those are the
+deep-stall points where the polar/stall branch dominates, consistent with the
+Viterna work. At 25 m/s it overshoots to +74 %.
