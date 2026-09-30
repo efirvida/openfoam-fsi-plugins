@@ -478,3 +478,38 @@ at `nElements = 50`. Neither the sheet quadrature (A) nor smoothing (B) alone
 makes the formulation usable here; the remaining viable paths are a documented
 limiter (C) or restricting the correction to the outer span (D), or accepting
 that the model needs the paper's much coarser resolution. No path is applied.
+
+### 2026-09-29 — RESOLVED: smooth Γ over the kernel width; arm A relaunched
+
+The physical, general fix: the ALM cannot resolve loading structure finer than
+its own projection width ε, so the spanwise derivative of the bound circulation
+must be taken on the **kernel-filtered** Γ. `calcTipCorrection` now smooths
+`Γ(s)` with a Gaussian of width equal to the element's own `projectionEpsilon()`
+before differencing (`axialFlowTurbineALSource.C`, commit `3437e17`). No
+case-specific parameter, cap, or span restriction is introduced; the smoothing
+length is the model's own scale.
+
+Why this and not the others (all measured offline, design record above): the
+sheet quadrature converges to 12.8 m/s (does not bound), a distance floor kills
+the tip signal (0.83 → 0.03 m/s), coarsening the wake is worse, and restricting
+to the outer span would not help because the tip itself was the residual spike.
+Smoothing over ε removes the discontinuity that made the mid-point sum produce
+`(dΓ/ds)/(2π) → O(U∞)`.
+
+**Verified on the short 7 m/s coarse diagnostic** (Slurm `11604162`, dev queue,
+5:44, `COMPLETED`):
+
+| | before (raw Γ) | after (ε-smoothed Γ) |
+|---|---|---|
+| run outcome | diverged at t = 0.088 | completes t = 0.30 |
+| max \|w_corr\| | 15.8 → 2.0e6 m/s | bounded ~7.4 m/s (element 0, non-lifting) |
+| tip correction | 0.81 m/s (same, the tip was never the problem) | 0.78 m/s, stable |
+| tip `f_ref_n` | — | 231.0 → 226.6 m/s (−1.9 %) |
+
+**Arm A relaunched**: Slurm **11604168** (`phaseVI-tipcorr`, `sequana_cpu`, 48
+ranks, cores-only), the full 7 m/s coarse window with the correction on and the
+tip loss off, default and CSU polars. (An earlier submission, `11604166`, failed
+in 18 s with exit 3 because it was launched from the repository root instead of
+the package directory, so `$SLURM_SUBMIT_DIR` did not resolve the package; the
+resubmission uses `cd turbinesFoam/validation/phaseVI` first.) The verdict goes
+to `campaign-results/RESULTS.md` (task 8).
