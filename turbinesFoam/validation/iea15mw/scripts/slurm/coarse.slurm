@@ -73,7 +73,14 @@ if ! decomposePar -force > log.decomposePar 2>&1; then
     tail -30 log.decomposePar >&2; echo "ERROR: decomposePar failed" >&2; exit 3
 fi
 
-mpi_mca="${PHASEVI_MPI_MCA---mca pml ucx --mca btl ^openib}"
+# MPI startup: the legacy openib BTL races in device-memory registration
+# (MPI_Init_thread -> btl_openib_connect_udcm, signal 11), and with 48 ranks
+# spread over many nodes by the scheduler the PMIx client also aborts
+# intermittently (OPAL ERROR: Unreachable in file pmix3x_client.c, NULL
+# communicator). Both are MPI/scheduler races, not physics. The project policy
+# forbids capping --nodes, so pack the ranks with --map-by instead (the fix the
+# Phase VI campaign documents): 8 ranks per node over the 48 allocated.
+mpi_mca="${PHASEVI_MPI_MCA---mca pml ucx --mca btl ^openib --map-by ppr:8:node}"
 # shellcheck disable=SC2086
 if ! mpirun $mpi_mca -np 48 pimpleFoam -parallel > log.pimpleFoam 2>&1; then
     tail -40 log.pimpleFoam >&2

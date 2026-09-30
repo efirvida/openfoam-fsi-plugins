@@ -1,0 +1,9 @@
+# Generated run trees, reference outputs and Slurm logs (mirrors the Phase VI
+# package .gitignore conventions).
+runs/
+reference/
+[0-9]*.out
+[0-9]*.err
+__pycache__/
+*.py[cod]
+.pytest_cache/
