@@ -110,6 +110,9 @@ protected:
         //- List of normal coefficient slopes (1/rad) for multiple Re dataset
         List<scalar> normalCoeffSlopeList_;
 
+        //- List of lift coefficient slopes (1/rad) for multiple Re dataset
+        List<scalar> liftCoeffSlopeList_;
+
         //- Angle of attack list (deg)
         List<scalar> angleOfAttackList_;
 
@@ -139,6 +142,9 @@ protected:
 
         //- Slope of normal force coefficient (1/rad)
         scalar normalCoeffSlope_;
+
+        //- Slope of lift coefficient (1/rad)
+        scalar liftCoeffSlope_;
 
 
     // Protected Member Functions
@@ -184,6 +190,9 @@ protected:
 
         //- Calculate normal force coefficient slope
         void calcNormalCoeffSlope();
+
+        //- Calculate lift coefficient slope
+        void calcLiftCoeffSlope();
 
         //- Set coefficient lists for current Reynolds number by interpolating
         //  the 2-D coefficient arrays
@@ -379,6 +388,13 @@ public:
 
             //- Return normal coefficient slope (1/rad)
             scalar normalCoeffSlope();
+
+            //- Return lift coefficient slope (1/rad), fitted over the polar's
+            //  linear region [0, staticStallAngle/2] with least squares (the
+            //  same window as `normalCoeffSlope`, but on CL rather than CN).
+            //  Used by the Lindenburg rotational augmentation to form the
+            //  inviscid reference lift CL,inv = (dCL/dalpha)(alpha - alpha0).
+            scalar liftCoeffSlope();
 
             //- Return Reynolds number
             scalar Re();

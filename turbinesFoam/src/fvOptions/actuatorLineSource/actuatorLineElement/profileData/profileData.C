@@ -327,6 +327,29 @@ void Foam::profileData::calcNormalCoeffSlope()
 }
 
 
+void Foam::profileData::calcLiftCoeffSlope()
+{
+    // Least-squares fit of CL over the same linear window used for the normal
+    // coefficient slope, [0, staticStallAngle/2]. CL,inv = slope*(alpha -
+    // alpha0) is the inviscid reference used to invert the Kirchhoff
+    // separation relation; the normal-coefficient slope is NOT used because
+    // the Kirchhoff inversion here is written on CL (see actuatorLineElement).
+    // staticStallAngleRad() forces the stall-angle evaluation on the lazy
+    // singleRe path (analyze() has not necessarily run yet).
+    scalar alphaHigh = 0.5*radToDeg(staticStallAngleRad());
+    List<scalar> alphaList = degToRad(angleOfAttackList(0, alphaHigh));
+    List<scalar> clList = liftCoefficientList(0, alphaHigh);
+    simpleMatrix<scalar> A(2);
+    A[0][0] = alphaList.size();
+    A[0][1] = Foam::sum(alphaList);
+    A[1][0] = Foam::sum(alphaList);
+    A[1][1] = Foam::sum(Foam::sqr(alphaList));
+    A.source()[0] = Foam::sum(clList);
+    A.source()[1] = Foam::sum(clList*alphaList);
+    liftCoeffSlope_ = A.solve()[1];
+}
+
+
 void Foam::profileData::interpCoeffLists()
 {
     // Create lists for lift, drag, and moment coefficient at current Re
@@ -396,6 +419,12 @@ void Foam::profileData::interpPropsMultiRe()
         normalCoeffSlopeList_,
         interpIndex
     );
+    liftCoeffSlope_ = interpolateUtils::interpolate1D
+    (
+        interpFraction,
+        liftCoeffSlopeList_,
+        interpIndex
+    );
 }
 
 
@@ -412,6 +441,7 @@ void Foam::profileData::analyzeMultiRe()
         zeroLiftAngleOfAttackList_.append(zeroLiftAngleOfAttack_);
         zeroLiftMomentCoeffList_.append(zeroLiftMomentCoeff_);
         normalCoeffSlopeList_.append(normalCoeffSlope_);
+        liftCoeffSlopeList_.append(liftCoeffSlope_);
     }
     Re_ = ReOld;
 }
@@ -533,7 +563,8 @@ Foam::profileData::profileData
     zeroLiftDragCoeff_(VGREAT),
     zeroLiftAngleOfAttack_(VGREAT),
     zeroLiftMomentCoeff_(VGREAT),
-    normalCoeffSlope_(VGREAT)
+    normalCoeffSlope_(VGREAT),
+    liftCoeffSlope_(VGREAT)
 {
     if (tableType_ == "singleRe")
     {
@@ -590,6 +621,7 @@ void Foam::profileData::analyze()
     calcZeroLiftAngleOfAttack();
     calcZeroLiftMomentCoeff();
     calcNormalCoeffSlope();
+    calcLiftCoeffSlope();
 }
 
 
@@ -923,6 +955,16 @@ Foam::scalar Foam::profileData::normalCoeffSlope()
         calcNormalCoeffSlope();
     }
     return normalCoeffSlope_;
+}
+
+
+Foam::scalar Foam::profileData::liftCoeffSlope()
+{
+    if (liftCoeffSlope_ == VGREAT)
+    {
+        calcLiftCoeffSlope();
+    }
+    return liftCoeffSlope_;
 }
 
 

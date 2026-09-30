@@ -184,6 +184,78 @@ def _expected_corrected(alpha_deg, radius, tsr):
 
 
 # --------------------------------------------------------------------------- #
+# Lindenburg (bounded rotational augmentation) reference
+#
+# Ouakki & Arbaoui (2023) Eqs. 5-9, with the static polar providing the
+# Beddoes-Leishman / Kirchhoff trailing-edge separation factor f(alpha). The
+# inviscid reference slope dCL/dalpha is fitted from the polar's linear region
+# with the same [0, staticStallAngle/2] window that ``profileData`` uses for
+# its normal-coefficient slope, but on CL (see ``calcLiftCoeffSlope``).
+# ``profileData::normalCoeffSlope()`` returns dCN/dalpha, not dCL/dalpha, so it
+# is not the right quantity for the CL-form Kirchhoff inversion.
+# --------------------------------------------------------------------------- #
+
+def _static_stall_angle_deg():
+    """Replicate ``profileData::calcStaticStallAngle`` (drag-slope break)."""
+    for alpha in ALPHA_TABLE:
+        if 2.0 < alpha < 30.0:
+            cd1 = static_cd(alpha + 1.0)
+            cd0 = static_cd(alpha)
+            if cd1 - cd0 > 0.03:
+                return float(alpha)
+    raise AssertionError("no static stall angle found in the S809 polar")
+
+
+def _lift_coeff_slope():
+    """Replicate ``profileData::calcLiftCoeffSlope`` (least-squares CL fit)."""
+    alpha_high = 0.5 * _static_stall_angle_deg()
+    idx = [i for i, a in enumerate(ALPHA_TABLE) if 0.0 <= a <= alpha_high]
+    alpha_rad = np.deg2rad(ALPHA_TABLE[idx])
+    cl = CL_TABLE[idx]
+    n = len(alpha_rad)
+    matrix = np.array([[n, alpha_rad.sum()],
+                       [alpha_rad.sum(), np.square(alpha_rad).sum()]])
+    rhs = np.array([cl.sum(), (cl * alpha_rad).sum()])
+    return float(np.linalg.solve(matrix, rhs)[1])
+
+
+DCL_DALPHA = _lift_coeff_slope()
+
+
+def _separation_factor(alpha_deg, cl_2d):
+    """Kirchhoff trailing-edge separation factor f in [0, 1].
+
+    Invert ``CL,2D = CL,inv ((1 + sqrt(f))/2)^2`` with
+    ``CL,inv = (dCL/dalpha)(alpha - alpha0)``. A non-positive ``CL,inv``
+    (``alpha <= alpha0``) means the section cannot be separated, so f = 1.
+    """
+    alpha = np.deg2rad(alpha_deg)
+    alpha_0 = np.deg2rad(ALPHA0_DEG)
+    cl_inv = DCL_DALPHA * (alpha - alpha_0)
+    if cl_inv <= 0.0:
+        return 1.0, cl_inv
+    ratio = min(max(cl_2d / max(cl_inv, np.finfo(float).tiny), 0.0), 1.0)
+    r = np.sqrt(ratio)
+    f = min(max((2.0 * r - 1.0) ** 2, 0.0), 1.0)
+    return f, cl_inv
+
+
+def lindenburg(c_over_r, alpha_deg, cl_2d, cd_2d, cos_phi):
+    """Lindenburg bounded increments; returns (f, cl_inv, alpha_rot,
+    d_cl, d_cd, cl_3d, cd_3d)."""
+    alpha = np.deg2rad(alpha_deg)
+    alpha_0 = np.deg2rad(ALPHA0_DEG)
+    f, cl_inv = _separation_factor(alpha_deg, cl_2d)
+    cos_phi2 = cos_phi ** 2
+    alpha_rot = alpha + (0.25 / (2.0 * np.pi)) * 1.6 * c_over_r * cos_phi2
+    d_cl = 1.6 * c_over_r * cos_phi2 * (
+        f ** 2 * np.cos(alpha_rot) + 0.25 * np.cos(alpha_rot - alpha_0)
+    )
+    d_cd = 1.6 * c_over_r * cos_phi2 * f ** 2 * np.sin(alpha_rot)
+    return f, cl_inv, alpha_rot, d_cl, d_cd, cl_2d + d_cl, cd_2d + d_cd
+
+
+# --------------------------------------------------------------------------- #
 # Case harness
 # --------------------------------------------------------------------------- #
 
@@ -332,6 +404,14 @@ def cylinder_case(tmp_path_factory):
     return case_dir
 
 
+@pytest.fixture(scope="module")
+def lindenburg_case(tmp_path_factory):
+    case_dir = str(tmp_path_factory.mktemp("ra-lindenburg") / "case")
+    _copy_case(case_dir)
+    _run_case(case_dir, "-lindenburg")
+    return case_dir
+
+
 # --------------------------------------------------------------------------- #
 # Pure-Python reference
 # --------------------------------------------------------------------------- #
@@ -358,6 +438,124 @@ def test_du_selig_reference_values():
     # so a text-dump-style exponent cannot silently pass.
     f_l_low_lambda, _ = du_selig_factors(0.271, 2.27, 0.5)
     assert f_l_low_lambda > f_l  # smaller Lambda -> larger exponent -> larger fL
+
+
+def test_lindenburg_separation_factor_behavior():
+    """f(alpha) from the committed polar: in [0, 1] and falls through stall.
+
+    Over 0..20 deg (stall is at ~17.2 deg) the factor is non-increasing, so the
+    Lindenburg increment self-limits as the section separates. Beyond the deep
+    stall bumps of the empirical/extended polar CL is non-monotone, so f is not
+    asserted monotone there.
+    """
+    previous = 2.0
+    for alpha_deg in np.linspace(0.0, 20.0, 81):
+        f, cl_inv = _separation_factor(alpha_deg, static_cl(alpha_deg))
+        assert 0.0 <= f <= 1.0
+        assert f <= previous + 1e-12
+        previous = f
+        assert np.isfinite(cl_inv)
+
+    # Pre-stall the section is attached; just past stall it is separated.
+    f_pre, _ = _separation_factor(3.0, static_cl(3.0))
+    f_stall, _ = _separation_factor(20.0, static_cl(20.0))
+    assert f_pre == pytest.approx(1.0, abs=1e-9)
+    assert f_stall < 0.05
+
+
+def test_lindenburg_pre_stall_attached():
+    """With CL,2D ~ CL,inv pre-stall the factor is f = 1 (attached).
+
+    The Lindenburg increment is NOT driven to zero pre-stall: its attached
+    branch 1.6(c/r)cos^2(phi)[f^2 cos + 0.25 cos] keeps a bounded term. The
+    near-zero pre-stall increment is the Du-Selig blend's property (CL,2D ~
+    CL,p), covered by ``test_pre_stall_unchanged``.
+    """
+    for alpha_deg in (0.0, 1.0, 3.0, 5.0):
+        cl_2d = static_cl(alpha_deg)
+        f, cl_inv = _separation_factor(alpha_deg, cl_2d)
+        assert f == pytest.approx(1.0, abs=1e-9)
+        # At or above the inviscid line -> the Kirchhoff ratio clamps to 1.
+        assert cl_2d >= cl_inv - 1e-9
+
+    f, _, _, d_cl, _, _, _ = lindenburg(
+        0.271, 3.0, static_cl(3.0), static_cd(3.0), np.cos(np.deg2rad(3.0)))
+    assert f == pytest.approx(1.0, abs=1e-9)
+    assert 0.0 < d_cl < 1.6 * 0.271 * 1.25
+
+
+def test_lindenburg_increment_bounded():
+    """The Lindenburg increments are bounded as alpha grows (unlike Du-Selig).
+
+    At a deep-stall angle the corrected CL stays finite, below the unbounded
+    potential reference, and below the Du-Selig value at the same geometry;
+    the Du-Selig increment, by contrast, keeps growing with alpha.
+    """
+    alpha_deg = 30.0
+    c_over_r = 0.271
+    cl_2d = static_cl(alpha_deg)
+    cd_2d = static_cd(alpha_deg)
+    cos_phi = 1.0  # conservative maximum
+
+    f, _, _, d_cl, d_cd, cl_3d, cd_3d = lindenburg(
+        c_over_r, alpha_deg, cl_2d, cd_2d, cos_phi)
+    cl_p = 2.0 * np.pi * (np.deg2rad(alpha_deg) - np.deg2rad(ALPHA0_DEG))
+
+    assert np.isfinite(cl_3d) and np.isfinite(cd_3d)
+    assert cl_3d < cl_p
+    assert d_cl <= 1.6 * c_over_r * 1.25 + 1e-12
+    assert d_cd <= 1.6 * c_over_r + 1e-12
+    assert f < 0.1  # deep stall
+
+    # Du-Selig at the same geometry: its blend toward CL,p grows with alpha.
+    _fl, _fd, cl_p_near, cl_ds_near, _ = du_selig(
+        c_over_r, 2.27, _lambda(TSR_ON), alpha_deg, cl_2d, cd_2d)
+    _fl2, _fd2, cl_p_far, cl_ds_far, _ = du_selig(
+        c_over_r, 2.27, _lambda(TSR_ON), 60.0,
+        static_cl(60.0), static_cd(60.0))
+    assert cl_p_far > cl_p_near  # the potential reference is unbounded
+    assert (cl_ds_far - static_cl(60.0)) > (cl_ds_near - cl_2d)
+    assert cl_3d < cl_ds_near
+
+
+def test_lindenburg_cpp_constants_and_config_pinned():
+    """The Python reference cannot drift from the C++ and the rendered dict."""
+    src = open(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..", "src", "fvOptions", "actuatorLineSource", "actuatorLineElement",
+        "actuatorLineElement.C",
+    )).read()
+    # Dispatch and model acceptance
+    assert 'rotationalAugmentationModel_ == "Lindenburg"' in src
+    assert 'rotationalAugmentationModel_ != "Lindenburg"' in src
+    # Eqs. 7-9 constants and the cos(phi) geometry
+    assert "1.6*cOverR*cosPhi2" in src
+    assert "Foam::sqr(f)*Foam::cos(alphaRot)" in src
+    assert "+ 0.25*Foam::cos(alphaRot - alpha0)" in src
+    assert "Foam::sqr(f)*Foam::sin(alphaRot)" in src
+    assert "(0.25/(2.0*pi))*1.6*cOverR*cosPhi2" in src
+    # f(alpha) inversion and its guards
+    assert "profileData_.liftCoeffSlope()" in src
+    assert "CLinv > VSMALL" in src
+    assert "Foam::sqr(2.0*r - 1.0)" in src
+    # Du-Selig path untouched
+    assert "(1.6*cOverR/0.1267)*((a_ - qL)/(b_ + qL))" in src
+    assert "liftCoefficient_ += fL*(CLp - liftCoefficient_)" in src
+
+    rendered = open(os.path.join(
+        CASE_DIR, "system", "fvOptions.lindenburg"
+    )).read()
+    assert "rotationalAugmentation" in rendered
+    assert "active          on;" in rendered
+    assert "model           Lindenburg;" in rendered
+
+    profile_src = open(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..", "src", "fvOptions", "actuatorLineSource", "actuatorLineElement",
+        "profileData", "profileData.C",
+    )).read()
+    assert "Foam::profileData::calcLiftCoeffSlope()" in profile_src
+    assert "liftCoeffSlope_ = A.solve()[1];" in profile_src
 
 
 def test_cpp_constants_and_config_pinned():
@@ -568,6 +766,39 @@ def test_all_models_inherit(on_case, asm_case):
             assert row["cl"] == pytest.approx(cl_3d, rel=2e-4)
             assert row["cd"] == pytest.approx(cd_3d, rel=2e-4)
             assert row["cl"] != pytest.approx(cl_2d, rel=1e-6)
+
+
+def test_lindenburg_correction_applied(lindenburg_case):
+    """The Lindenburg fixture rewrites cl/cd per Eqs. 5-9 with f from the polar.
+
+    ``cos(phi)`` is the inflow-plane factor; because the element angle of
+    attack is formed from ``planformNormal_`` (the chord-plane normal), the
+    code's ``V_T/|V_rel|`` equals ``cos(alpha)`` exactly.
+    """
+    for element in range(N_ELEMENTS):
+        radius = ELEMENT_RADIUS[element]
+        row = _initial_row(lindenburg_case, element)
+        alpha = row["alpha_deg"]
+        cl_2d = static_cl(alpha)
+        cd_2d = static_cd(alpha)
+        cos_phi = np.cos(np.deg2rad(alpha))
+
+        f, _, _, d_cl, d_cd, cl_3d, cd_3d = lindenburg(
+            CHORD / radius, alpha, cl_2d, cd_2d, cos_phi)
+        assert row["cl"] == pytest.approx(cl_3d, rel=2e-4)
+        assert row["cd"] == pytest.approx(cd_3d, rel=2e-4)
+
+        # Bounded increments: below the unbounded potential reference and below
+        # the Du-Selig value at the same operating point.
+        cl_p = 2.0 * np.pi * (np.deg2rad(alpha) - np.deg2rad(ALPHA0_DEG))
+        assert np.isfinite(cl_3d) and cl_3d < cl_p
+        _fl, _fd, _clp, cl_ds, _cdds = du_selig(
+            CHORD / radius, ROTOR_RADIUS / radius, _lambda(TSR_ON),
+            alpha, cl_2d, cd_2d)
+        assert cl_3d < cl_ds
+        # The correction changed the output from the static polar.
+        assert row["cl"] != pytest.approx(cl_2d, rel=1e-6)
+        assert d_cl > 0.0 and d_cd > 0.0
 
 
 def test_parallel_matches_serial(on_case, tmp_path):

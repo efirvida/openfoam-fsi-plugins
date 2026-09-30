@@ -144,7 +144,7 @@ protected:
         //- Switch for applying rotational augmentation
         bool rotationalAugmentationActive_;
 
-        //- Rotational augmentation model name (only "DuSelig" registered)
+        //- Rotational augmentation model name ("DuSelig" or "Lindenburg")
         word rotationalAugmentationModel_;
 
         //- Du-Selig constant (paper default 1)
@@ -271,6 +271,16 @@ protected:
         //  formulation, the independent source cross-checks and the
         //  arXiv:1702.02108v4 transcription-error note.
         void correctRotationalAugmentation();
+
+        //- Apply the Lindenburg rotational augmentation (bounded 3D stall
+        //  delay) in place to liftCoefficient_/dragCoefficient_. Implements
+        //  Eqs. 5-9 of Lindenburg as transcribed by Ouakki & Arbaoui (2023),
+        //  with the trailing-edge separation factor f(alpha) inverted from the
+        //  static polar through the Kirchhoff relation. Unlike Du-Selig it
+        //  adds bounded increments and self-limits in deep stall. The full
+        //  formulation and the f(alpha) derivation live in
+        //  actuatorLineElement.C and odd/tasks/phasevi-lindenburg-design.md.
+        void correctLindenburgRotationalAugmentation();
 
         //- Calculate projection width epsilon
         virtual scalar calcProjectionEpsilon();

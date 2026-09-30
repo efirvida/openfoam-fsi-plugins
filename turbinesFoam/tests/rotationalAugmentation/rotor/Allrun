@@ -2,7 +2,7 @@
 # Minimal one-blade axialFlowTurbineALSource case for the rotational
 # augmentation tests. The args are:
 #   $1: fvOptions variant to install: -on | -off | -asm | -on-fast | -nogeom |
-#       -badmodel | -cylinder (default: none)
+#       -badmodel | -cylinder | -lindenburg (default: none)
 #   $2: `-parallel` or nothing
 #
 # The variant is copied over system/fvOptions inside the run directory; the
@@ -41,6 +41,10 @@ case "$1" in
         ;;
     -cylinder)
         cp system/fvOptions.cylinder system/fvOptions
+        shift
+        ;;
+    -lindenburg)
+        cp system/fvOptions.lindenburg system/fvOptions
         shift
         ;;
 esac

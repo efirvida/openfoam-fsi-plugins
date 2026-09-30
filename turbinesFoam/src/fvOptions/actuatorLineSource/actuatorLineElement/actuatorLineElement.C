@@ -136,12 +136,16 @@ void Foam::fv::actuatorLineElement::read()
         b_ = raDict.lookupOrDefault("b", 1.0);
         d_ = raDict.lookupOrDefault("d", 1.0);
 
-        if (rotationalAugmentationModel_ != "DuSelig")
+        if
+        (
+            rotationalAugmentationModel_ != "DuSelig"
+            and rotationalAugmentationModel_ != "Lindenburg"
+        )
         {
             FatalIOErrorInFunction(raDict)
                 << "Unknown rotationalAugmentation model '"
                 << rotationalAugmentationModel_
-                << "'; only DuSelig is registered"
+                << "'; registered models are DuSelig and Lindenburg"
                 << exit(FatalIOError);
         }
 
@@ -301,6 +305,14 @@ void Foam::fv::actuatorLineElement::lookupCoefficients()
 
 void Foam::fv::actuatorLineElement::correctRotationalAugmentation()
 {
+    // Dispatch to the selected model. Du-Selig below is the default and its
+    // arithmetic is untouched; Lindenburg is the bounded incremental model.
+    if (rotationalAugmentationModel_ == "Lindenburg")
+    {
+        correctLindenburgRotationalAugmentation();
+        return;
+    }
+
     // Rotationally augmented (3D stall-delayed) blade-load correction.
     //
     // Formulation -- Du & Selig (1998), AIAA-98-0021:
@@ -399,6 +411,113 @@ void Foam::fv::actuatorLineElement::correctRotationalAugmentation()
 
     liftCoefficient_ += fL*(CLp - liftCoefficient_);
     dragCoefficient_ -= fD*(dragCoefficient_ - CD0);
+}
+
+
+void Foam::fv::actuatorLineElement::correctLindenburgRotationalAugmentation()
+{
+    // Rotationally augmented (3D stall-delayed) blade-load correction,
+    // Lindenburg form, applied as bounded increments to the static 2-D
+    // coefficients in place.
+    //
+    // Formulation -- Lindenburg, as transcribed by Ouakki & Arbaoui (2023),
+    // "Verification, calibration, and validation of stall delay models using
+    // NREL phase VI and MEXICO data", J. Renewable Sustainable Energy,
+    // Eqs. (5)-(9):
+    //
+    //     dCL = 1.6(c/r)(cos phi)^2 [ f^2 cos(alpha_rot)
+    //                                  + 0.25 cos(alpha_rot - alpha0) ]
+    //     dCD = 1.6(c/r)(cos phi)^2 f^2 sin(alpha_rot)
+    //     alpha_rot = alpha + (0.25/2pi) 1.6 (c/r) (cos phi)^2
+    //
+    // with CL,3D = CL,2D + dCL and CD,3D = CD,2D + dCD.
+    //
+    // Unlike Du-Selig, which blends toward the unbounded potential lift
+    // CL,p = 2pi(alpha - alpha0) and so keeps inflating in deep stall, this
+    // model adds increments whose magnitude is governed by (c/r)(cos phi)^2
+    // and the separation factor f^2. Because f(alpha) falls as the section
+    // separates, the increment self-limits (it is bounded by roughly
+    // 1.6(c/r) above) instead of growing with alpha.
+    //
+    // Geometry: phi is the inflow angle from the rotor plane, so with the
+    // already-computed planformNormal_ (set in calculateForce before this
+    // hook) take V_N = relativeVelocity_ & planformNormal_ and
+    // V_T = |relativeVelocity_ - V_N*planformNormal_|, giving
+    // cos(phi) = V_T/|relativeVelocity_|. The rOmega/V_eff factor of Eq. (5)
+    // is replaced by this cos(phi) form throughout, per the task contract.
+    //
+    // f(alpha) is the Beddoes-Leishman / Kirchhoff trailing-edge separation
+    // factor, derived from the static polar itself (no invented constants).
+    // Invert the Kirchhoff relation
+    //
+    //     CL,2D = CL,inv ((1 + sqrt(f))/2)^2,
+    //     CL,inv = (dCL/dalpha)(alpha - alpha0):
+    //
+    //     ratio = clamp(CL,2D/max(CL,inv, VSMALL), 0, 1)
+    //     r     = sqrt(ratio)
+    //     f     = clamp((2 r - 1)^2, 0, 1)
+    //
+    // The inviscid slope dCL/dalpha is taken from the polar's linear region
+    // via profileData_.liftCoeffSlope() (a least-squares CL fit over
+    // [0, staticStallAngle/2], the same window as normalCoeffSlope).
+    // normalCoeffSlope() returns dCN/dalpha, not dCL/dalpha, so it is NOT the
+    // right quantity for the CL-form inversion above; the rationale is
+    // recorded in odd/tasks/phasevi-lindenburg-design.md.
+    //
+    // Boundary guards:
+    //   - alpha <= alpha0 (or a non-positive inviscid lift) means the section
+    //     is on/inside the zero-lift line and cannot be separated; set f = 1
+    //     (fully attached) rather than dividing by a non-positive CL,inv.
+    //   - f is clamped to [0, 1] and the ratio to [0, 1], so a CL,2D above
+    //     the inviscid line (measurement scatter) still yields f <= 1.
+    //   - The degenerate-placeholder guard (no zero-lift reference in the
+    //     polar) is shared with Du-Selig and skips the correction.
+    if (not profileData_.hasZeroLiftReference())
+    {
+        return;
+    }
+
+    const scalar pi = Foam::constant::mathematical::pi;
+    const scalar cOverR = chordLength_/radius_;
+
+    // cos(phi) from the normal/tangential split of the relative velocity
+    const scalar normalComponent = relativeVelocity_ & planformNormal_;
+    const scalar tangentialComponent = mag
+    (
+        relativeVelocity_ - normalComponent*planformNormal_
+    );
+    const scalar relativeSpeed = mag(relativeVelocity_);
+    const scalar cosPhi = tangentialComponent/Foam::max(relativeSpeed, VSMALL);
+    const scalar cosPhi2 = Foam::sqr(cosPhi);
+
+    const scalar alpha = degToRad(angleOfAttack_);
+    const scalar alpha0 = degToRad(profileData_.zeroLiftAngleOfAttack());
+
+    // Trailing-edge separation factor from the static polar (Kirchhoff)
+    const scalar CLinv = profileData_.liftCoeffSlope()*(alpha - alpha0);
+
+    scalar f = 1.0;
+    if (CLinv > VSMALL)
+    {
+        const scalar ratio = Foam::min
+        (
+            Foam::max(liftCoefficient_/Foam::max(CLinv, VSMALL), 0.0),
+            1.0
+        );
+        const scalar r = Foam::sqrt(ratio);
+        f = Foam::min(Foam::max(Foam::sqr(2.0*r - 1.0), 0.0), 1.0);
+    }
+
+    const scalar alphaRot = alpha
+        + (0.25/(2.0*pi))*1.6*cOverR*cosPhi2;
+
+    const scalar dCL = 1.6*cOverR*cosPhi2
+        *(Foam::sqr(f)*Foam::cos(alphaRot)
+          + 0.25*Foam::cos(alphaRot - alpha0));
+    const scalar dCD = 1.6*cOverR*cosPhi2*Foam::sqr(f)*Foam::sin(alphaRot);
+
+    liftCoefficient_ += dCL;
+    dragCoefficient_ += dCD;
 }
 
 
