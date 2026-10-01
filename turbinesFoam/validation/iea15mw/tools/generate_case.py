@@ -186,13 +186,26 @@ def lateral_cells(domain: dict[str, float | str]) -> list[int]:
     return _scale_cells(BASE_LAT_CELLS, base, lateral_breaks(domain), refinement)
 
 
-def delta_t(domain: dict[str, float | str], rpm: float = RATED_RPM) -> float:
-    """Time step [s]: tip displacement per step stays below the hub-adjacent cell.
+def delta_t(
+    domain: dict[str, float | str],
+    rpm: float = RATED_RPM,
+    snappy_level: int = 0,
+) -> float:
+    """Time step [s]: tip displacement per step stays below the finest cell.
+
+    The constraint length is the finest cell the rotor sees. For the
+    actuator-surface meshes that is *not* the background hub cell but the
+    castellated rotor-disk cell (``hub_cell_size / 2**snappy_level``): leaving
+    deltaT at the background value drove the refined run to Courant max 4.19
+    and wild blade loads.
 
     Rounded to 3 significant figures so the coarse case keeps ``deltaT 0.075``.
     """
+    cell = hub_cell_size(domain)
+    if int(snappy_level) > 0:
+        cell /= 2.0 ** int(snappy_level)
     tip_speed = omega_from_rpm(rpm) * ROTOR_RADIUS
-    return float(f"{0.95 * hub_cell_size(domain) / tip_speed:.3g}")
+    return float(f"{0.95 * cell / tip_speed:.3g}")
 
 # --- Decomposition (P3 plan) -------------------------------------------------
 NUMBER_OF_SUBDOMAINS = 48
@@ -645,6 +658,7 @@ def render_control_dict(
     end_revs: float = DEFAULT_END_REVOLUTIONS,
     start_from: str = "startTime",
     write_interval_deg: float = WRITE_INTERVAL_DEG,
+    snappy_level: int = 0,
 ) -> str:
     domain = _as_domain(domain)
     t_rev = revolution_period(rpm)
@@ -658,7 +672,7 @@ startFrom {start_from};
 startTime 0;
 stopAt endTime;
 endTime {end_time:.8g};
-deltaT {delta_t(domain, rpm):.8g};
+deltaT {delta_t(domain, rpm, snappy_level):.8g};
 writeControl runTime;
 writeInterval {write_interval:.8g};
 purgeWrite 0;
@@ -1233,11 +1247,14 @@ def outputs(
     system = case_dir / "system"
     constant = case_dir / "constant"
     zero = case_dir / "0.org"
+    # deltaT follows the castellated rotor-disk cell ONLY when the run actually
+    # uses it: an ALM run on the background mesh keeps the background step.
+    dt_level = int(snappy_level) if model == "asm-mesh" else 0
     rendered: dict[Path, str] = {
         system / "blockMeshDict": render_block_mesh(domain, flow_axis),
         system / "topoSetDict": render_toposet(flow_axis),
         system / "controlDict": render_control_dict(
-            speed, rpm, domain, end_revs, start_from, write_interval_deg
+            speed, rpm, domain, end_revs, start_from, write_interval_deg, dt_level
         ),
         system / "decomposeParDict": render_decompose_par(ranks),
         system / "fvSchemes": render_fv_schemes(),

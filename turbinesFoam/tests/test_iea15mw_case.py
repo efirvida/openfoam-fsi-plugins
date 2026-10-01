@@ -833,6 +833,19 @@ class TestCaseSkeleton:
             case_dir / "system" / "snappyHexMeshDict"
         ).read_text(encoding="utf-8")
 
+    def test_snappy_level_tightens_the_time_step(self, tmp_path):
+        # The castellated rotor-disk cell constrains deltaT, not the background
+        # hub cell: leaving it at the background value drove Courant max 4.19.
+        coarse = generate_case.domain_spec("coarse")
+        base = generate_case.delta_t(coarse)
+        refined = generate_case.delta_t(coarse, snappy_level=3)
+        assert 0.0 < refined < base
+        assert abs(refined * 8.0 - base) < 1e-3
+        case_dir = tmp_path / "asm"
+        assert generate_case.main(["--case-dir", str(case_dir), "--model", "asm-mesh"]) == 0
+        control = (case_dir / "system" / "controlDict").read_text(encoding="utf-8")
+        assert f"deltaT {refined:.8g};" in control
+
     def test_flow_axis_x_is_the_openfast_orientation(self, tmp_path):
         case_dir = tmp_path / "x"
         assert (
