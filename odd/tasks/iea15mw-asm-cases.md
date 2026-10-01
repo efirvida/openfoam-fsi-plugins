@@ -94,3 +94,43 @@ problem, not a whole-domain one.
 - The `snappyHexMesh` target cell size vs the local chord (a rule, e.g. ≥4 cells
   per local chord), and the resulting cell budget.
 - Whether the tower/hub need the ASM too, or stay ALM (they are drag bodies).
+
+## Progress log — ASM implementation (2026-10-01)
+
+### Etapa A — ASM sin malla ✅ (commit `9a49c37`)
+- `generate_case.py --model {alm,asm,asm-mesh}` con los tres twins
+  (`fvOptions.ALM`, `.ASM`, `.ASM-MESH`); `--model` instala el elegido como
+  `system/fvOptions`. El runner reenvía `PHASEVI_MODEL` / `PHASEVI_N_CHORDWISE`.
+- Smoke dev 11605633 (0.05 rev, coarse): `elementType actuatorSurfaceElement;
+  nChordwise 5;`, coeficientes emitidos, `IEA 15 MW run complete`. ✅
+- Caveat: en D/32 el `ε` del ASM es por celda (`2·∛V·meshFactor` ≈ 15 m) y la
+  cuerda máxima es 5.77 m → la fuerza se embarrona. Corre, pero **no es
+  físicamente válido**: hace falta la cuerda resuelta (etapa B).
+
+### Etapa B — STL de pala ✅ (`bceeef1` + `ccec95c`)
+- Exportado con Aeroelast desde el WindIO yaml (element_size 0.2 m, 100 236
+  triángulos), commiteado binario (5 MB) en `geometry/stl/iea15mw_blade.stl`
+  con `geometry/metadata/iea15mw_blade.json` (sha256 + procedencia) y
+  `tools/stage_blade_stl.py` (verifica sha256 y stagea a
+  `constant/triSurface/`); el runner lo stagea para `--model asm-mesh`.
+- **Hallazgo (smoke 11605648 abortó, y fue correcto)**: `BladeMesh` exporta la
+  pala en el frame raíz-de-pala (span Z 0..117 = `BlSpn`) mientras los
+  elementos viven en r = `HubRad`..`HubRad+BlSpn` (3.97..120.97).
+  `bladeSurfaceSampler::buildPartition` compara las coordenadas de span de
+  nodos y elementos restando **el mismo** `surfaceOrigin` a ambos, así que el
+  corrimiento relativo sobrevive → la última estación de elemento quedaba sin
+  caras (`FatalError`). O sea: el aborto es una invariante sana, no un bug de
+  config.
+- **Fix**: exportar con `RotorMesh --n-blades 1 --hub-radius 3.97` (Z
+  3.970..120.970 = frame del caso). `BladeMesh` no acepta placement; sólo
+  `RotorMesh`/`RotorHubMesh` toman `hub_radius`.
+- Re-smoke dev 11605660 ✅: `100236 nodes over 147 element patches` por pala
+  (147 = `nElements` de la pala), cero `patch ... is empty`, run completo.
+- Caveat del sampler: mapea la superficie con **un único eje de span rígido**,
+  así que el prebend/sweep/`curveAngle` quedan representados sólo de forma
+  aproximada. No hay frame curvilíneo.
+
+### Pendiente
+- Etapa B2: fondo paramétrico + `snappyHexMesh` refinando alrededor de la pala
+  (cuerda resuelta, tip 0.5 m) → recién ahí la corrida ASM es físicamente
+  comparable contra ALM/OLAF.
