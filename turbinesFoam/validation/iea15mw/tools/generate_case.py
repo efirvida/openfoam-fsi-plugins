@@ -212,6 +212,19 @@ PATCH_NAMES = ("inlet", "outlet", "bottom", "top", "sideMinus", "sidePlus")
 #: downwind); ``y`` = the Aeroelast/FSI convention (fluid in +Y, blade axis +Z,
 #: profiles in XY), used so the fluid and structural meshes coincide for FSI.
 FLOW_AXIS_CHOICES = ("x", "y")
+
+#: ALM actuator-surface model choices (mirrors the Phase VI twins):
+#  alm      -> actuatorLineElement (the committed baseline);
+#  asm      -> actuatorSurfaceElement, the force spread over nChordwise chord
+#              strips from the chord line (no profile shape);
+#  asm-mesh -> asm + surfaceGeometry, sampling an imported blade STL.
+MODEL_CHOICES = ("alm", "asm", "asm-mesh")
+ALM_ELEMENT = "actuatorLineElement"
+ASM_ELEMENT = "actuatorSurfaceElement"
+#: Case-relative path the asm-mesh twin references (staged from Aeroelast/geometry).
+SURFACE_GEOMETRY = "constant/triSurface/iea15mw_blade.stl"
+#: Chordwise strips for the actuator surface (Phase VI used 5).
+DEFAULT_N_CHORDWISE = 5
 #: Default orientation. ``y`` = the Aeroelast/FSI frame the IEA 15 MW case exists
 #: for (fluid +Y, rotor axis about Y, blade axis +Z); ``x`` = OpenFAST.
 DEFAULT_FLOW_AXIS = "y"
@@ -887,6 +900,9 @@ def render_fv_options(
     tower: bool = True,
     hub: bool = False,
     rotation: str = "ccw",
+    element_type: str = ALM_ELEMENT,
+    n_chordwise: int | None = None,
+    surface_geometry: str = "",
 ) -> str:
     """The neutral-baseline ``axialFlowTurbineALSource``.
 
@@ -902,6 +918,14 @@ def render_fv_options(
     # rotationDirection = -1 flips the turbinesFoam (ccw) convention to cw, the
     # CCBlade/Aeroelast default.
     rotation_dir = -1.0 if rotation == "cw" else 1.0
+    surface_keys = ""
+    if element_type == ASM_ELEMENT:
+        strips = DEFAULT_N_CHORDWISE if n_chordwise is None else int(n_chordwise)
+        if strips <= 0:
+            raise ValueError("nChordwise must be a positive integer")
+        surface_keys += f"                nChordwise {strips};\n"
+        if surface_geometry:
+            surface_keys += f'                surfaceGeometry "{surface_geometry}";\n'
     polars = _polars_include_dir(case_dir)
     profiles = " ".join(blade_element_profiles())
     blade_rows = "\n".join(
@@ -1013,8 +1037,8 @@ def render_fv_options(
             {{
                 writePerf true;
                 writeElementPerf true;
-                elementType actuatorLineElement;
-                nElements {int(n_elements)};
+                elementType {element_type};
+{surface_keys}                nElements {int(n_elements)};
                 elementProfiles
                 (
                     {profiles}
@@ -1072,6 +1096,8 @@ def outputs(
     ranks: int = NUMBER_OF_SUBDOMAINS,
     write_interval_deg: float = WRITE_INTERVAL_DEG,
     rotation: str = "ccw",
+    model: str = "alm",
+    n_chordwise: int | None = None,
 ) -> dict[Path, str]:
     domain = _as_domain(domain)
     case_dir = Path(case_dir)
@@ -1087,17 +1113,25 @@ def outputs(
         system / "decomposeParDict": render_decompose_par(ranks),
         system / "fvSchemes": render_fv_schemes(),
         system / "fvSolution": render_fv_solution(),
+        system / "fvOptions.ALM": render_fv_options(
+            speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
+            flow_axis, tower, hub, rotation, ALM_ELEMENT,
+        ),
+        system / "fvOptions.ASM": render_fv_options(
+            speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
+            flow_axis, tower, hub, rotation, ASM_ELEMENT, n_chordwise,
+        ),
+        system / "fvOptions.ASM-MESH": render_fv_options(
+            speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
+            flow_axis, tower, hub, rotation, ASM_ELEMENT, n_chordwise,
+            SURFACE_GEOMETRY,
+        ),
         system / "fvOptions": render_fv_options(
-            speed,
-            rpm,
-            pitch_deg,
-            case_dir,
-            n_elements,
-            cone_angle,
-            flow_axis,
-            tower,
-            hub,
-            rotation,
+            speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
+            flow_axis, tower, hub, rotation,
+            ASM_ELEMENT if model in ("asm", "asm-mesh") else ALM_ELEMENT,
+            n_chordwise,
+            SURFACE_GEOMETRY if model == "asm-mesh" else "",
         ),
         constant / "transportProperties": render_transport_properties(),
         constant / "turbulenceProperties": render_turbulence_properties(),
@@ -1223,6 +1257,18 @@ def main(argv: list[str] | None = None) -> int:
         default="ccw",
         help="rotation sense: ccw = turbinesFoam current (default, physically verified), cw = CCBlade/Aeroelast label (see odd/tasks/iea15mw-asm-cases.md)",
     )
+    parser.add_argument(
+        "--model",
+        choices=MODEL_CHOICES,
+        default="alm",
+        help="alm (default), asm (actuator surface, no mesh) or asm-mesh",
+    )
+    parser.add_argument(
+        "--n-chordwise",
+        type=int,
+        default=None,
+        help="actuator-surface chordwise strips (default 5)",
+    )
     parser.add_argument("--case-dir", type=Path, default=DEFAULT_CASE_DIR)
     parser.add_argument(
         "--check",
@@ -1257,6 +1303,8 @@ def main(argv: list[str] | None = None) -> int:
             args.ranks,
             args.write_interval_deg,
             args.rotation,
+            args.model,
+            args.n_chordwise,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)

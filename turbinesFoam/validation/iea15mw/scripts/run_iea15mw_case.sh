@@ -57,7 +57,10 @@ run_dir="${PHASEVI_RUN_DIR:-runs/iea15mw-rated-${PHASEVI_MESH:-coarse}}"
 mesh="${PHASEVI_MESH:-coarse}"
 ranks="${PHASEVI_RANKS:-48}"
 
-domain_args=(--mesh "$mesh" --ranks "$ranks")
+domain_args=(--mesh "$mesh" --ranks "$ranks" --model "${PHASEVI_MODEL:-alm}")
+if [ -n "${PHASEVI_N_CHORDWISE:-}" ]; then
+    domain_args+=(--n-chordwise "$PHASEVI_N_CHORDWISE")
+fi
 write_deg="${PHASEVI_WRITE_DEG:-}"
 if [ -n "$write_deg" ]; then
     domain_args+=(--write-interval-deg "$write_deg")

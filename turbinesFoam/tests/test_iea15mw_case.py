@@ -790,6 +790,26 @@ class TestCaseSkeleton:
             case_dir / "system" / "fvOptions"
         ).read_text(encoding="utf-8")
 
+    def test_model_twins_select_the_actuator_model(self, tmp_path):
+        alm = (CASE_DIR / "system" / "fvOptions.ALM").read_text(encoding="utf-8")
+        asm = (CASE_DIR / "system" / "fvOptions.ASM").read_text(encoding="utf-8")
+        mesh = (CASE_DIR / "system" / "fvOptions.ASM-MESH").read_text(encoding="utf-8")
+        assert "elementType actuatorLineElement;" in alm
+        assert "nChordwise" not in alm
+        assert "elementType actuatorSurfaceElement;" in asm
+        assert "nChordwise 5;" in asm
+        assert "surfaceGeometry" not in asm
+        assert 'surfaceGeometry "constant/triSurface/iea15mw_blade.stl";' in mesh
+        # --model picks which twin is installed as system/fvOptions
+        case_dir = tmp_path / "asm-mesh"
+        assert (
+            generate_case.main(["--case-dir", str(case_dir), "--model", "asm-mesh"])
+            == 0
+        )
+        selected = (case_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "elementType actuatorSurfaceElement;" in selected
+        assert "surfaceGeometry" in selected
+
     def test_flow_axis_x_is_the_openfast_orientation(self, tmp_path):
         case_dir = tmp_path / "x"
         assert (
