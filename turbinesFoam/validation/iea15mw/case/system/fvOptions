@@ -152,6 +152,29 @@ turbine
             );
         }
 
+        tower
+        {
+            // The OpenFAST reference has TwrAero=True, TwrCd=0.5; the
+            // tower is excluded from the rotor total drag (RotThrust is rotor-only).
+            includeInTotalDrag false;
+            nElements 40;
+            elementProfiles (tower);
+            elementData
+            (
+                (-12.0975718 -135 10)
+                (-12.0975718 -122 10)
+                (-12.0975718 -109 9.926)
+                (-12.0975718 -96 9.443)
+                (-12.0975718 -83 8.833)
+                (-12.0975718 -70 8.151)
+                (-12.0975718 -57 7.39)
+                (-12.0975718 -44 6.909)
+                (-12.0975718 -31 6.748)
+                (-12.0975718 -18 6.572)
+                (-12.0975718 -5.614 6.5)
+            );
+        }
+
         profileData
         {
             polar_00
@@ -655,6 +678,7 @@ turbine
                 #include "../../data/polars/polar_49.dat"
             }
             cylinder { data ((-180 0 1.1 0) (180 0 1.1 0)); }
+            tower { data ((-180 0 0.5 0) (180 0 0.5 0)); }
         }
     }
 }

@@ -718,6 +718,29 @@ class TestCaseSkeleton:
         assert "axis (0 -1 0);" in fv
         assert "freeStreamVelocity (0 10.659 0);" in fv
 
+    def test_tower_alm_is_included_from_the_windio_tower(self, fvoptions):
+        tower = _coeffs(fvoptions)["tower"]
+        assert int(tower["nElements"]) == generate_case.TOWER_N_ELEMENTS
+        assert "tower" in tower["elementProfiles"]
+        rows = tower["elementData"]
+        assert len(rows) == 11
+        heights = [float(row[1]) for row in rows]
+        assert max(heights) < 0  # the tower is below the hub
+        assert min(heights) > -generate_case.HUB_HEIGHT  # above the floor
+        diameters = [float(row[2]) for row in rows]
+        assert diameters[0] == pytest.approx(10.0)
+        assert diameters[-1] == pytest.approx(6.5)
+        text = (CASE_DIR / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "tower { data ((-180 0 0.5 0) (180 0 0.5 0)); }" in text
+
+    def test_tower_can_be_disabled(self, tmp_path):
+        case_dir = tmp_path / "case"
+        assert (
+            generate_case.main(["--case-dir", str(case_dir), "--tower", "off"]) == 0
+        )
+        text = (case_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "elementProfiles (tower)" not in text
+
     def test_flow_axis_x_is_the_openfast_orientation(self, tmp_path):
         case_dir = tmp_path / "x"
         assert (

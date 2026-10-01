@@ -79,6 +79,10 @@ N_BLADES = 3
 N_ELEMENTS = 147
 #: 4 deg precone, applied through the source's `coneAngle` key (option b).
 PRECONE_DEG = 4.0
+#: Tower downwind offset from the rotor apex [m] (ElastoDyn OverHang, negative).
+TOWER_OVERHANG = 12.097571763912535
+#: Tower ALM elements: the WindIO tower table has 11 unique stations (10 segments).
+TOWER_N_ELEMENTS = 40
 
 # --- Domain and mesh (ground-anchored, D/32) ---------------------------------
 #: Horizontal box: 20D streamwise x 8D lateral around the rotor.
@@ -378,6 +382,25 @@ def hub_element_rows() -> list[list[float]]:
         [0.0, blade_geometry.HUB_RADIUS, blade_geometry.HUB_DIAMETER],
         [0.0, -blade_geometry.HUB_RADIUS, blade_geometry.HUB_DIAMETER],
     ]
+
+
+def tower_element_rows() -> list[list[float]]:
+    """Tower ALM rows ``(axialDistance height diameter)`` from the WindIO tower.
+
+    ``height`` is along the vertical from the rotor/hub at the origin, so the
+    tower is below the hub (negative heights); ``axialDistance`` is the tower's
+    downwind offset (``-TOWER_OVERHANG``, since the rotor axis points upwind).
+    """
+    return [
+        [-TOWER_OVERHANG, station["z"] - HUB_HEIGHT, station["diameter"]]
+        for station in blade_geometry.read_tower_table()
+    ]
+
+
+def tower_drag_coefficient() -> float:
+    """Tower drag coefficient from the WindIO tower (AeroDyn ``TwrCd``)."""
+    stations = blade_geometry.read_tower_table()
+    return stations[0]["cd"] if stations else 1.1
 
 
 # ---------------------------------------------------------------------------
@@ -768,6 +791,7 @@ def render_fv_options(
     n_elements: int = N_ELEMENTS,
     cone_angle: float = PRECONE_DEG,
     flow_axis: str = DEFAULT_FLOW_AXIS,
+    tower: bool = True,
 ) -> str:
     """The neutral-baseline ``axialFlowTurbineALSource``.
 
@@ -789,6 +813,30 @@ def render_fv_options(
         for row in blade_element_rows(pitch_deg)
     )
     hub_rows = render_cell_list(hub_element_rows(), indent="                ")
+    tower_rows = render_cell_list(tower_element_rows(), indent="                ")
+    tower_cd = tower_drag_coefficient()
+    if tower:
+        tower_block = f"""
+        tower
+        {{
+            // The OpenFAST reference has TwrAero=True, TwrCd={tower_cd:.3g}; the
+            // tower is excluded from the rotor total drag (RotThrust is rotor-only).
+            includeInTotalDrag false;
+            nElements {TOWER_N_ELEMENTS};
+            elementProfiles (tower);
+            elementData
+            (
+{tower_rows}
+            );
+        }}
+"""
+        tower_profile = (
+            f"            tower {{ data ((-180 0 {tower_cd:.8g} 0)"
+            f" (180 0 {tower_cd:.8g} 0)); }}"
+        )
+    else:
+        tower_block = ""
+        tower_profile = ""
     profile_blocks = "\n".join(
         f"""            {name}
             {{
@@ -889,11 +937,12 @@ def render_fv_options(
 {hub_rows}
             );
         }}
-
+{tower_block}
         profileData
         {{
 {profile_blocks}
             cylinder {{ data ((-180 0 1.1 0) (180 0 1.1 0)); }}
+{tower_profile}
         }}
     }}
 }}
@@ -917,6 +966,7 @@ def outputs(
     start_from: str = "startTime",
     flow_axis: str = DEFAULT_FLOW_AXIS,
     domain_top: float = DEFAULT_DOMAIN_TOP,
+    tower: bool = True,
 ) -> dict[Path, str]:
     case_dir = Path(case_dir)
     system = case_dir / "system"
@@ -932,7 +982,7 @@ def outputs(
         system / "fvSchemes": render_fv_schemes(),
         system / "fvSolution": render_fv_solution(),
         system / "fvOptions": render_fv_options(
-            speed, rpm, pitch_deg, case_dir, n_elements, cone_angle, flow_axis
+            speed, rpm, pitch_deg, case_dir, n_elements, cone_angle, flow_axis, tower
         ),
         constant / "transportProperties": render_transport_properties(),
         constant / "turbulenceProperties": render_turbulence_properties(),
@@ -998,6 +1048,12 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_DOMAIN_TOP,
         help="domain top [m] above the rotor (the floor is at -hub height)",
     )
+    parser.add_argument(
+        "--tower",
+        choices=("on", "off"),
+        default="on",
+        help="include the tower ALM (from the WindIO tower; default on, like OpenFAST)",
+    )
     parser.add_argument("--case-dir", type=Path, default=DEFAULT_CASE_DIR)
     parser.add_argument(
         "--check",
@@ -1019,6 +1075,7 @@ def main(argv: list[str] | None = None) -> int:
             args.start_from,
             args.flow_axis,
             args.domain_top,
+            args.tower == "on",
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)

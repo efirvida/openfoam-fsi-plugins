@@ -297,6 +297,35 @@ def element_rows(
     ]
 
 
+def read_tower_table(
+    path: Path | str | None = None,
+) -> list[dict[str, float]]:
+    """WindIO tower stations ``{z, diameter, cd}`` (z from the ground, m).
+
+    The WindIO grid repeats each station with a sub-millimetre offset to model
+    the abrupt diameter steps; the duplicates are collapsed to one station, so
+    the returned list has no zero-length segments.
+    """
+    try:
+        import yaml
+    except ImportError as error:  # pragma: no cover - depends on environment
+        raise GeometryError("PyYAML is required to read the tower") from error
+
+    source = Path(path) if path is not None else DEFAULT_WINDIO
+    data = yaml.safe_load(source.read_text(encoding="utf-8"))
+    tower = data["components"]["tower"]["outer_shape_bem"]
+    z_values = [float(v) for v in tower["reference_axis"]["z"]["values"]]
+    d_values = [float(v) for v in tower["outer_diameter"]["values"]]
+    cd_entry = tower.get("drag_coefficient")
+    cd = float(cd_entry["values"][0]) if cd_entry else 1.1
+    stations: list[dict[str, float]] = []
+    for z, diameter in zip(z_values, d_values):
+        if stations and abs(z - stations[-1]["z"]) < 0.01:
+            continue
+        stations.append({"z": z, "diameter": diameter, "cd": cd})
+    return stations
+
+
 def _format(value: float) -> str:
     text = f"{value:.10g}"
     return "0" if text in ("-0", "") else text

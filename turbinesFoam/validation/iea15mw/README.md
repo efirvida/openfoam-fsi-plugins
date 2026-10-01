@@ -303,8 +303,9 @@ by the physics still matches the P0 table.
 
 ### `fvOptions` neutral baseline
 
-One `axialFlowTurbineALSource` at `origin (0 0 150)`, `verticalDirection (0 0
-1)`. `generate_case.py --flow-axis` selects the orientation:
+One `axialFlowTurbineALSource` at `origin (0 0 0)` (the rotor/hub at the
+origin), `verticalDirection (0 0 1)`. `generate_case.py --flow-axis` selects the
+orientation:
 
 - **`y` (default, Aeroelast/FSI)** — `axis (0 -1 0)`, `freeStreamVelocity (0
   10.659 0)`: fluid in **+Y**, rotor axis **−Y**, blade axis **+Z**, profiles in
@@ -324,7 +325,27 @@ Neutral baseline (both orientations):
 
 The 50 per-station `profileData` entries include the committed polars
 (`#include "../../data/polars/polar_NN.dat"`) with `GaussianCoeffs { chordFactor
-0.25; dragFactor 1.0; meshFactor 1; }`. A 7.94 m hub cylinder mirrors Phase VI.
+0.25; dragFactor 1.0; meshFactor 1; }`.
+
+Objects are **configurable** so the model matches the reference used for
+validation (adding an object the reference omits would compare different
+models):
+
+- **Hub** — a 7.94 m cylinder (always present).
+- **Tower** (`--tower on|off`, default **on**) — an ALM built from the WindIO
+  tower (`(axialDistance, height, diameter)`, 11 collapsed stations, 40
+  elements), with the AeroDyn `TwrCd = 0.5` in a dedicated `tower` profile (the
+  `cylinder` profile is 1.1). The OpenFAST reference has `TwrAero=True`, so the
+  tower is on to compare like-for-like; `includeInTotalDrag false` keeps the
+  reported `RotThrust` rotor-only. The tower is `OverHang = 12.098 m` downwind
+  of the rotor apex and reaches from the floor (z = −135, 15 m above the ground)
+  to −5.614 m below the hub.
+- **Nacelle** — turbinesFoam models it as a `nacelleSurfaceSource`, an actuator
+  **surface** (needs an STL + `cf`), not an ALM. The WindIO yaml only gives the
+  drivetrain (overhang 12.03 m, uptilt 6°, diameters), and the AeroDyn reference
+  has `NacelleDrag = False`, so the nacelle is **not in the reference** and is a
+  full-system object rather than part of the blade-loading comparison. Not
+  rendered yet.
 
 ### Mesh
 
