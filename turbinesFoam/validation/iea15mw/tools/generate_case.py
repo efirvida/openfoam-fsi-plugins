@@ -665,8 +665,13 @@ def render_control_dict(
     end_time = float(end_revs) * t_rev
     # Write every `write_interval_deg` of rotation, so the wake snapshots are a
     # smooth animation at the natural rotor speed. Binary format keeps each
-    # snapshot ~4x smaller than ascii; purgeWrite 0 keeps the full history.
+    # snapshot ~4x smaller than ascii. purgeWrite keeps exactly the LAST
+    # revolution (360/write_interval_deg snapshots): a 15-rev campaign with
+    # purgeWrite 0 wrote ~300 GB per run of fields and blew the group quota.
+    # postProcessing CSVs are not time directories, so the full coefficient
+    # history survives the purge either way.
     write_interval = (float(write_interval_deg) / 360.0) * t_rev
+    snaps_per_rev = max(1, int(round(360.0 / float(write_interval_deg))))
     return foam_header("controlDict") + f"""application {APPLICATION};
 startFrom {start_from};
 startTime 0;
@@ -675,7 +680,7 @@ endTime {end_time:.8g};
 deltaT {delta_t(domain, rpm, snappy_level):.8g};
 writeControl runTime;
 writeInterval {write_interval:.8g};
-purgeWrite 0;
+purgeWrite {snaps_per_rev};
 writeFormat binary;
 writePrecision 10;
 writeCompression off;

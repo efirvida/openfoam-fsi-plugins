@@ -810,6 +810,20 @@ class TestCaseSkeleton:
         assert "elementType actuatorSurfaceElement;" in selected
         assert "surfaceGeometry" in selected
 
+    def test_purge_write_keeps_exactly_one_revolution(self, tmp_path):
+        # A 15-rev campaign with purgeWrite 0 wrote ~300 GB of fields per run and
+        # blew the group /scratch quota; the fields now keep the last revolution.
+        case_dir = tmp_path / "pw"
+        for degrees, snaps in ((6, 60), (60, 6), (120, 3), (360, 1)):
+            assert (
+                generate_case.main(
+                    ["--case-dir", str(case_dir), "--write-interval-deg", str(degrees)]
+                )
+                == 0
+            )
+            control = (case_dir / "system" / "controlDict").read_text(encoding="utf-8")
+            assert f"purgeWrite {snaps};" in control
+
     def test_snappy_dict_refines_the_rotor_disk_without_a_surface(self, tmp_path):
         text = (CASE_DIR / "system" / "snappyHexMeshDict").read_text(encoding="utf-8")
         assert "castellatedMesh true;" in text
