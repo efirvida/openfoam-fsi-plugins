@@ -1,14 +1,19 @@
 {
   "component": "iea15mw_blade",
   "format_version": 1,
-  "generator": "aeroelast --export-mesh --mesh-generator BladeMesh (fem-shell)",
+  "generator": "aeroelast --export-mesh --mesh-generator RotorMesh --n-blades 1 --hub-radius 3.97 (fem-shell)",
   "input_sha256": "4b9d1afbe6449d57335a253b31e7124909c6c405c2519d86ae183c33e5f7786b",
   "inputs": {
     "blade_yaml": "IEA-15-240-RWT.yaml (WindIO v1.1, NREL/TP-75698)",
-    "element_size_m": 0.2
+    "element_size_m": 0.2,
+    "hub_radius_m": 3.97
   },
   "n_triangles": 100236,
-  "note": "Blade surface for the ASM-mesh twin (surfaceGeometry). Binary STL converted from the Aeroelast BladeMesh ASCII export.",
-  "stl_sha256": "3ea233fae7312dc0118209dd49952bd92d585929dc50f62d046b6514d0a9b972",
+  "note": "Blade surface for the ASM-mesh twin (surfaceGeometry). Exported with RotorMesh so the span already sits in the case frame (root at HubRad, tip at HubRad+BlSpn); bladeSurfaceSampler::buildPartition compares node and element spanwise coordinates directly, so a BladeMesh-root-frame export (Z 0..117) leaves the outermost element patch empty. Binary STL converted from the ASCII export.",
+  "span_extent_m": [
+    3.97,
+    120.97
+  ],
+  "stl_sha256": "e6a204ce0312faed8e565be449577abdd2d012409d268bc6c51b8d0ca36281da",
   "units": "m"
 }
