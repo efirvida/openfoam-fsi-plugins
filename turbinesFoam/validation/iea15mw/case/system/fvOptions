@@ -24,7 +24,7 @@ turbine
         fieldNames (U);
         selectionMode cellSet;
         cellSet turbine;
-        origin (0 0 150);
+        origin (0 0 0);
         axis (0 -1 0);
         verticalDirection (0 0 1);
         freeStreamVelocity (0 10.659 0);

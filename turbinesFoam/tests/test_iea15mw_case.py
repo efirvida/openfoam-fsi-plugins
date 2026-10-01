@@ -416,7 +416,7 @@ generate_case = _load(
 )
 
 CASE_DIR = PACKAGE / "case"
-EXPECTED_CELL_COUNT = 6_674_304
+EXPECTED_CELL_COUNT = 4_299_792
 RATED_TSR = 8.913185552348528
 RATED_RADIUS = 120.67532316
 EXPECTED_FILES = (
@@ -558,7 +558,7 @@ class TestFvOptions:
         assert float(coeffs["tipSpeedRatio"]) == pytest.approx(RATED_TSR, abs=1e-6)
         assert float(coeffs["rotorRadius"]) == pytest.approx(RATED_RADIUS, abs=1e-4)
         assert [float(v) for v in coeffs["freeStreamVelocity"]] == [0.0, 10.659, 0.0]
-        assert [float(v) for v in coeffs["origin"]] == [0.0, 0.0, 150.0]
+        assert [float(v) for v in coeffs["origin"]] == [0.0, 0.0, 0.0]
         assert [float(v) for v in coeffs["axis"]] == [0.0, -1.0, 0.0]
         assert [float(v) for v in coeffs["verticalDirection"]] == [0.0, 0.0, 1.0]
 
@@ -671,6 +671,24 @@ class TestCaseSkeleton:
         text = (CASE_DIR / "0.org" / "U").read_text(encoding="utf-8")
         assert "uniform (0 10.659 0)" in text
 
+    def test_ground_is_a_wall_hub_height_below_the_rotor(self):
+        # Rotor/hub at the origin; the floor is one hub height below (z = -150).
+        u = (CASE_DIR / "0.org" / "U").read_text(encoding="utf-8")
+        assert "type noSlip;" in u
+        breaks, cells, _ = generate_case.vertical_mesh()
+        assert breaks[0] == pytest.approx(-generate_case.HUB_HEIGHT)
+        assert breaks[1] == pytest.approx(0.0)
+        assert cells[0] >= 2  # a graded ground layer for the wall function
+
+    def test_domain_top_is_configurable(self):
+        top = 3.0 * generate_case.ROTOR_DIAMETER
+        breaks, _, _ = generate_case.vertical_mesh(top)
+        assert breaks[-1] == pytest.approx(top)
+        # The hub-adjacent cell stays ~D/32 independent of the domain top.
+        assert generate_case.hub_cell_size("coarse", top) == pytest.approx(
+            generate_case.ROTOR_DIAMETER / 32.0, rel=0.03
+        )
+
     def test_flow_axis_y_points_flow_and_rotor_along_y(self, tmp_path):
         """The Aeroelast/FSI orientation: fluid +Y, rotor axis -Y, blade axis +Z."""
         case_dir = tmp_path / "y"
@@ -735,7 +753,8 @@ class TestMesh:
         assert total == EXPECTED_CELL_COUNT
         for name in ("inlet", "outlet", "bottom", "top", "sideMinus", "sidePlus"):
             assert f"    {name}\n" in text
-        assert text.count("type symmetryPlane;") == 4
+        assert text.count("type symmetryPlane;") == 3
+        assert text.count("type wall;") == 1
 
     def test_hub_adjacent_cell_is_d_over_32(self):
         hub = generate_case.hub_cell_size("coarse")

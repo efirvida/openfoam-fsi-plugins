@@ -80,27 +80,32 @@ N_ELEMENTS = 147
 #: 4 deg precone, applied through the source's `coneAngle` key (option b).
 PRECONE_DEG = 4.0
 
-# --- Domain and mesh (Phase VI D-normalised box, D/32) -----------------------
-#: Box 20D x 8D x 5D around the rotor, hub height 150 m.
-DOMAIN_D = {"x": (-5.0, 15.0), "y": (-4.0, 4.0), "z_offset": (-2.5, 2.5)}
+# --- Domain and mesh (ground-anchored, D/32) ---------------------------------
+#: Horizontal box: 20D streamwise x 8D lateral around the rotor.
+DOMAIN_D = {"x": (-5.0, 15.0), "y": (-4.0, 4.0)}
 MESH_CHOICES = ("coarse",)
-#: Block breaks in D units (x/y absolute D; z hub offset in D).
+#: Horizontal block breaks in D units.
 BREAKS_D = {
     "x": [-5.0, -0.5, 8.0, 15.0],
     "y": [-4.0, -1.5, 1.5, 4.0],
-    "z": [-2.5, 0.0, 2.5],
 }
-#: D/32 development mesh; identical relative resolution to Phase VI coarse.
+#: Default domain top [m] above the rotor/hub (the floor is z = -HUB_HEIGHT).
+DEFAULT_DOMAIN_TOP = 2.5 * ROTOR_DIAMETER
+#: Hub-adjacent vertical cell [m] (~D/32; the time-step constraint).
+Z_HUB_CELL = ROTOR_DIAMETER / 32.0
+#: Ground-adjacent vertical cell [m] and vertical growth ratio above the hub.
+Z_GROUND_CELL = 2.0
+Z_GROWTH = 1.06
+#: D/32 development mesh (horizontal); the vertical is ground-anchored.
 MESH = {
     "coarse": {
         "x": {"cells": [50, 272, 60], "grading": [0.160029, 1.0, 9.252929]},
         "y": {"cells": [36, 96, 36], "grading": [0.241240, 1.0, 4.145249]},
-        "z": {"cells": [52, 52], "grading": [0.4464, 2.2404]},
         "delta_t": 0.075,
     }
 }
-#: Recorded expected cell count of the D/32 mesh (Phase VI-identical topology).
-EXPECTED_CELL_COUNT = 6_674_304
+#: Recorded expected cell count of the default ground-anchored mesh.
+EXPECTED_CELL_COUNT = 4_299_792
 
 # --- Decomposition (P3 plan) -------------------------------------------------
 NUMBER_OF_SUBDOMAINS = 48
@@ -177,32 +182,84 @@ def revolution_period(rpm: float) -> float:
 
 
 def axis_extents(axis: str) -> list[float]:
-    """Physical block extents [m] of one axis (x/y absolute D, z hub offset)."""
-    values = [float(value) for value in BREAKS_D[axis]]
-    if axis == "z":
-        return [HUB_HEIGHT + ROTOR_DIAMETER * value for value in values]
-    return [ROTOR_DIAMETER * value for value in values]
+    """Horizontal block extents [m] of one axis (absolute multiples of D)."""
+    if axis not in BREAKS_D:
+        raise KeyError(f"{axis!r} is not a horizontal axis (x/y)")
+    return [ROTOR_DIAMETER * float(value) for value in BREAKS_D[axis]]
 
 
-def cell_count(mesh: str = "coarse") -> int:
+def _geometric_layer(length: float, first_cell: float, last_cell: float) -> tuple[int, float]:
+    """Number of cells and OpenFOAM grading for a geometric layer [m].
+
+    Returns ``(n, grading)`` with ``grading = last_cell/first_cell`` and ``n``
+    chosen so the actual first cell is closest to ``first_cell``.
+    """
+    ratio = float(last_cell) / float(first_cell)
+    best_n, best_err = 1, float("inf")
+    for n in range(2, 4000):
+        q = ratio ** (1.0 / (n - 1))
+        first = float(length) * (q - 1.0) / (q**n - 1.0)
+        err = abs(first - float(first_cell))
+        if err < best_err:
+            best_err, best_n = err, n
+        if first < float(first_cell) * 0.5:
+            break
+    return best_n, ratio
+
+
+def _growing_layer(length: float, first_cell: float, growth: float) -> tuple[int, float]:
+    """Number of cells and grading for a layer growing at ``growth`` from
+    ``first_cell`` over ``length``."""
+    g = float(growth)
+    n = max(
+        1,
+        int(
+            math.ceil(
+                math.log(1.0 + float(length) * (g - 1.0) / float(first_cell))
+                / math.log(g)
+            )
+        ),
+    )
+    return n, g ** (n - 1)
+
+
+def vertical_mesh(
+    domain_top: float = DEFAULT_DOMAIN_TOP,
+) -> tuple[list[float], list[int], list[float]]:
+    """Hub-anchored vertical mesh: breaks, cells and grading.
+
+    The rotor/hub is at z = 0 and the floor at z = -``HUB_HEIGHT``. Below the
+    hub the cells go from ``Z_GROUND_CELL`` (at the ground, for the wall
+    function) up to ``Z_HUB_CELL``; above the hub they grow at ``Z_GROWTH`` to
+    ``domain_top``.
+    """
+    top = float(domain_top)
+    if top <= 0.0:
+        raise ValueError(f"domain top {top} must be above the hub (z = 0)")
+    breaks = [-HUB_HEIGHT, 0.0, top]
+    n_low, grade_low = _geometric_layer(HUB_HEIGHT, Z_GROUND_CELL, Z_HUB_CELL)
+    n_up, grade_up = _growing_layer(top, Z_HUB_CELL, Z_GROWTH)
+    return breaks, [n_low, n_up], [grade_low, grade_up]
+
+
+def cell_count(mesh: str = "coarse", domain_top: float = DEFAULT_DOMAIN_TOP) -> int:
     """Total hexahedral cell count of a rendered mesh."""
     resolution = _resolution(mesh)
     total = 1
-    for axis in ("x", "y", "z"):
+    for axis in ("x", "y"):
         total *= sum(int(value) for value in resolution[axis]["cells"])
-    return total
+    _, z_cells, _ = vertical_mesh(domain_top)
+    return total * sum(z_cells)
 
 
-def hub_cell_size(mesh: str = "coarse") -> float:
-    """Finest (hub-adjacent) z cell [m]; the time-step constraint length."""
-    resolution = _resolution(mesh)
-    extents = axis_extents("z")
-    z_cells = [int(value) for value in resolution["z"]["cells"]]
-    z_grading = [float(value) for value in resolution["z"]["grading"]]
+def hub_cell_size(mesh: str = "coarse", domain_top: float = DEFAULT_DOMAIN_TOP) -> float:
+    """Finest hub-adjacent vertical cell [m]; the time-step constraint length."""
+    del mesh  # the vertical mesh depends only on the domain top
+    breaks, z_cells, z_grading = vertical_mesh(domain_top)
     hub_adjacent = []
     for index, cells in enumerate(z_cells):
         sizes = _cell_sizes(
-            extents[index + 1] - extents[index], cells, z_grading[index]
+            breaks[index + 1] - breaks[index], cells, z_grading[index]
         )
         hub_adjacent.append(sizes[-1] if index == 0 else sizes[0])
     return max(hub_adjacent)
@@ -278,8 +335,8 @@ def render_cell_list(values: list[list[float]], indent: str = "            ") ->
 
 
 def turbine_origin() -> tuple[float, float, float]:
-    """Rotor centre in mesh coordinates: the hub at x = y = 0, z = hub height."""
-    return (0.0, 0.0, HUB_HEIGHT)
+    """Rotor centre: the hub at the origin; the floor is z = -``HUB_HEIGHT``."""
+    return (0.0, 0.0, 0.0)
 
 
 def blade_profile_names() -> list[str]:
@@ -326,21 +383,29 @@ def hub_element_rows() -> list[list[float]]:
 # ---------------------------------------------------------------------------
 # Renderers
 # ---------------------------------------------------------------------------
-def render_block_mesh(mesh: str = "coarse", flow_axis: str = DEFAULT_FLOW_AXIS) -> str:
+def render_block_mesh(
+    mesh: str = "coarse",
+    flow_axis: str = DEFAULT_FLOW_AXIS,
+    domain_top: float = DEFAULT_DOMAIN_TOP,
+) -> str:
     """18-block hexahedral blockMeshDict with six far-field patches.
 
     The mesh roles are x=flow, y=lateral, z=vertical; ``flow_axis`` maps them
-    to physical coordinates (see ``_role_to_physical``).
+    to physical coordinates (see ``_role_to_physical``). The vertical mesh is
+    hub-anchored: z = 0 at the rotor, the floor at -``HUB_HEIGHT``.
     """
     resolution = _resolution(mesh)
-    breaks = {axis: axis_extents(axis) for axis in ("x", "y", "z")}
+    z_breaks, z_cells, z_grading = vertical_mesh(domain_top)
+    breaks = {"x": axis_extents("x"), "y": axis_extents("y"), "z": z_breaks}
     cells = {
-        axis: [int(value) for value in resolution[axis]["cells"]]
-        for axis in ("x", "y", "z")
+        "x": [int(value) for value in resolution["x"]["cells"]],
+        "y": [int(value) for value in resolution["y"]["cells"]],
+        "z": z_cells,
     }
     grading = {
-        axis: [float(value) for value in resolution[axis]["grading"]]
-        for axis in ("x", "y", "z")
+        "x": [float(value) for value in resolution["x"]["grading"]],
+        "y": [float(value) for value in resolution["y"]["grading"]],
+        "z": z_grading,
     }
     nx, ny, nz = (len(breaks[axis]) for axis in ("x", "y", "z"))
 
@@ -390,7 +455,7 @@ def render_block_mesh(mesh: str = "coarse", flow_axis: str = DEFAULT_FLOW_AXIS) 
     patch_types = {
         "inlet": "patch",
         "outlet": "patch",
-        "bottom": "symmetryPlane",
+        "bottom": "wall",
         "top": "symmetryPlane",
         "sideMinus": "symmetryPlane",
         "sidePlus": "symmetryPlane",
@@ -624,12 +689,14 @@ def render_field_uniform(
             "        inletValue uniform (0 0 0);\n"
             f"        value uniform {uin};"
         )
+        ground = "type noSlip;"
     elif field == "p":
         dims = "[0 2 -2 0 0 0 0]"
         header = "volScalarField"
         internal = "uniform 0"
         inlet = "type zeroGradient;"
         outlet = "type fixedValue;\n        value uniform 0;"
+        ground = "type zeroGradient;"
     elif field == "k":
         dims = "[0 2 -2 0 0 0 0]"
         header = "volScalarField"
@@ -641,6 +708,7 @@ def render_field_uniform(
             "        inletValue uniform 0;\n"
             f"        value uniform {value:.8g};"
         )
+        ground = f"type kqRWallFunction;\n        value uniform {value:.8g};"
     elif field == "omega":
         dims = "[0 0 -1 0 0 0 0]"
         header = "volScalarField"
@@ -652,6 +720,7 @@ def render_field_uniform(
             "        inletValue uniform 0;\n"
             f"        value uniform {value:.8g};"
         )
+        ground = f"type omegaWallFunction;\n        value uniform {value:.8g};"
     elif field == "nut":
         dims = "[0 2 -1 0 0 0 0]"
         header = "volScalarField"
@@ -662,12 +731,13 @@ def render_field_uniform(
             "        inletValue uniform 0;\n"
             "        value uniform 0;"
         )
+        ground = "type nutkWallFunction;\n        value uniform 0;"
     else:
         raise ValueError(f"unknown field {field!r}")
 
-    far_block = "\n".join(
+    far_block = "    bottom\n    {\n" + ground + "\n    }\n" + "\n".join(
         f"    {name}\n    {{\n{far}\n    }}"
-        for name in ("bottom", "top", "sideMinus", "sidePlus")
+        for name in ("top", "sideMinus", "sidePlus")
     )
     return foam_header(field, header) + f"""dimensions      {dims};
 
@@ -846,13 +916,14 @@ def outputs(
     end_revs: float = DEFAULT_END_REVOLUTIONS,
     start_from: str = "startTime",
     flow_axis: str = DEFAULT_FLOW_AXIS,
+    domain_top: float = DEFAULT_DOMAIN_TOP,
 ) -> dict[Path, str]:
     case_dir = Path(case_dir)
     system = case_dir / "system"
     constant = case_dir / "constant"
     zero = case_dir / "0.org"
     rendered: dict[Path, str] = {
-        system / "blockMeshDict": render_block_mesh(mesh, flow_axis),
+        system / "blockMeshDict": render_block_mesh(mesh, flow_axis, domain_top),
         system / "topoSetDict": render_toposet(flow_axis),
         system / "controlDict": render_control_dict(
             speed, rpm, mesh, end_revs, start_from
@@ -921,6 +992,12 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_FLOW_AXIS,
         help="flow/rotor axis: y = Aeroelast/FSI (fluid +Y, default), x = OpenFAST",
     )
+    parser.add_argument(
+        "--domain-top",
+        type=float,
+        default=DEFAULT_DOMAIN_TOP,
+        help="domain top [m] above the rotor (the floor is at -hub height)",
+    )
     parser.add_argument("--case-dir", type=Path, default=DEFAULT_CASE_DIR)
     parser.add_argument(
         "--check",
@@ -941,6 +1018,7 @@ def main(argv: list[str] | None = None) -> int:
             args.end_revs,
             args.start_from,
             args.flow_axis,
+            args.domain_top,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)

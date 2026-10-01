@@ -35,7 +35,7 @@ boundaryField
 
     bottom
     {
-        type symmetryPlane;
+type noSlip;
     }
     top
     {

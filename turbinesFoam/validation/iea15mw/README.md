@@ -328,23 +328,29 @@ The 50 per-station `profileData` entries include the committed polars
 
 ### Mesh
 
-Box 20D x 8D x 5D around the rotor, hub height 150 m, `D = 241.35064632 m`.
-The D/32 development mesh reuses the Phase VI coarse block topology exactly
-(18 hexahedral blocks, breaks in D units), so its cell count is identical:
+The domain is **ground-anchored**: the rotor/hub sits at the origin `(0 0 0)`,
+the floor (ground, `bottom` = `wall`, no-slip with `kOmegaSST` wall functions)
+at `z = -HUB_HEIGHT = -150 m`, and the top at `+DEFAULT_DOMAIN_TOP = +603.4 m`
+(`--domain-top`, configurable). Horizontally 20D streamwise x 8D lateral around
+the rotor, `D = 241.35064632 m`. This makes the case ready for ABL /
+parameterisation studies, not just a bare rotor.
 
-| mesh | cell size | cells | cells/rank @48 |
-|---|---|---|---|
-| `coarse` (D/32) | hub cell 7.538 m (= D/32) | **6 674 304** | ~139 k |
+The vertical mesh is hub-anchored: from `Z_GROUND_CELL = 2 m` at the ground
+(fine enough for the wall function) growing to `Z_HUB_CELL = D/32 = 7.54 m` at
+the hub, then growing at 6 % to the top. 18 hexahedral blocks (3x3x2):
+
+| mesh | hub cell | ground cell | cells | cells/rank @48 |
+|---|---|---|---|---|
+| `coarse` (D/32 horizontal) | 7.50 m (~D/32) | 2 m | **4 299 792** | ~90 k |
 
 `decomposeParDict` uses `numberOfSubdomains 48` (the P3 plan). `controlDict`
 uses `deltaT 0.075 s` and `endTime 3` revolutions (23.94 s): the tip
 displacement per step is `95.006 * 0.075 = 7.13 m`, below the hub-adjacent cell
-`7.538 m`.
+`7.50 m`.
 
 Verified with a loaded OpenFOAM v2506 environment on the rendered case:
-`blockMesh` reports `cells: 6674304` (matching the analytic count) and
-`checkMesh` reports `Mesh OK` (max aspect ratio 9.26, non-orthogonality
-1.7e-06, max skewness 7.7e-09).
+`blockMesh` reports `nCells: 4299792` (matching the analytic count) and
+`checkMesh` reports `Mesh OK` (non-orthogonality 3.1e-06).
 
 ## Known limitations
 

@@ -33,7 +33,7 @@ boundaryField
 
     bottom
     {
-        type symmetryPlane;
+type zeroGradient;
     }
     top
     {
