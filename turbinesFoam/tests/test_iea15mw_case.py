@@ -766,6 +766,15 @@ class TestCaseSkeleton:
         text = (case_dir / "system" / "fvOptions").read_text(encoding="utf-8")
         assert "elementProfiles (tower)" not in text
 
+    def test_tower_is_offset_downwind_by_the_windio_overhang(self, fvoptions):
+        # Rotor at the origin: the tower (yaw axis) is one WindIO overhang
+        # downwind, so axialDistance = -overhang (the rotor axis points upwind).
+        overhang = blade_geometry.read_tower_overhang()
+        assert overhang == pytest.approx(12.0313, abs=1e-3)
+        rows = _coeffs(fvoptions)["tower"]["elementData"]
+        for row in rows:
+            assert float(row[0]) == pytest.approx(-overhang, abs=1e-9)
+
     def test_flow_axis_x_is_the_openfast_orientation(self, tmp_path):
         case_dir = tmp_path / "x"
         assert (

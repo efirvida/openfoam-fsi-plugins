@@ -326,6 +326,21 @@ def read_tower_table(
     return stations
 
 
+def read_tower_overhang(path: Path | str | None = None) -> float:
+    """WindIO nacelle overhang [m]: the hub-to-yaw-axis horizontal distance.
+
+    The rotor is upwind, so the tower (yaw axis) sits this far DOWNWIND of the
+    rotor/hub. Source: ``components.nacelle.drivetrain.overhang``.
+    """
+    try:
+        import yaml
+    except ImportError as error:  # pragma: no cover - depends on environment
+        raise GeometryError("PyYAML is required to read the overhang") from error
+    source = Path(path) if path is not None else DEFAULT_WINDIO
+    data = yaml.safe_load(source.read_text(encoding="utf-8"))
+    return float(data["components"]["nacelle"]["drivetrain"]["overhang"])
+
+
 def _format(value: float) -> str:
     text = f"{value:.10g}"
     return "0" if text in ("-0", "") else text

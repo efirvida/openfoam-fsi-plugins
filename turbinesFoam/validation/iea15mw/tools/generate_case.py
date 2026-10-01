@@ -79,8 +79,7 @@ N_BLADES = 3
 N_ELEMENTS = 147
 #: 4 deg precone, applied through the source's `coneAngle` key (option b).
 PRECONE_DEG = 4.0
-#: Tower downwind offset from the rotor apex [m] (ElastoDyn OverHang, negative).
-TOWER_OVERHANG = 12.097571763912535
+#: WindIO nacelle overhang (hub-to-yaw-axis distance) is the tower offset source.
 #: Tower ALM elements: the WindIO tower table has 11 unique stations (10 segments).
 TOWER_N_ELEMENTS = 40
 
@@ -479,10 +478,13 @@ def tower_element_rows() -> list[list[float]]:
 
     ``height`` is along the vertical from the rotor/hub at the origin, so the
     tower is below the hub (negative heights); ``axialDistance`` is the tower's
-    downwind offset (``-TOWER_OVERHANG``, since the rotor axis points upwind).
+    downwind offset (``-overhang``, since the rotor axis points upwind). The
+    overhang is read from the WindIO nacelle (``drivetrain.overhang``), so the
+    tower position is derived from the same geometry source as the blade.
     """
+    overhang = blade_geometry.read_tower_overhang()
     return [
-        [-TOWER_OVERHANG, station["z"] - HUB_HEIGHT, station["diameter"]]
+        [-overhang, station["z"] - HUB_HEIGHT, station["diameter"]]
         for station in blade_geometry.read_tower_table()
     ]
 
