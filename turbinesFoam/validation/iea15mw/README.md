@@ -273,9 +273,26 @@ by the physics still matches the P0 table.
 ### `elementData` and `nElements`
 
 - 50 rows in the AFTAL format `(axialDistance radius azimuth chord chordMount
-  pitch)` (`axialFlowTurbineALSource.C:134-143`), straight from
-  `blade_geometry.element_rows`: `radius = HubRad + BlSpn`, `azimuth = 0`,
-  `chordMount` = section aerodynamic centre, `pitch = -(twist + collective)`.
+  pitch curveAngle)` (`axialFlowTurbineALSource.C:134-143`), straight from
+  `blade_geometry.element_rows`. The first six columns are the classic AFTAL
+  set; the **7th `curveAngle`** is an additive turbinesFoam extension (absent in
+  legacy 6-column tables) that tilts the element section frame:
+  - `radius = HubRad + BlSpn` (physical along-blade radius; cone via
+    `coneAngle 4`);
+  - `axialDistance = -BlCrvAC` (prebend, up to 3.999 m at the tip; `+axis_` is
+    upwind);
+  - `azimuth = asin(BlSwpAC / radius)` (sweep);
+  - `chordMount` = section aerodynamic centre; `pitch = -(twist + collective)`
+    (AeroDyn also negates `BlTwist`);
+  - `curveAngle = BlCrvAng` (the local prebend slope, up to -5.77 deg at the
+    tip), applied as a rotation of the element frame about the local tangential
+    axis.
+
+  The mapping was verified against the AeroDyn node locus
+  (`position = root + RefOrientation @ (BlCrvAC, BlSwpAC, BlSpn)`, `theta =
+  (0, BlCrvAng, -BlTwist)`) — every lifting station matches to < 5 mm — in
+  `odd/tasks/iea15mw-blade-geometry-mapping.md` and
+  `tests/test_iea15mw_case.py::TestAlmConventions::test_element_positions_reproduce_aerodyn_locus`.
 - 50 geometry control points -> 49 segments, so `nElements` must be a multiple
   of 49. **`nElements = 147`** (3 per segment, ~0.80 m spacing).
 - `elementProfiles` lists the 50 per-station profiles (`polar_00` .. `polar_49`)
@@ -286,8 +303,19 @@ by the physics still matches the P0 table.
 
 ### `fvOptions` neutral baseline
 
-One `axialFlowTurbineALSource` at `origin (0 0 150)`, `axis (-1 0 0)`,
-`verticalDirection (0 0 1)`, `freeStreamVelocity (10.659 0 0)`. Neutral baseline:
+One `axialFlowTurbineALSource` at `origin (0 0 150)`, `verticalDirection (0 0
+1)`. `generate_case.py --flow-axis` selects the orientation:
+
+- **`y` (default, Aeroelast/FSI)** — `axis (0 -1 0)`, `freeStreamVelocity (0
+  10.659 0)`: fluid in **+Y**, rotor axis **−Y**, blade axis **+Z**, profiles in
+  the XY plane — the Aeroelast frame, so the fluid and structural meshes
+  coincide for FSI. The domain is the `R_z(+90°)` image (Y the 20D axis, X the
+  8D one).
+- **`x` (OpenFAST/AeroDyn)** — `axis (-1 0 0)`, `freeStreamVelocity (10.659 0
+  0)`: fluid and rotor axis along X, domain elongated in X.
+
+The `elementData` is rotor-relative and does **not** change with the flow axis.
+Neutral baseline (both orientations):
 
 - `dynamicStall { active off; }`
 - `rotationalAugmentation { active off; }`

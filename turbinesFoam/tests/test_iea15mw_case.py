@@ -42,6 +42,27 @@ build_polars = _load("iea15mw_build_polars", PACKAGE / "scripts" / "buildPolars.
 ROUND_TRIP_TOLERANCE = 1e-6
 
 
+def _v_add(a, b):
+    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
+
+
+def _v_scale(a, s):
+    return (a[0] * s, a[1] * s, a[2] * s)
+
+
+def _v_rot(v, axis, angle):
+    """Rodrigues rotation about ``axis`` through the origin (matches
+    ``actuatorLineElement::rotateVector``)."""
+    x, y, z = axis
+    c, s = math.cos(angle), math.sin(angle)
+    rm = (
+        (x * x + (1 - x * x) * c, x * y * (1 - c) - z * s, x * z * (1 - c) + y * s),
+        (x * y * (1 - c) + z * s, y * y + (1 - y * y) * c, y * z * (1 - c) - x * s),
+        (x * z * (1 - c) - y * s, y * z * (1 - c) + x * s, z * z + (1 - z * z) * c),
+    )
+    return tuple(sum(rm[i][j] * v[j] for j in range(3)) for i in range(3))
+
+
 # ---------------------------------------------------------------------------
 # P0 — geometry table
 # ---------------------------------------------------------------------------
@@ -155,15 +176,75 @@ class TestAlmConventions:
     def test_element_rows_shape(self):
         rows = blade_geometry.element_rows(GEOMETRY)
         assert len(rows) == 50
-        assert all(len(row) == 6 for row in rows)
+        assert all(len(row) == 7 for row in rows)
         geometry = blade_geometry.read_geometry(GEOMETRY)
         for element, row in zip(rows, geometry):
-            assert element[0] == 0.0
+            assert element[0] == pytest.approx(row["axial_distance_m"], abs=1e-9)
             assert element[1] == pytest.approx(row["radius_m"], abs=1e-9)
-            assert element[2] == 0.0
+            assert element[2] == pytest.approx(row["azimuth_deg"], abs=1e-9)
             assert element[3] == pytest.approx(row["chord_m"], abs=1e-9)
             assert element[4] == pytest.approx(row["chord_mount"], abs=1e-9)
             assert element[5] == pytest.approx(row["pitch_deg"], abs=1e-9)
+            assert element[6] == pytest.approx(row["curve_angle_deg"], abs=1e-9)
+
+    def test_blade_shape_columns_match_aerodyn(self):
+        rows = blade_geometry.read_geometry(GEOMETRY)
+        source = blade_geometry.read_blade_table()
+        for row, station in zip(rows, source):
+            # The committed CSV carries 10 significant digits.
+            assert row["crv_ac_m"] == pytest.approx(station["crv_ac"], abs=1e-9)
+            assert row["swp_ac_m"] == pytest.approx(station["swp_ac"], abs=1e-9)
+            assert row["crv_ang_deg"] == pytest.approx(station["crv_ang"], abs=1e-9)
+            # axialDistance = -BlCrvAC (prebend), curveAngle = BlCrvAng.
+            assert row["axial_distance_m"] == pytest.approx(-station["crv_ac"], abs=1e-9)
+            assert row["curve_angle_deg"] == pytest.approx(station["crv_ang"], abs=1e-9)
+            # azimuth = asin(BlSwpAC / radius).
+            expected = math.degrees(
+                math.asin(max(-1.0, min(1.0, station["swp_ac"] / row["radius_m"])))
+            )
+            assert row["azimuth_deg"] == pytest.approx(expected, abs=1e-9)
+        # The tip prebend is ~4 m upwind and the tip curve angle ~-5.77 deg.
+        assert rows[-1]["axial_distance_m"] == pytest.approx(3.9987, abs=1e-3)
+        assert rows[-1]["curve_angle_deg"] == pytest.approx(-5.7654, abs=1e-3)
+
+    def test_element_positions_reproduce_aerodyn_locus(self):
+        """The ALM aero-centre positions must match the AeroDyn node locus.
+
+        Mirrors ``axialFlowTurbineALSource.C`` (cone about the tangential,
+        azimuth about the rotor axis) and AeroDyn's ``position = root +
+        RefOrientation @ (BlCrvAC, BlSwpAC, BlSpn)`` with ``RefOrientation``
+        the ElastoDyn ``PreCone``. The circular/transition root stations use a
+        different ``chordMount`` reference line and are excluded; every lifting
+        station (``chord_mount == 0.25``) must match to < 5 mm.
+        """
+        precone = math.radians(-4.0)
+        cone = 4.0
+        hub = blade_geometry.HUB_RADIUS
+        source = blade_geometry.read_blade_table()
+        rows = blade_geometry.read_geometry(GEOMETRY)
+        axis, radial, tangential = (-1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (0.0, 1.0, 0.0)
+        for row, station in zip(rows, source):
+            point = _v_add(
+                _v_scale(axis, row["axial_distance_m"]),
+                _v_scale(radial, row["radius_m"]),
+            )
+            point = _v_add(
+                point,
+                _v_scale(tangential, -(row["chord_mount"] - 0.25) * row["chord_m"]),
+            )
+            point = _v_rot(point, tangential, math.radians(-cone))
+            point = _v_rot(point, axis, math.radians(row["azimuth_deg"]))
+            aerodyn = _v_add(
+                _v_rot((0.0, 0.0, hub), (0.0, 1.0, 0.0), precone),
+                _v_rot(
+                    (station["crv_ac"], station["swp_ac"], station["span"]),
+                    (0.0, 1.0, 0.0),
+                    precone,
+                ),
+            )
+            residual = math.dist(point, aerodyn)
+            if row["chord_mount"] == pytest.approx(0.25, abs=1e-9):
+                assert residual < 5e-3, (row["span_m"], residual)
 
     def test_nelements_must_be_multiple_of_49(self):
         rows = blade_geometry.read_geometry(GEOMETRY)
@@ -476,9 +557,9 @@ class TestFvOptions:
         assert fvoptions["turbine"]["active"] == "on"
         assert float(coeffs["tipSpeedRatio"]) == pytest.approx(RATED_TSR, abs=1e-6)
         assert float(coeffs["rotorRadius"]) == pytest.approx(RATED_RADIUS, abs=1e-4)
-        assert [float(v) for v in coeffs["freeStreamVelocity"]] == [10.659, 0.0, 0.0]
+        assert [float(v) for v in coeffs["freeStreamVelocity"]] == [0.0, 10.659, 0.0]
         assert [float(v) for v in coeffs["origin"]] == [0.0, 0.0, 150.0]
-        assert [float(v) for v in coeffs["axis"]] == [-1.0, 0.0, 0.0]
+        assert [float(v) for v in coeffs["axis"]] == [0.0, -1.0, 0.0]
         assert [float(v) for v in coeffs["verticalDirection"]] == [0.0, 0.0, 1.0]
 
     def test_three_blades_120_apart(self, fvoptions):
@@ -510,13 +591,16 @@ class TestFvOptions:
         geometry = blade_geometry.read_geometry(GEOMETRY)
         assert len(rows) == len(geometry) == 50
         for element, row in zip(rows, geometry):
-            assert len(element) == 6
-            assert float(element[0]) == 0.0
+            assert len(element) == 7
+            assert float(element[0]) == pytest.approx(
+                row["axial_distance_m"], abs=1e-6
+            )
             assert float(element[1]) == pytest.approx(row["radius_m"], abs=1e-6)
-            assert float(element[2]) == 0.0
+            assert float(element[2]) == pytest.approx(row["azimuth_deg"], abs=1e-6)
             assert float(element[3]) == pytest.approx(row["chord_m"], abs=1e-6)
             assert float(element[4]) == pytest.approx(row["chord_mount"], abs=1e-6)
             assert float(element[5]) == pytest.approx(row["pitch_deg"], abs=1e-6)
+            assert float(element[6]) == pytest.approx(row["curve_angle_deg"], abs=1e-6)
 
     def test_element_twist_sign(self, fvoptions):
         rows = _coeffs(fvoptions)["blades"]["blade1"]["elementData"]
@@ -585,7 +669,48 @@ class TestCaseSkeleton:
 
     def test_u_field_prescribes_rated_speed(self):
         text = (CASE_DIR / "0.org" / "U").read_text(encoding="utf-8")
-        assert "uniform (10.659 0 0)" in text
+        assert "uniform (0 10.659 0)" in text
+
+    def test_flow_axis_y_points_flow_and_rotor_along_y(self, tmp_path):
+        """The Aeroelast/FSI orientation: fluid +Y, rotor axis -Y, blade axis +Z."""
+        case_dir = tmp_path / "y"
+        assert (
+            generate_case.main(["--case-dir", str(case_dir), "--flow-axis", "y"])
+            == 0
+        )
+        fv = (case_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "axis (0 -1 0);" in fv
+        assert "verticalDirection (0 0 1);" in fv
+        assert "freeStreamVelocity (0 10.659 0);" in fv
+        u = (case_dir / "0.org" / "U").read_text(encoding="utf-8")
+        assert "uniform (0 10.659 0)" in u
+        # The domain is the R_z(+90) image: flow (Y) 20D, lateral (X) 8D.
+        text = (case_dir / "system" / "blockMeshDict").read_text(encoding="utf-8")
+        block = text.split("vertices")[1].split("blocks")[0]
+        pts = [
+            tuple(float(value) for value in group.split())
+            for group in re.findall(r"\(([-0-9.eE+ ]+)\)", block)
+        ]
+        d = generate_case.ROTOR_DIAMETER
+        assert max(p[1] for p in pts) - min(p[1] for p in pts) == pytest.approx(20 * d)
+        assert max(p[0] for p in pts) - min(p[0] for p in pts) == pytest.approx(8 * d)
+
+    def test_default_flow_axis_is_aeroelast_y(self):
+        fv = (CASE_DIR / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "axis (0 -1 0);" in fv
+        assert "freeStreamVelocity (0 10.659 0);" in fv
+
+    def test_flow_axis_x_is_the_openfast_orientation(self, tmp_path):
+        case_dir = tmp_path / "x"
+        assert (
+            generate_case.main(["--case-dir", str(case_dir), "--flow-axis", "x"])
+            == 0
+        )
+        fv = (case_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "axis (-1 0 0);" in fv
+        assert "freeStreamVelocity (10.659 0 0);" in fv
+        u = (case_dir / "0.org" / "U").read_text(encoding="utf-8")
+        assert "uniform (10.659 0 0)" in u
 
     def test_inflow_k_and_omega_consistent(self):
         fields = generate_case.inflow_fields(10.659)
@@ -621,6 +746,22 @@ class TestCheckMode:
     def test_check_passes_for_committed_case(self):
         assert generate_case.main(["--check", "--case-dir", str(CASE_DIR)]) == 0
 
+    def test_start_from_latest_time(self, tmp_path):
+        case_dir = tmp_path / "case"
+        assert (
+            generate_case.main(
+                ["--case-dir", str(case_dir), "--start-from", "latestTime"]
+            )
+            == 0
+        )
+        text = (case_dir / "system" / "controlDict").read_text(encoding="utf-8")
+        assert "startFrom latestTime;" in text
+        # The default stays startTime (the committed case must be unchanged).
+        assert (
+            generate_case.main(["--case-dir", str(case_dir), "--check"])
+            == 1
+        )
+
     def test_check_fails_when_stale(self, tmp_path):
         case_dir = tmp_path / "case"
         assert generate_case.main(["--case-dir", str(case_dir)]) == 0
@@ -647,4 +788,4 @@ class TestCheckMode:
         text = (case_dir / "system" / "fvOptions").read_text(encoding="utf-8")
         expected = generate_case.tip_speed_ratio(9.0, 6.0)
         assert f"tipSpeedRatio {expected:.8g};" in text
-        assert "freeStreamVelocity (9 0 0);" in text
+        assert "freeStreamVelocity (0 9 0);" in text

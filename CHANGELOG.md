@@ -1,5 +1,46 @@
 # Changelog
 
+## [Unreleased] — 2026-10-01
+
+### Bug Fixes
+
+#### 1. Guard `profileData::interpolate` against a constant table
+
+**Files:**
+- `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineElement/profileData/profileData.C`
+
+**Problem:** `calcZeroLiftDragCoeff()` interpolates the drag coefficient at
+`Cl = 0` from the sampled `Cl`/`Cd` lists. A polar whose `Cl` is constant over
+the sampled range (the IEA 15 MW circular-root polar fixes `Cl` at 0.0001)
+makes the interpolation denominator `Cl[i+1] - Cl[i]` zero and the trapped
+`FOAM_SIGFPE` aborts the ALM. Phase VI never hit it because its cylinder
+placeholder has `Cl = 0` exactly and takes the early `==` return.
+
+**Fix:** return the nearest sample when the interpolation denominator is zero.
+
+### New Features
+
+#### 2. AeroDyn blade shape (prebend, sweep, curve angle) in the ALM
+
+**Files:**
+- `turbinesFoam/src/fvOptions/axialFlowTurbineALSource/axialFlowTurbineALSource.C`
+- `turbinesFoam/validation/iea15mw/tools/blade_geometry.py`
+- `turbinesFoam/validation/iea15mw/tools/generate_case.py`
+
+**Problem:** the IEA 15-240-RWT `elementData` carried only the radial position,
+chord and twist, dropping the blade's out-of-plane prebend (`BlCrvAC`, to
+−4.0 m), in-plane sweep (`BlSwpAC`, to ±0.44 m) and curve angle (`BlCrvAng`, to
+−5.77°). AeroDyn places each node at `(BlCrvAC, BlSwpAC, BlSpn)` with an
+orientation `EulerConstruct((0, BlCrvAng, -BlTwist))`.
+
+**Fix:** `axialFlowTurbineALSource` reads an additive 7th `elementData` column,
+the curve angle, and tilts the element frame about the local tangential axis
+before the azimuth rotation (mirroring AeroDyn's `R_y(BlCrvAng)`). A 6-column
+table keeps the legacy zero curve angle (byte-identical). The IEA generator maps
+`axialDistance = -BlCrvAC`, `azimuth = asin(BlSwpAC/radius)` and
+`curveAngle = BlCrvAng`, verified against the AeroDyn node locus to < 5 mm at
+the lifting stations.
+
 ## [Unreleased] — 2026-04-02
 
 ### New Features

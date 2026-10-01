@@ -141,6 +141,13 @@ void Foam::fv::axialFlowTurbineALSource::createBlades()
             scalar chordLength = elementData[j][3];
             scalar chordMount = elementData[j][4];
             scalar pitch = elementData[j][5];
+            // AeroDyn BlCrvAng section-frame tilt (7th column, additive).
+            // A 6-column elementData keeps the legacy zero curve angle.
+            scalar curveAngleDegrees = 0.0;
+            if (elementData[j].size() > 6)
+            {
+                curveAngleDegrees = elementData[j][6];
+            }
 
             // Find max radius for calculating frontal area
             if (radius > maxRadius)
@@ -217,6 +224,23 @@ void Foam::fv::axialFlowTurbineALSource::createBlades()
                 azimuthalDirection_,
                 -coneAngleRadians
             );
+
+            // AeroDyn BlCrvAng: tilt the local span about the tangential
+            // (sweep) axis so the section frame follows the prebend slope.
+            // Applied before the azimuth rotation, like the cone. Zero when
+            // the 7th elementData column is absent, so existing cases are
+            // byte-identical.
+            if (curveAngleDegrees != 0.0)
+            {
+                rotateVector
+                (
+                    spanDirection,
+                    vector::zero,
+                    azimuthalDirection_,
+                    degToRad(curveAngleDegrees)
+                );
+            }
+
             // Rotate span and chord directions according to azimuth
             rotateVector(spanDirection, vector::zero, axis_, azimuthRadians);
             elementGeometry[j][1][0] = spanDirection.x();

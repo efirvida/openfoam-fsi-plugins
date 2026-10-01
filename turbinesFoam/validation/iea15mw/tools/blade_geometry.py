@@ -95,6 +95,12 @@ COLUMNS = (
     "chord_mount",
     "pitch_deg",
     "airfoil_id",
+    "crv_ac_m",
+    "swp_ac_m",
+    "crv_ang_deg",
+    "axial_distance_m",
+    "azimuth_deg",
+    "curve_angle_deg",
 )
 
 # Distinct airfoil labels and their grid positions (WindIO ``airfoil_position``).
@@ -199,6 +205,11 @@ def interpolated_aerodynamic_center(span_fraction: float) -> float:
     raise GeometryError(f"span fraction {span_fraction} outside the airfoil grid")
 
 
+def _asin_degrees(ratio: float) -> float:
+    """``asin`` in degrees, clamped so rounding cannot raise a domain error."""
+    return math.degrees(math.asin(max(-1.0, min(1.0, ratio))))
+
+
 def build_rows(
     blade: list[dict[str, float]] | None = None,
     collective_pitch_deg: float = 0.0,
@@ -226,6 +237,18 @@ def build_rows(
                 "chord_mount": interpolated_aerodynamic_center(span_fraction),
                 "pitch_deg": -(station["twist"] + collective_pitch_deg),
                 "airfoil_id": station["af_id"],
+                # AeroDyn blade shape (out-of-plane / in-plane / curve angle).
+                "crv_ac_m": station["crv_ac"],
+                "swp_ac_m": station["swp_ac"],
+                "crv_ang_deg": station["crv_ang"],
+                # turbinesFoam ALM ← AeroDyn mapping (verified against the
+                # AeroDyn node locus; see odd/tasks/iea15mw-blade-geometry-mapping.md):
+                #   axialDistance = -BlCrvAC   (prebend; +axis_ is upwind)
+                #   azimuth       = asin(BlSwpAC / radius)
+                #   curveAngle    = BlCrvAng   (tilts the section frame)
+                "axial_distance_m": -station["crv_ac"],
+                "azimuth_deg": _asin_degrees(station["swp_ac"] / radius_m),
+                "curve_angle_deg": station["crv_ang"],
             }
         )
     return rows
@@ -251,20 +274,24 @@ def element_rows(
     collective_pitch_deg: float = 0.0,
 ) -> list[list[float]]:
     """turbinesFoam blade element rows ``(axialDistance radius azimuth chord
-    chordMount pitch)`` for the committed geometry.
+    chordMount pitch curveAngle)`` for the committed geometry.
 
     The radius is the along-blade radius (``HubRad + span``); the case should
     apply ``coneAngle`` 4 deg so the ALM projects it onto the rotor plane.
+    ``axialDistance`` is the prebend (``-BlCrvAC``), ``azimuth`` the sweep and
+    ``curveAngle`` the AeroDyn ``BlCrvAng`` section tilt (the 7th column is
+    additive: a 6-column table keeps the legacy zero curve angle).
     """
     rows = read_geometry(path)
     return [
         [
-            0.0,
+            row["axial_distance_m"],
             row["radius_m"],
-            0.0,
+            row["azimuth_deg"],
             row["chord_m"],
             row["chord_mount"],
             -(row["twist_deg"] + collective_pitch_deg),
+            row["curve_angle_deg"],
         ]
         for row in rows
     ]
@@ -295,6 +322,12 @@ HEADER = [
     "# pitch_axis is the structural pitch axis (OpenFAST ElastoDyn PitchAxis); it is",
     "# NOT the ALM chord mount and is recorded here for the audit only.",
     "# airfoil_id = BlAFID (1..50, per-node AeroDyn15 polar index).",
+    "#",
+    "# Blade shape (AeroDyn v15, see odd/tasks/iea15mw-blade-geometry-mapping.md):",
+    "# crv_ac_m = BlCrvAC (prebend, + downwind), swp_ac_m = BlSwpAC (sweep,",
+    "# + opposite rotation), crv_ang_deg = BlCrvAng (curve angle = prebend slope).",
+    "# axial_distance_m = -BlCrvAC (ALM prebend slot), azimuth_deg = asin(BlSwpAC/",
+    "# radius) (ALM sweep), curve_angle_deg = BlCrvAng (ALM section-frame tilt).",
 ]
 
 
