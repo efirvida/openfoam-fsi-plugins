@@ -30,17 +30,33 @@ it activates surface sampling (`actuatorLineSource.C:76, 211, 602`). The only
 difference between the Phase VI `fvOptions.ASM` and `fvOptions.ASM-MESH` twins
 is that single line.
 
-## Rotation direction — a real blocker
+## Rotation direction — RESOLVED: keep ccw
 
 `turbineALSource` fixes the direction: `omega_ = tipSpeedRatio·mag(V)/R`
 (always positive) and `azimuthalDirection_ = axis × vertical`; the header says
-*"Positive anti-clockwise when looking along axis direction"*. There is **no
-direction switch**. The current ALM case therefore rotates counter-clockwise;
-Aeroelast states *"clockwise when viewed from above (wind comes from the
-left)"*. Decision: add a **`--rotation {ccw,cw}`** option, default **cw**, which
-flips the applied azimuth (a C++ direction factor on the azimuth, not on the
-TSR, so the coefficient normalisation keeps its sign). The exact Aeroelast sign
-must be confirmed against CCBlade before it is frozen.
+*"Positive anti-clockwise when looking along axis direction"*. A
+`rotationSign_` (`fvOptions rotationDirection ±1`) and `--rotation {ccw,cw}` were
+added, applied to the applied azimuth and the blade speed only (the TSR used for
+cp/ct keeps its sign).
+
+**A naive cw flip is WRONG.** A dev-queue smoke test (0.1 rev) showed that
+`rotationDirection -1` inverts the azimuth *and* the rotor thrust (cd +1.13 →
+−1.06), because the sense is coupled to the blade geometry (twist/AoA).
+
+**Pinned by physics against CCBlade** (`BEMSolver.distributedAeroLoads` at the
+rated point) vs the turbinesFoam ALM first step, at r/R ≈ 0.30:
+
+| source | alpha | Cn / c_ref_n |
+|---|---|---|
+| CCBlade / Aeroelast | 9.16° | **+1.596** |
+| turbinesFoam ccw (current) | 14.26° | **+2.306** |
+| turbinesFoam cw (flip) | 26.74° | **−2.306** |
+
+The CCBlade Cn is positive and only the ccw reproduces it. CCBlade carries
+`OmegaV` along the wind axis (+X) while turbinesFoam carries `omega_` along
+`axis_` (upwind); the **labels are opposite but the physical rotor is the
+same**. So the default stays **ccw** (the physical Aeroelast rotation) and
+`--rotation cw` remains available but unused.
 
 ## Mesh — the ASM needs the chord resolved
 
@@ -75,7 +91,6 @@ problem, not a whole-domain one.
 
 ## Open questions
 
-- Which exact Aeroelast/CCBlade rotation is "clockwise", and viewed from where.
 - The `snappyHexMesh` target cell size vs the local chord (a rule, e.g. ≥4 cells
   per local chord), and the resulting cell budget.
 - Whether the tower/hub need the ASM too, or stay ALM (they are drag bodies).
