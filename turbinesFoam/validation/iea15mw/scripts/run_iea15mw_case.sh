@@ -11,8 +11,14 @@
 #
 # Environment:
 #   PHASEVI_PKG_DIR            package dir (default $SLURM_SUBMIT_DIR)
-#   PHASEVI_RUN_DIR            run dir (default runs/iea15mw-rated-coarse)
-#   PHASEVI_MESH               coarse (default)
+#   PHASEVI_RUN_DIR            run dir (default runs/iea15mw-rated-<mesh>)
+#   PHASEVI_MESH               coarse | medium | fine (default coarse)
+#   PHASEVI_UPSTREAM           upstream extent [D] (default 5)
+#   PHASEVI_DOWNSTREAM         downstream extent [D] (default 15)
+#   PHASEVI_LATERAL            lateral half-extent [D] (default 4)
+#   PHASEVI_FINE_MAX           refined region downstream end [D] (default 8)
+#   PHASEVI_FINE_LAT           refined region lateral half-width [D] (default 1.5)
+#   PHASEVI_DOMAIN_TOP         domain top [m] above the rotor (default 2.5D)
 #   PHASEVI_RANKS              ranks (default 48)
 #   PHASEVI_TOTAL_REVS         total revolutions (default 3)
 #   PHASEVI_SLICE_REVS         revolutions per allocation (default 0.5)
@@ -47,9 +53,25 @@ if [ ! -f "${pkg_dir}/tools/generate_case.py" ]; then
 fi
 cd "$pkg_dir"
 
-run_dir="${PHASEVI_RUN_DIR:-runs/iea15mw-rated-coarse}"
+run_dir="${PHASEVI_RUN_DIR:-runs/iea15mw-rated-${PHASEVI_MESH:-coarse}}"
 mesh="${PHASEVI_MESH:-coarse}"
 ranks="${PHASEVI_RANKS:-48}"
+
+domain_args=(--mesh "$mesh")
+for pair in \
+    "PHASEVI_UPSTREAM:--domain-upstream" \
+    "PHASEVI_DOWNSTREAM:--domain-downstream" \
+    "PHASEVI_LATERAL:--domain-lateral" \
+    "PHASEVI_FINE_MAX:--domain-fine-max" \
+    "PHASEVI_FINE_LAT:--domain-fine-lat" \
+    "PHASEVI_DOMAIN_TOP:--domain-top"; do
+    var="${pair%%:*}"
+    flag="${pair##*:}"
+    value="${!var:-}"
+    if [ -n "$value" ]; then
+        domain_args+=("$flag" "$value")
+    fi
+done
 total_revs="${PHASEVI_TOTAL_REVS:-3}"
 requeue="${PHASEVI_REQUEUE:-1}"
 
@@ -102,10 +124,10 @@ fi
 echo "IEA 15 MW P3 on $(hostname): latest=${latest} s (${latest_revs} rev); slice end=${slice_end_revs} rev; mesh=${mesh}; ranks=${ranks}"
 
 if [ "$resume" -eq 1 ]; then
-    "$PYTHON" tools/generate_case.py --case-dir "$run_dir" --mesh "$mesh" \
+    "$PYTHON" tools/generate_case.py --case-dir "$run_dir" "${domain_args[@]}" \
         --end-revs "$slice_end_revs" --start-from latestTime
 else
-    "$PYTHON" tools/generate_case.py --case-dir "$run_dir" --mesh "$mesh" \
+    "$PYTHON" tools/generate_case.py --case-dir "$run_dir" "${domain_args[@]}" \
         --end-revs "$slice_end_revs"
 fi
 

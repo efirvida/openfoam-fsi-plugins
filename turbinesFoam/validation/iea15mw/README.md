@@ -361,22 +361,39 @@ at `z = -HUB_HEIGHT = -150 m`, and the top at `+DEFAULT_DOMAIN_TOP = +603.4 m`
 the rotor, `D = 241.35064632 m`. This makes the case ready for ABL /
 parameterisation studies, not just a bare rotor.
 
-The vertical mesh is hub-anchored: from `Z_GROUND_CELL = 2 m` at the ground
-(fine enough for the wall function) growing to `Z_HUB_CELL = D/32 = 7.54 m` at
-the hub, then growing at 6 % to the top. 18 hexahedral blocks (3x3x2):
+The mesh is **parametric** (`--mesh` and the `--domain-*` extents):
 
-| mesh | hub cell | ground cell | cells | cells/rank @48 |
+- **Resolution** `--mesh {coarse,medium,fine}` = `D/32`, `D/48`, `D/64` in the
+  horizontal, and the same hub-adjacent size in the vertical. Other resolutions
+  scale the base (D/32) cells proportionally, so the relative refinement and the
+  grading are preserved.
+- **Extents** `--domain-upstream` / `--domain-downstream` / `--domain-lateral`
+  (rotor diameters) and `--domain-fine-max` / `--domain-fine-lat` set the
+  refined region. `--domain-top` sets the top [m].
+- **`deltaT` is derived** from the hub-adjacent cell (tip displacement per step
+  below it): `0.075 s` coarse, `0.0498` medium, `0.0375` fine.
+
+A finer mesh is affordable by shrinking the domain — the point of the P5 mesh
+sweep:
+
+| mesh | hub cell | default (20D x 8D) | compact (10D x 5D) | cells/rank @48 |
 |---|---|---|---|---|
-| `coarse` (D/32 horizontal) | 7.50 m (~D/32) | 2 m | **4 299 792** | ~90 k |
+| `coarse` D/32 | 7.50 m | **4.30 M** | 2.02 M | ~90 k |
+| `medium` D/48 | 4.98 m | 11.98 M | 5.65 M | ~118 k (compact) |
+| `fine` D/64 | 3.75 m | 24.39 M | 11.48 M | ~239 k (compact) |
 
-`decomposeParDict` uses `numberOfSubdomains 48` (the P3 plan). `controlDict`
-uses `deltaT 0.075 s` and `endTime 3` revolutions (23.94 s): the tip
-displacement per step is `95.006 * 0.075 = 7.13 m`, below the hub-adjacent cell
-`7.50 m`.
+`decomposeParDict` uses `numberOfSubdomains 48` (the P3 plan). `endTime 3`
+revolutions (23.94 s): the tip displacement per step is `95.006 * 0.075 =
+7.13 m`, below the coarse hub-adjacent cell `7.50 m`.
 
-Verified with a loaded OpenFOAM v2506 environment on the rendered case:
+Verified with a loaded OpenFOAM v2506 environment on the rendered coarse case:
 `blockMesh` reports `nCells: 4299792` (matching the analytic count) and
 `checkMesh` reports `Mesh OK` (non-orthogonality 3.1e-06).
+
+**Running the finer meshes**: they do not fit the 20-minute development queue,
+so `scripts/slurm/production.slurm` runs the whole case (96 h) for a given
+`PHASEVI_MESH` / `PHASEVI_*` domain, while `scripts/slurm/coarse-dev.slurm`
+keeps the 20-minute sliced/self-requeuing path for the coarse mesh.
 
 ## Known limitations
 

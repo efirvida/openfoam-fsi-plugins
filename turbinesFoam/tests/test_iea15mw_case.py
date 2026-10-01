@@ -689,9 +689,29 @@ class TestCaseSkeleton:
         top = 3.0 * generate_case.ROTOR_DIAMETER
         breaks, _, _ = generate_case.vertical_mesh(top)
         assert breaks[-1] == pytest.approx(top)
-        # The hub-adjacent cell stays ~D/32 independent of the domain top.
-        assert generate_case.hub_cell_size("coarse", top) == pytest.approx(
+        # The hub-adjacent cell stays ~D/32 for the coarse mesh.
+        domain = generate_case.domain_spec("coarse", top=top)
+        assert generate_case.hub_cell_size(domain) == pytest.approx(
             generate_case.ROTOR_DIAMETER / 32.0, rel=0.03
+        )
+
+    def test_mesh_resolution_and_domain_are_parametric(self):
+        coarse = generate_case.domain_spec("coarse")
+        fine = generate_case.domain_spec("fine")
+        # A finer mesh has a smaller hub cell and more cells.
+        assert generate_case.hub_cell_size(fine) < generate_case.hub_cell_size(coarse)
+        assert generate_case.cell_count(fine) > generate_case.cell_count(coarse)
+        # A smaller domain has fewer cells.
+        small = generate_case.domain_spec(
+            "coarse", upstream=2.5, downstream=7.5, lateral=2.5
+        )
+        assert generate_case.cell_count(small) < generate_case.cell_count(coarse)
+        # A compact finer domain can cost about the same as the big coarse one.
+        compact_medium = generate_case.domain_spec(
+            "medium", upstream=2.5, downstream=7.5, lateral=2.5
+        )
+        assert generate_case.cell_count(compact_medium) < 2.0 * generate_case.cell_count(
+            coarse
         )
 
     def test_flow_axis_y_points_flow_and_rotor_along_y(self, tmp_path):

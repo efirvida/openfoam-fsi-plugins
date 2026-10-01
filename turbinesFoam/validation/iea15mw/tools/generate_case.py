@@ -84,32 +84,116 @@ TOWER_OVERHANG = 12.097571763912535
 #: Tower ALM elements: the WindIO tower table has 11 unique stations (10 segments).
 TOWER_N_ELEMENTS = 40
 
-# --- Domain and mesh (ground-anchored, D/32) ---------------------------------
-#: Horizontal box: 20D streamwise x 8D lateral around the rotor.
-DOMAIN_D = {"x": (-5.0, 15.0), "y": (-4.0, 4.0)}
-MESH_CHOICES = ("coarse",)
-#: Horizontal block breaks in D units.
-BREAKS_D = {
-    "x": [-5.0, -0.5, 8.0, 15.0],
-    "y": [-4.0, -1.5, 1.5, 4.0],
-}
-#: Default domain top [m] above the rotor/hub (the floor is z = -HUB_HEIGHT).
+# --- Domain and mesh (ground-anchored, parametric) ---------------------------
+#: Horizontal mesh resolutions: cells across the rotor diameter.
+MESH_CHOICES = ("coarse", "medium", "fine")
+MESH_D_OVER = {"coarse": 32.0, "medium": 48.0, "fine": 64.0}
+#: Base (coarse, D/32) horizontal block breaks [D] and cells/grading. Other
+#: resolutions and domain extents scale the cells proportionally, so the grading
+#: (a ratio) and the relative resolution are preserved.
+BASE_FLOW_BREAKS = (-5.0, -0.5, 8.0, 15.0)
+BASE_LAT_BREAKS = (-4.0, -1.5, 1.5, 4.0)
+BASE_FLOW_CELLS = (50, 272, 60)
+BASE_LAT_CELLS = (36, 96, 36)
+BASE_FLOW_GRADING = (0.160029, 1.0, 9.252929)
+BASE_LAT_GRADING = (0.241240, 1.0, 4.145249)
+#: Default domain extents [D] and top [m above the rotor].
+DEFAULT_UPSTREAM_D = 5.0
+DEFAULT_DOWNSTREAM_D = 15.0
+DEFAULT_LATERAL_D = 4.0
+DEFAULT_FINE_MAX_D = 8.0
+DEFAULT_FINE_LAT_D = 1.5
 DEFAULT_DOMAIN_TOP = 2.5 * ROTOR_DIAMETER
-#: Hub-adjacent vertical cell [m] (~D/32; the time-step constraint).
+#: Ground-anchored vertical refinement: hub-adjacent and ground-adjacent cells [m].
 Z_HUB_CELL = ROTOR_DIAMETER / 32.0
-#: Ground-adjacent vertical cell [m] and vertical growth ratio above the hub.
 Z_GROUND_CELL = 2.0
 Z_GROWTH = 1.06
-#: D/32 development mesh (horizontal); the vertical is ground-anchored.
-MESH = {
-    "coarse": {
-        "x": {"cells": [50, 272, 60], "grading": [0.160029, 1.0, 9.252929]},
-        "y": {"cells": [36, 96, 36], "grading": [0.241240, 1.0, 4.145249]},
-        "delta_t": 0.075,
-    }
-}
-#: Recorded expected cell count of the default ground-anchored mesh.
+#: Recorded expected cell count of the default ground-anchored coarse mesh.
 EXPECTED_CELL_COUNT = 4_299_792
+
+
+def domain_spec(
+    mesh: str = "coarse",
+    upstream: float = DEFAULT_UPSTREAM_D,
+    downstream: float = DEFAULT_DOWNSTREAM_D,
+    lateral: float = DEFAULT_LATERAL_D,
+    fine_max: float = DEFAULT_FINE_MAX_D,
+    fine_lat: float = DEFAULT_FINE_LAT_D,
+    top: float = DEFAULT_DOMAIN_TOP,
+) -> dict[str, float | str]:
+    """Bundle the parametric domain/mesh definition (D units, and top in m)."""
+    if mesh not in MESH_D_OVER:
+        raise KeyError(f"unsupported mesh {mesh!r}; choose from {MESH_CHOICES}")
+    if not (0.0 < upstream and 0.0 < lateral and downstream > upstream):
+        raise ValueError("domain extents must satisfy downstream > upstream > 0")
+    return {
+        "mesh": mesh,
+        "upstream": float(upstream),
+        "downstream": float(downstream),
+        "lateral": float(lateral),
+        "fine_max": float(fine_max),
+        "fine_lat": float(fine_lat),
+        "top": float(top),
+    }
+
+
+def _domain_breaks(domain: dict[str, float | str], axis: str) -> list[float]:
+    up = float(domain["upstream"])
+    down = float(domain["downstream"])
+    lat = float(domain["lateral"])
+    fmax = min(float(domain["fine_max"]), 0.9 * down)
+    flat = min(float(domain["fine_lat"]), 0.5 * lat)
+    d = {
+        "x": (-up, -0.5, fmax, down),
+        "y": (-lat, -flat, flat, lat),
+    }[axis]
+    return [ROTOR_DIAMETER * v for v in d]
+
+
+def _scale_cells(
+    cells: tuple[int, ...],
+    base_breaks: tuple[float, ...],
+    breaks: list[float],
+    refinement: float,
+) -> list[int]:
+    """Scale the base cells for a new resolution/extent, keeping the cell size."""
+    scaled = []
+    for index, count in enumerate(cells):
+        base_len = abs(base_breaks[index + 1] - base_breaks[index])
+        new_len = abs(breaks[index + 1] - breaks[index])
+        scaled.append(max(1, round(count * refinement * new_len / base_len)))
+    return scaled
+
+
+def flow_breaks(domain: dict[str, float | str]) -> list[float]:
+    """Streamwise block breaks [m]."""
+    return _domain_breaks(domain, "x")
+
+
+def lateral_breaks(domain: dict[str, float | str]) -> list[float]:
+    """Lateral block breaks [m]."""
+    return _domain_breaks(domain, "y")
+
+
+def flow_cells(domain: dict[str, float | str]) -> list[int]:
+    refinement = MESH_D_OVER[str(domain["mesh"])] / MESH_D_OVER["coarse"]
+    base = [ROTOR_DIAMETER * v for v in BASE_FLOW_BREAKS]
+    return _scale_cells(BASE_FLOW_CELLS, base, flow_breaks(domain), refinement)
+
+
+def lateral_cells(domain: dict[str, float | str]) -> list[int]:
+    refinement = MESH_D_OVER[str(domain["mesh"])] / MESH_D_OVER["coarse"]
+    base = [ROTOR_DIAMETER * v for v in BASE_LAT_BREAKS]
+    return _scale_cells(BASE_LAT_CELLS, base, lateral_breaks(domain), refinement)
+
+
+def delta_t(domain: dict[str, float | str], rpm: float = RATED_RPM) -> float:
+    """Time step [s]: tip displacement per step stays below the hub-adjacent cell.
+
+    Rounded to 3 significant figures so the coarse case keeps ``deltaT 0.075``.
+    """
+    tip_speed = omega_from_rpm(rpm) * ROTOR_RADIUS
+    return float(f"{0.95 * hub_cell_size(domain) / tip_speed:.3g}")
 
 # --- Decomposition (P3 plan) -------------------------------------------------
 NUMBER_OF_SUBDOMAINS = 48
@@ -186,10 +270,13 @@ def revolution_period(rpm: float) -> float:
 
 
 def axis_extents(axis: str) -> list[float]:
-    """Horizontal block extents [m] of one axis (absolute multiples of D)."""
-    if axis not in BREAKS_D:
-        raise KeyError(f"{axis!r} is not a horizontal axis (x/y)")
-    return [ROTOR_DIAMETER * float(value) for value in BREAKS_D[axis]]
+    """Default-domain horizontal block extents [m] of one axis (x/y)."""
+    domain = domain_spec()
+    if axis == "x":
+        return flow_breaks(domain)
+    if axis == "y":
+        return lateral_breaks(domain)
+    raise KeyError(f"{axis!r} is not a horizontal axis (x/y)")
 
 
 def _geometric_layer(length: float, first_cell: float, last_cell: float) -> tuple[int, float]:
@@ -229,37 +316,48 @@ def _growing_layer(length: float, first_cell: float, growth: float) -> tuple[int
 
 def vertical_mesh(
     domain_top: float = DEFAULT_DOMAIN_TOP,
+    mesh: str = "coarse",
 ) -> tuple[list[float], list[int], list[float]]:
     """Hub-anchored vertical mesh: breaks, cells and grading.
 
     The rotor/hub is at z = 0 and the floor at z = -``HUB_HEIGHT``. Below the
     hub the cells go from ``Z_GROUND_CELL`` (at the ground, for the wall
-    function) up to ``Z_HUB_CELL``; above the hub they grow at ``Z_GROWTH`` to
-    ``domain_top``.
+    function) up to the mesh's hub-adjacent size (``D/32`` coarse, ``D/64``
+    fine); above the hub they grow at ``Z_GROWTH`` to ``domain_top``.
     """
     top = float(domain_top)
     if top <= 0.0:
         raise ValueError(f"domain top {top} must be above the hub (z = 0)")
+    hub_cell = ROTOR_DIAMETER / MESH_D_OVER.get(mesh, MESH_D_OVER["coarse"])
     breaks = [-HUB_HEIGHT, 0.0, top]
-    n_low, grade_low = _geometric_layer(HUB_HEIGHT, Z_GROUND_CELL, Z_HUB_CELL)
-    n_up, grade_up = _growing_layer(top, Z_HUB_CELL, Z_GROWTH)
+    n_low, grade_low = _geometric_layer(HUB_HEIGHT, Z_GROUND_CELL, hub_cell)
+    n_up, grade_up = _growing_layer(top, hub_cell, Z_GROWTH)
     return breaks, [n_low, n_up], [grade_low, grade_up]
 
 
-def cell_count(mesh: str = "coarse", domain_top: float = DEFAULT_DOMAIN_TOP) -> int:
-    """Total hexahedral cell count of a rendered mesh."""
-    resolution = _resolution(mesh)
-    total = 1
-    for axis in ("x", "y"):
-        total *= sum(int(value) for value in resolution[axis]["cells"])
-    _, z_cells, _ = vertical_mesh(domain_top)
+def _as_domain(domain: object = None) -> dict[str, float | str]:
+    """Accept a domain spec, a mesh name, or ``None`` (the default domain)."""
+    if domain is None:
+        return domain_spec()
+    if isinstance(domain, str):
+        return domain_spec(mesh=domain)
+    if isinstance(domain, dict):
+        return domain
+    raise TypeError(f"unsupported domain {domain!r}")
+
+
+def cell_count(domain: object = None) -> int:
+    """Total hexahedral cell count of the domain/mesh."""
+    domain = _as_domain(domain)
+    total = sum(flow_cells(domain)) * sum(lateral_cells(domain))
+    _, z_cells, _ = vertical_mesh(domain["top"], str(domain["mesh"]))
     return total * sum(z_cells)
 
 
-def hub_cell_size(mesh: str = "coarse", domain_top: float = DEFAULT_DOMAIN_TOP) -> float:
+def hub_cell_size(domain: object = None) -> float:
     """Finest hub-adjacent vertical cell [m]; the time-step constraint length."""
-    del mesh  # the vertical mesh depends only on the domain top
-    breaks, z_cells, z_grading = vertical_mesh(domain_top)
+    domain = _as_domain(domain)
+    breaks, z_cells, z_grading = vertical_mesh(domain["top"], str(domain["mesh"]))
     hub_adjacent = []
     for index, cells in enumerate(z_cells):
         sizes = _cell_sizes(
@@ -277,14 +375,6 @@ def inflow_fields(speed: float) -> dict[str, float]:
     c_mu = 0.09
     omega = math.sqrt(k) / (c_mu**0.25 * length)
     return {"k": k, "omega": omega}
-
-
-def _resolution(mesh: str) -> dict[str, Any]:
-    if mesh not in MESH:
-        raise KeyError(
-            f"unsupported mesh resolution {mesh!r}; choose from {sorted(MESH)}"
-        )
-    return MESH[mesh]
 
 
 def _cell_sizes(length: float, cells: int, grading: float) -> list[float]:
@@ -407,9 +497,8 @@ def tower_drag_coefficient() -> float:
 # Renderers
 # ---------------------------------------------------------------------------
 def render_block_mesh(
-    mesh: str = "coarse",
+    domain: object = None,
     flow_axis: str = DEFAULT_FLOW_AXIS,
-    domain_top: float = DEFAULT_DOMAIN_TOP,
 ) -> str:
     """18-block hexahedral blockMeshDict with six far-field patches.
 
@@ -417,17 +506,13 @@ def render_block_mesh(
     to physical coordinates (see ``_role_to_physical``). The vertical mesh is
     hub-anchored: z = 0 at the rotor, the floor at -``HUB_HEIGHT``.
     """
-    resolution = _resolution(mesh)
-    z_breaks, z_cells, z_grading = vertical_mesh(domain_top)
-    breaks = {"x": axis_extents("x"), "y": axis_extents("y"), "z": z_breaks}
-    cells = {
-        "x": [int(value) for value in resolution["x"]["cells"]],
-        "y": [int(value) for value in resolution["y"]["cells"]],
-        "z": z_cells,
-    }
+    domain = _as_domain(domain)
+    z_breaks, z_cells, z_grading = vertical_mesh(domain["top"], str(domain["mesh"]))
+    breaks = {"x": flow_breaks(domain), "y": lateral_breaks(domain), "z": z_breaks}
+    cells = {"x": flow_cells(domain), "y": lateral_cells(domain), "z": z_cells}
     grading = {
-        "x": [float(value) for value in resolution["x"]["grading"]],
-        "y": [float(value) for value in resolution["y"]["grading"]],
+        "x": [float(value) for value in BASE_FLOW_GRADING],
+        "y": [float(value) for value in BASE_LAT_GRADING],
         "z": z_grading,
     }
     nx, ny, nz = (len(breaks[axis]) for axis in ("x", "y", "z"))
@@ -533,11 +618,11 @@ def render_toposet(flow_axis: str = DEFAULT_FLOW_AXIS) -> str:
 def render_control_dict(
     speed: float = RATED_SPEED,
     rpm: float = RATED_RPM,
-    mesh: str = "coarse",
+    domain: object = None,
     end_revs: float = DEFAULT_END_REVOLUTIONS,
     start_from: str = "startTime",
 ) -> str:
-    resolution = _resolution(mesh)
+    domain = _as_domain(domain)
     t_rev = revolution_period(rpm)
     end_time = float(end_revs) * t_rev
     write_interval = WRITE_INTERVAL_REV * t_rev
@@ -546,7 +631,7 @@ startFrom {start_from};
 startTime 0;
 stopAt endTime;
 endTime {end_time:.8g};
-deltaT {float(resolution['delta_t']):.8g};
+deltaT {delta_t(domain, rpm):.8g};
 writeControl runTime;
 writeInterval {write_interval:.8g};
 purgeWrite 1;
@@ -962,26 +1047,26 @@ def outputs(
     speed: float = RATED_SPEED,
     rpm: float = RATED_RPM,
     pitch_deg: float = RATED_PITCH_DEG,
-    mesh: str = "coarse",
+    domain: object = None,
     case_dir: Path = DEFAULT_CASE_DIR,
     n_elements: int = N_ELEMENTS,
     cone_angle: float = PRECONE_DEG,
     end_revs: float = DEFAULT_END_REVOLUTIONS,
     start_from: str = "startTime",
     flow_axis: str = DEFAULT_FLOW_AXIS,
-    domain_top: float = DEFAULT_DOMAIN_TOP,
     tower: bool = True,
     hub: bool = False,
 ) -> dict[Path, str]:
+    domain = _as_domain(domain)
     case_dir = Path(case_dir)
     system = case_dir / "system"
     constant = case_dir / "constant"
     zero = case_dir / "0.org"
     rendered: dict[Path, str] = {
-        system / "blockMeshDict": render_block_mesh(mesh, flow_axis, domain_top),
+        system / "blockMeshDict": render_block_mesh(domain, flow_axis),
         system / "topoSetDict": render_toposet(flow_axis),
         system / "controlDict": render_control_dict(
-            speed, rpm, mesh, end_revs, start_from
+            speed, rpm, domain, end_revs, start_from
         ),
         system / "decomposeParDict": render_decompose_par(),
         system / "fvSchemes": render_fv_schemes(),
@@ -1056,6 +1141,36 @@ def main(argv: list[str] | None = None) -> int:
         help="flow/rotor axis: y = Aeroelast/FSI (fluid +Y, default), x = OpenFAST",
     )
     parser.add_argument(
+        "--domain-upstream",
+        type=float,
+        default=DEFAULT_UPSTREAM_D,
+        help="upstream extent [rotor diameters]",
+    )
+    parser.add_argument(
+        "--domain-downstream",
+        type=float,
+        default=DEFAULT_DOWNSTREAM_D,
+        help="downstream extent [rotor diameters]",
+    )
+    parser.add_argument(
+        "--domain-lateral",
+        type=float,
+        default=DEFAULT_LATERAL_D,
+        help="lateral half-extent [rotor diameters]",
+    )
+    parser.add_argument(
+        "--domain-fine-max",
+        type=float,
+        default=DEFAULT_FINE_MAX_D,
+        help="downstream end of the refined region [rotor diameters]",
+    )
+    parser.add_argument(
+        "--domain-fine-lat",
+        type=float,
+        default=DEFAULT_FINE_LAT_D,
+        help="lateral half-width of the refined region [rotor diameters]",
+    )
+    parser.add_argument(
         "--domain-top",
         type=float,
         default=DEFAULT_DOMAIN_TOP,
@@ -1082,18 +1197,26 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        domain = domain_spec(
+            args.mesh,
+            args.domain_upstream,
+            args.domain_downstream,
+            args.domain_lateral,
+            args.domain_fine_max,
+            args.domain_fine_lat,
+            args.domain_top,
+        )
         rendered = outputs(
             args.speed,
             args.rpm,
             args.pitch,
-            args.mesh,
+            domain,
             args.case_dir,
             args.n_elements,
             args.cone_angle,
             args.end_revs,
             args.start_from,
             args.flow_axis,
-            args.domain_top,
             args.tower == "on",
             args.hub == "on",
         )
