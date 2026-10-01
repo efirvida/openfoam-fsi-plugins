@@ -1,0 +1,14 @@
+{
+  "component": "iea15mw_blade",
+  "format_version": 1,
+  "generator": "aeroelast --export-mesh --mesh-generator BladeMesh (fem-shell)",
+  "input_sha256": "4b9d1afbe6449d57335a253b31e7124909c6c405c2519d86ae183c33e5f7786b",
+  "inputs": {
+    "blade_yaml": "IEA-15-240-RWT.yaml (WindIO v1.1, NREL/TP-75698)",
+    "element_size_m": 0.2
+  },
+  "n_triangles": 100236,
+  "note": "Blade surface for the ASM-mesh twin (surfaceGeometry). Binary STL converted from the Aeroelast BladeMesh ASCII export.",
+  "stl_sha256": "3ea233fae7312dc0118209dd49952bd92d585929dc50f62d046b6514d0a9b972",
+  "units": "m"
+}

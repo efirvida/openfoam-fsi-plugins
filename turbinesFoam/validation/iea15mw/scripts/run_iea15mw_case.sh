@@ -138,6 +138,16 @@ else
         --end-revs "$slice_end_revs"
 fi
 
+# ASM-mesh: stage the committed blade STL the twin references as surfaceGeometry
+# so restarts/relocated runs resolve their own surface (sha256-checked).
+if [ "${PHASEVI_MODEL:-alm}" = "asm-mesh" ]; then
+    if ! "$PYTHON" tools/stage_blade_stl.py --run-dir "$run_dir" > "$run_dir/log.stage-blade-stl" 2>&1; then
+        cat "$run_dir/log.stage-blade-stl" >&2
+        echo "ERROR: staging the blade STL for asm-mesh failed" >&2
+        exit 3
+    fi
+fi
+
 cd "$run_dir"
 
 if [ ! -d constant/polyMesh ]; then
