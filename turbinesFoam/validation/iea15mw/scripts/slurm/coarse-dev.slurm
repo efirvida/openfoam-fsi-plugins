@@ -31,4 +31,7 @@ export PHASEVI_PKG_DIR="$pkg_dir"
 export PHASEVI_SLURM_SCRIPT="${pkg_dir}/scripts/slurm/coarse-dev.slurm"
 export PHASEVI_REQUEUE=1
 export PHASEVI_SLICE_REVS="${PHASEVI_SLICE_REVS:-0.5}"
+# 15 revs: the IEA 15 MW rotor needs ~10-15 revs to reach a quasi-steady state
+# (the 3-rev P2 check is a first look, not converged). See README.
+export PHASEVI_TOTAL_REVS="${PHASEVI_TOTAL_REVS:-15}"
 exec bash "${pkg_dir}/scripts/run_iea15mw_case.sh"
