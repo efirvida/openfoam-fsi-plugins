@@ -57,7 +57,7 @@ run_dir="${PHASEVI_RUN_DIR:-runs/iea15mw-rated-${PHASEVI_MESH:-coarse}}"
 mesh="${PHASEVI_MESH:-coarse}"
 ranks="${PHASEVI_RANKS:-48}"
 
-domain_args=(--mesh "$mesh")
+domain_args=(--mesh "$mesh" --ranks "$ranks")
 for pair in \
     "PHASEVI_UPSTREAM:--domain-upstream" \
     "PHASEVI_DOWNSTREAM:--domain-downstream" \

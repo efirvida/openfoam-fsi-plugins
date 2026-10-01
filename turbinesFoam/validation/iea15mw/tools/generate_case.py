@@ -754,8 +754,10 @@ relaxationFactors
 """
 
 
-def render_decompose_par() -> str:
-    return foam_header("decomposeParDict") + f"""numberOfSubdomains {NUMBER_OF_SUBDOMAINS};
+def render_decompose_par(ranks: int = NUMBER_OF_SUBDOMAINS) -> str:
+    if int(ranks) < 1:
+        raise ValueError("ranks must be a positive integer")
+    return foam_header("decomposeParDict") + f"""numberOfSubdomains {int(ranks)};
 method scotch;
 """
 
@@ -1056,6 +1058,7 @@ def outputs(
     flow_axis: str = DEFAULT_FLOW_AXIS,
     tower: bool = True,
     hub: bool = False,
+    ranks: int = NUMBER_OF_SUBDOMAINS,
 ) -> dict[Path, str]:
     domain = _as_domain(domain)
     case_dir = Path(case_dir)
@@ -1068,7 +1071,7 @@ def outputs(
         system / "controlDict": render_control_dict(
             speed, rpm, domain, end_revs, start_from
         ),
-        system / "decomposeParDict": render_decompose_par(),
+        system / "decomposeParDict": render_decompose_par(ranks),
         system / "fvSchemes": render_fv_schemes(),
         system / "fvSolution": render_fv_solution(),
         system / "fvOptions": render_fv_options(
@@ -1188,6 +1191,12 @@ def main(argv: list[str] | None = None) -> int:
         default="off",
         help="include the hub drag body; default off (AeroDyn has no hub aero)",
     )
+    parser.add_argument(
+        "--ranks",
+        type=int,
+        default=NUMBER_OF_SUBDOMAINS,
+        help="numberOfSubdomains in decomposeParDict (must match --ntasks)",
+    )
     parser.add_argument("--case-dir", type=Path, default=DEFAULT_CASE_DIR)
     parser.add_argument(
         "--check",
@@ -1219,6 +1228,7 @@ def main(argv: list[str] | None = None) -> int:
             args.flow_axis,
             args.tower == "on",
             args.hub == "on",
+            args.ranks,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)
