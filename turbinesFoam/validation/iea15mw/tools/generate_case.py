@@ -792,6 +792,7 @@ def render_fv_options(
     cone_angle: float = PRECONE_DEG,
     flow_axis: str = DEFAULT_FLOW_AXIS,
     tower: bool = True,
+    hub: bool = False,
 ) -> str:
     """The neutral-baseline ``axialFlowTurbineALSource``.
 
@@ -813,6 +814,19 @@ def render_fv_options(
         for row in blade_element_rows(pitch_deg)
     )
     hub_rows = render_cell_list(hub_element_rows(), indent="                ")
+    if hub:
+        hub_block = f"""        hub
+        {{
+            nElements 4;
+            elementProfiles (cylinder);
+            elementData
+            (
+{hub_rows}
+            );
+        }}
+"""
+    else:
+        hub_block = ""
     tower_rows = render_cell_list(tower_element_rows(), indent="                ")
     tower_cd = tower_drag_coefficient()
     if tower:
@@ -928,17 +942,7 @@ def render_fv_options(
             }}
         }}
 
-        hub
-        {{
-            nElements 4;
-            elementProfiles (cylinder);
-            elementData
-            (
-{hub_rows}
-            );
-        }}
-{tower_block}
-        profileData
+{hub_block}{tower_block}        profileData
         {{
 {profile_blocks}
             cylinder {{ data ((-180 0 1.1 0) (180 0 1.1 0)); }}
@@ -967,6 +971,7 @@ def outputs(
     flow_axis: str = DEFAULT_FLOW_AXIS,
     domain_top: float = DEFAULT_DOMAIN_TOP,
     tower: bool = True,
+    hub: bool = False,
 ) -> dict[Path, str]:
     case_dir = Path(case_dir)
     system = case_dir / "system"
@@ -982,7 +987,15 @@ def outputs(
         system / "fvSchemes": render_fv_schemes(),
         system / "fvSolution": render_fv_solution(),
         system / "fvOptions": render_fv_options(
-            speed, rpm, pitch_deg, case_dir, n_elements, cone_angle, flow_axis, tower
+            speed,
+            rpm,
+            pitch_deg,
+            case_dir,
+            n_elements,
+            cone_angle,
+            flow_axis,
+            tower,
+            hub,
         ),
         constant / "transportProperties": render_transport_properties(),
         constant / "turbulenceProperties": render_turbulence_properties(),
@@ -1054,6 +1067,12 @@ def main(argv: list[str] | None = None) -> int:
         default="on",
         help="include the tower ALM (from the WindIO tower; default on, like OpenFAST)",
     )
+    parser.add_argument(
+        "--hub",
+        choices=("on", "off"),
+        default="off",
+        help="include the hub drag body; default off (AeroDyn has no hub aero)",
+    )
     parser.add_argument("--case-dir", type=Path, default=DEFAULT_CASE_DIR)
     parser.add_argument(
         "--check",
@@ -1076,6 +1095,7 @@ def main(argv: list[str] | None = None) -> int:
             args.flow_axis,
             args.domain_top,
             args.tower == "on",
+            args.hub == "on",
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)

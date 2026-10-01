@@ -141,16 +141,6 @@ turbine
             }
         }
 
-        hub
-        {
-            nElements 4;
-            elementProfiles (cylinder);
-            elementData
-            (
-                (0 3.97 7.94)
-                (0 -3.97 7.94)
-            );
-        }
 
         tower
         {
@@ -174,7 +164,6 @@ turbine
                 (-12.0975718 -5.614 6.5)
             );
         }
-
         profileData
         {
             polar_00

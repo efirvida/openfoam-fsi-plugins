@@ -329,22 +329,27 @@ The 50 per-station `profileData` entries include the committed polars
 
 Objects are **configurable** so the model matches the reference used for
 validation (adding an object the reference omits would compare different
-models):
+models). The validation default is the OpenFAST-faithful set — **blades +
+tower, no hub, no nacelle** — and objects are added only when scaling:
 
-- **Hub** — a 7.94 m cylinder (always present).
+- **Blades** — always present.
 - **Tower** (`--tower on|off`, default **on**) — an ALM built from the WindIO
   tower (`(axialDistance, height, diameter)`, 11 collapsed stations, 40
   elements), with the AeroDyn `TwrCd = 0.5` in a dedicated `tower` profile (the
-  `cylinder` profile is 1.1). The OpenFAST reference has `TwrAero=True`, so the
-  tower is on to compare like-for-like; `includeInTotalDrag false` keeps the
-  reported `RotThrust` rotor-only. The tower is `OverHang = 12.098 m` downwind
-  of the rotor apex and reaches from the floor (z = −135, 15 m above the ground)
-  to −5.614 m below the hub.
+  `cylinder` profile is 1.1). OpenFAST has `TwrAero=True`, so the tower is on to
+  compare like-for-like; `includeInTotalDrag false` keeps `RotThrust`
+  rotor-only. The tower is `OverHang = 12.098 m` downwind of the rotor apex and
+  reaches from the floor (z = −135, 15 m above the ground) to −5.614 m below the
+  hub.
+- **Hub** (`--hub on|off`, default **off**) — a 7.94 m vertical cylinder
+  (WindIO `components.hub.diameter = 7.94`, half `HubRad`). **AeroDyn models no
+  hub aero** (`NacelleDrag = False`, no hub drag), so it is off for the
+  blade-loading comparison; enable it for a physical/full-system study. It is a
+  crude drag body (frontal area ~63 m² vs ~49.5 m² for a 7.94 m sphere).
 - **Nacelle** — turbinesFoam models it as a `nacelleSurfaceSource`, an actuator
   **surface** (needs an STL + `cf`), not an ALM. The WindIO yaml only gives the
   drivetrain (overhang 12.03 m, uptilt 6°, diameters), and the AeroDyn reference
-  has `NacelleDrag = False`, so the nacelle is **not in the reference** and is a
-  full-system object rather than part of the blade-loading comparison. Not
+  has `NacelleDrag = False`, so the nacelle is **not in the reference**. Not
   rendered yet.
 
 ### Mesh

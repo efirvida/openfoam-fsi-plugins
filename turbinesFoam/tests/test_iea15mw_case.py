@@ -639,13 +639,18 @@ class TestFvOptions:
         text = (CASE_DIR / "system" / "fvOptions").read_text(encoding="utf-8")
         assert '#include "../../data/polars/polar_00.dat"' in text
 
-    def test_hub_is_rendered(self, fvoptions):
-        hub = _coeffs(fvoptions)["hub"]
-        assert int(hub["nElements"]) == 4
-        rows = hub["elementData"]
-        assert len(rows) == 2
-        assert float(rows[0][1]) == pytest.approx(3.97, abs=1e-9)
-        assert float(rows[0][2]) == pytest.approx(7.94, abs=1e-9)
+    def test_hub_is_optional_and_matches_the_windio_diameter(self, tmp_path):
+        # Default off: AeroDyn has no hub aero, so the reference excludes it.
+        text = (CASE_DIR / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "\n        hub\n" not in text
+        # On: a 7.94 m cylinder matching WindIO components.hub.diameter.
+        case_dir = tmp_path / "case"
+        assert generate_case.main(["--case-dir", str(case_dir), "--hub", "on"]) == 0
+        fv = (case_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "\n        hub\n" in fv
+        assert "(0 3.97 7.94)" in fv
+        assert "(0 -3.97 7.94)" in fv
+        assert "elementProfiles (cylinder)" in fv
 
 
 class TestCaseSkeleton:
