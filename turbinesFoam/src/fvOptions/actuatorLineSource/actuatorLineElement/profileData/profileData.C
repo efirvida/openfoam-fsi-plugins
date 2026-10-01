@@ -62,10 +62,6 @@ Foam::scalar Foam::profileData::interpolate
             indexP = index;
             indexM = indexP - 1;
         }
-        return yOld[indexM]
-               + ((yOld[indexP]
-               - yOld[indexM])/(xOld[indexP]
-               - xOld[indexM]))*(xNew - xOld[indexM]);
     }
     else if (xNew > xOld[index])
     {
@@ -79,9 +75,6 @@ Foam::scalar Foam::profileData::interpolate
             indexP = index + 1;
             indexM = indexP - 1;
         }
-        return yOld[indexM] + ((yOld[indexP]
-               - yOld[indexM])/(xOld[indexP]
-               - xOld[indexM]))*(xNew - xOld[indexM]);
     }
     else if (xNew == xOld[index])
     {
@@ -91,6 +84,20 @@ Foam::scalar Foam::profileData::interpolate
     {
         return 0.0;
     }
+
+    // Guard a degenerate (constant) table: the circular-root polar has Cl fixed
+    // at 0.0001, so interpolating Cd at Cl = 0 would divide by
+    // (xOld[indexP] - xOld[indexM]) = 0 and trap SIGFPE. Return the nearest
+    // sample instead.
+    const scalar denominator = xOld[indexP] - xOld[indexM];
+    if (denominator == 0.0)
+    {
+        return yOld[indexM];
+    }
+
+    return yOld[indexM]
+           + ((yOld[indexP] - yOld[indexM])/denominator)
+            *(xNew - xOld[indexM]);
 }
 
 
