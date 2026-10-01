@@ -58,6 +58,10 @@ mesh="${PHASEVI_MESH:-coarse}"
 ranks="${PHASEVI_RANKS:-48}"
 
 domain_args=(--mesh "$mesh" --ranks "$ranks")
+write_deg="${PHASEVI_WRITE_DEG:-}"
+if [ -n "$write_deg" ]; then
+    domain_args+=(--write-interval-deg "$write_deg")
+fi
 for pair in \
     "PHASEVI_UPSTREAM:--domain-upstream" \
     "PHASEVI_DOWNSTREAM:--domain-downstream" \

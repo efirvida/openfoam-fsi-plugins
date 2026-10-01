@@ -205,7 +205,7 @@ KINEMATIC_VISCOSITY = 1.5e-5
 TURBULENCE_INTENSITY = 0.005
 MIXING_LENGTH_D = 0.07
 DEFAULT_END_REVOLUTIONS = 3
-WRITE_INTERVAL_REV = 0.5
+WRITE_INTERVAL_DEG = 5.0
 
 PATCH_NAMES = ("inlet", "outlet", "bottom", "top", "sideMinus", "sidePlus")
 
@@ -621,11 +621,15 @@ def render_control_dict(
     domain: object = None,
     end_revs: float = DEFAULT_END_REVOLUTIONS,
     start_from: str = "startTime",
+    write_interval_deg: float = WRITE_INTERVAL_DEG,
 ) -> str:
     domain = _as_domain(domain)
     t_rev = revolution_period(rpm)
     end_time = float(end_revs) * t_rev
-    write_interval = WRITE_INTERVAL_REV * t_rev
+    # Write every `write_interval_deg` of rotation, so the wake snapshots are a
+    # smooth animation at the natural rotor speed. Binary format keeps each
+    # snapshot ~4x smaller than ascii; purgeWrite 0 keeps the full history.
+    write_interval = (float(write_interval_deg) / 360.0) * t_rev
     return foam_header("controlDict") + f"""application {APPLICATION};
 startFrom {start_from};
 startTime 0;
@@ -634,8 +638,8 @@ endTime {end_time:.8g};
 deltaT {delta_t(domain, rpm):.8g};
 writeControl runTime;
 writeInterval {write_interval:.8g};
-purgeWrite 1;
-writeFormat ascii;
+purgeWrite 0;
+writeFormat binary;
 writePrecision 10;
 writeCompression off;
 timeFormat general;
@@ -1059,6 +1063,7 @@ def outputs(
     tower: bool = True,
     hub: bool = False,
     ranks: int = NUMBER_OF_SUBDOMAINS,
+    write_interval_deg: float = WRITE_INTERVAL_DEG,
 ) -> dict[Path, str]:
     domain = _as_domain(domain)
     case_dir = Path(case_dir)
@@ -1069,7 +1074,7 @@ def outputs(
         system / "blockMeshDict": render_block_mesh(domain, flow_axis),
         system / "topoSetDict": render_toposet(flow_axis),
         system / "controlDict": render_control_dict(
-            speed, rpm, domain, end_revs, start_from
+            speed, rpm, domain, end_revs, start_from, write_interval_deg
         ),
         system / "decomposeParDict": render_decompose_par(ranks),
         system / "fvSchemes": render_fv_schemes(),
@@ -1197,6 +1202,12 @@ def main(argv: list[str] | None = None) -> int:
         default=NUMBER_OF_SUBDOMAINS,
         help="numberOfSubdomains in decomposeParDict (must match --ntasks)",
     )
+    parser.add_argument(
+        "--write-interval-deg",
+        type=float,
+        default=WRITE_INTERVAL_DEG,
+        help="wake snapshot every N degrees of rotation (writeInterval = N/360 * T_rev)",
+    )
     parser.add_argument("--case-dir", type=Path, default=DEFAULT_CASE_DIR)
     parser.add_argument(
         "--check",
@@ -1229,6 +1240,7 @@ def main(argv: list[str] | None = None) -> int:
             args.tower == "on",
             args.hub == "on",
             args.ranks,
+            args.write_interval_deg,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)
