@@ -30,6 +30,7 @@ turbine
         freeStreamVelocity (0 10.659 0);
         tipSpeedRatio 8.9131856;
         rotorRadius 120.67532;
+        rotationDirection 1;
         azimuthalOffset 0;
         coneAngle 4;
 

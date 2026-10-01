@@ -78,8 +78,16 @@ protected:
         scalar rhoRef_;
 
         //- Rotational speed in rad/s
-        //  Positive anti-clockwise when looking along axis direction
+        //  Positive anti-clockwise when looking along axis direction; its sign
+        //  also carries rotationSign_ (see below)
         scalar omega_;
+
+        //- Rotation direction: +1 keeps the turbinesFoam convention (positive
+        //  anti-clockwise looking along the axis), -1 flips it (e.g. to match
+        //  the CCBlade/Aeroelast convention). Applied to the applied azimuth and
+        //  the blade speed only; the tip-speed ratio used for cp/ct keeps its
+        //  sign
+        scalar rotationSign_;
 
         //- Azimuthal angle in degrees (does not reset each rotation)
         scalar angleDeg_;

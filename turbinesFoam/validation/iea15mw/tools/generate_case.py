@@ -886,6 +886,7 @@ def render_fv_options(
     flow_axis: str = DEFAULT_FLOW_AXIS,
     tower: bool = True,
     hub: bool = False,
+    rotation: str = "ccw",
 ) -> str:
     """The neutral-baseline ``axialFlowTurbineALSource``.
 
@@ -898,6 +899,9 @@ def render_fv_options(
     origin = turbine_origin()
     axis_vec = rotor_axis(flow_axis)
     free_stream = tuple(float(speed) * c for c in inflow_direction(flow_axis))
+    # rotationDirection = -1 flips the turbinesFoam (ccw) convention to cw, the
+    # CCBlade/Aeroelast default.
+    rotation_dir = -1.0 if rotation == "cw" else 1.0
     polars = _polars_include_dir(case_dir)
     profiles = " ".join(blade_element_profiles())
     blade_rows = "\n".join(
@@ -973,6 +977,7 @@ def render_fv_options(
         freeStreamVelocity {foam_vector(free_stream)};
         tipSpeedRatio {tsr:.8g};
         rotorRadius {ROTOR_RADIUS:.8g};
+        rotationDirection {rotation_dir:.8g};
         azimuthalOffset 0;
         coneAngle {float(cone_angle):.8g};
 
@@ -1066,6 +1071,7 @@ def outputs(
     hub: bool = False,
     ranks: int = NUMBER_OF_SUBDOMAINS,
     write_interval_deg: float = WRITE_INTERVAL_DEG,
+    rotation: str = "ccw",
 ) -> dict[Path, str]:
     domain = _as_domain(domain)
     case_dir = Path(case_dir)
@@ -1091,6 +1097,7 @@ def outputs(
             flow_axis,
             tower,
             hub,
+            rotation,
         ),
         constant / "transportProperties": render_transport_properties(),
         constant / "turbulenceProperties": render_turbulence_properties(),
@@ -1210,6 +1217,12 @@ def main(argv: list[str] | None = None) -> int:
         default=WRITE_INTERVAL_DEG,
         help="wake snapshot every N degrees of rotation (writeInterval = N/360 * T_rev)",
     )
+    parser.add_argument(
+        "--rotation",
+        choices=("ccw", "cw"),
+        default="ccw",
+        help="rotation sense: ccw = turbinesFoam current (default, physically verified), cw = CCBlade/Aeroelast label (see odd/tasks/iea15mw-asm-cases.md)",
+    )
     parser.add_argument("--case-dir", type=Path, default=DEFAULT_CASE_DIR)
     parser.add_argument(
         "--check",
@@ -1243,6 +1256,7 @@ def main(argv: list[str] | None = None) -> int:
             args.hub == "on",
             args.ranks,
             args.write_interval_deg,
+            args.rotation,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)

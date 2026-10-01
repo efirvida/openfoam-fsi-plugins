@@ -775,6 +775,21 @@ class TestCaseSkeleton:
         for row in rows:
             assert float(row[0]) == pytest.approx(-overhang, abs=1e-9)
 
+    def test_rotation_defaults_to_ccw(self, tmp_path):
+        # The physical rotation sense is not yet pinned to the CCBlade label (a
+        # naive flip inverts the rotor thrust), so the default stays the
+        # turbinesFoam ccw convention; --rotation cw is available but unused.
+        fv = (CASE_DIR / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "rotationDirection 1;" in fv
+        case_dir = tmp_path / "cw"
+        assert (
+            generate_case.main(["--case-dir", str(case_dir), "--rotation", "cw"])
+            == 0
+        )
+        assert "rotationDirection -1;" in (
+            case_dir / "system" / "fvOptions"
+        ).read_text(encoding="utf-8")
+
     def test_flow_axis_x_is_the_openfast_orientation(self, tmp_path):
         case_dir = tmp_path / "x"
         assert (

@@ -250,7 +250,7 @@ void Foam::fv::turbineALSource::updateTSROmega()
         // Update tip speed ratio and omega
         scalar theta = degToRad(angleDeg_);
         tipSpeedRatio_ = meanTSR_ + tsrAmplitude_*cos(nBlades_*(theta - tsrPhase_));
-        omega_ = tipSpeedRatio_*mag(freeStreamVelocity_)/rotorRadius_;
+        omega_ = rotationSign_*tipSpeedRatio_*mag(freeStreamVelocity_)/rotorRadius_;
     }
 }
 
@@ -258,7 +258,7 @@ void Foam::fv::turbineALSource::updateTSROmega()
 Foam::scalar Foam::fv::turbineALSource::azimuth(const scalar t) const
 {
     const scalar pi = constant::mathematical::pi;
-    const scalar omega0 = meanTSR_*mag(freeStreamVelocity_)/rotorRadius_;
+    const scalar omega0 = rotationSign_*meanTSR_*mag(freeStreamVelocity_)/rotorRadius_;
     const scalar theta0 = degToRad(angle0_);
 
     // Constant TSR: theta(t) = theta0 + omega0*(t - t0)
@@ -380,6 +380,7 @@ Foam::fv::turbineALSource::turbineALSource
     lastRotationTime_(time_.value()),
     rhoRef_(1.0),
     omega_(0.0),
+    rotationSign_(1.0),
     angleDeg_(0.0),
     angle0_(0.0),
     t0_(time_.startTime().value()),
@@ -517,6 +518,13 @@ bool Foam::fv::turbineALSource::read(const dictionary& dict)
         coeffs_.lookup("rotorRadius") >> rotorRadius_;
         tsrAmplitude_ = coeffs_.lookupOrDefault("tsrAmplitude", 0.0);
         tsrPhase_ = coeffs_.lookupOrDefault("tsrPhase", 0.0);
+
+        // Rotation direction [+/-1]: +1 = the turbinesFoam convention (positive
+        // anti-clockwise looking along the axis), -1 = flipped (CCBlade /
+        // Aeroelast). Applied to the applied azimuth and the blade speed, so the
+        // coefficient normalisation (tipSpeedRatio_, cp) is untouched.
+        rotationSign_ = coeffs_.lookupOrDefault<scalar>("rotationDirection", 1.0);
+        rotationSign_ = (rotationSign_ >= 0.0) ? 1.0 : -1.0;
 
         // Optional registry omega override field (FSI seam)
         omegaOverrideField_ = coeffs_.getOrDefault<word>
