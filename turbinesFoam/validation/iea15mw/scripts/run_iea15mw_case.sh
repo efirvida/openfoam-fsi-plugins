@@ -174,10 +174,10 @@ if [ "${PHASEVI_MPI_MCA+x}" = "x" ]; then
     mpi_mca="$PHASEVI_MPI_MCA"
 else
     mpi_mca="-mca pml ucx --mca btl ^openib"
-    if [ -n "${SLURM_NNODES:-}" ] && [ "${SLURM_NNODES}" -ge 1 ]; then
-        ppr=$(( (ranks + SLURM_NNODES - 1) / SLURM_NNODES ))
-        mpi_mca="$mpi_mca --map-by ppr:${ppr}:node"
-    fi
+    # Do NOT force --map-by ppr:N:node: OpenMPI then requires exactly N slots on
+    # EVERY allocated node, and an uneven allocation (48 ranks over 7 nodes
+    # leaves one node with 6 slots) aborts with "not enough slots available".
+    # The default mapping is slot-aware and honours whatever Slurm granted.
 fi
 
 # Safety wall budget: the slice endTime normally stops the solver first.
@@ -199,21 +199,14 @@ if ! timeout -k 120 -s INT "$budget" mpirun $mpi_mca -np "$ranks" pimpleFoam -pa
     rc=$?
 fi
 
-if [ "$slice_end_revs" = "$total_revs" ] && [ "$rc" -eq 0 ]; then
-    echo "IEA 15 MW run complete: ${run_dir}"
-    exit 0
-fi
-
 if [ "$rc" -ne 0 ] && [ "$rc" -ne 124 ]; then
     tail -40 log.pimpleFoam >&2
     echo "ERROR: pimpleFoam failed (rc=$rc)" >&2
     exit 3
 fi
 
-# Chain the next slice by submitting a fresh job. Do NOT rely on requeue
-# semantics: this cluster requeues failed jobs by default (Requeue=1), which
-# would loop forever on a real solver failure. Continue only when the solver
-# exited cleanly (or hit the safety timeout) AND advanced the written time.
+# The solver must actually have advanced the written time; a launch that fails
+# (e.g. an MPI slot error) exits 0 from mpirun but leaves the run at `latest`.
 new_latest=$("$PYTHON" - processor0 <<'PY'
 import os
 import sys
@@ -233,6 +226,11 @@ if [ "$advanced" != "1" ]; then
     tail -40 log.pimpleFoam >&2
     echo "ERROR: solver exited (rc=$rc) without advancing past ${latest} s" >&2
     exit 3
+fi
+
+if [ "$slice_end_revs" = "$total_revs" ] && [ "$rc" -eq 0 ]; then
+    echo "IEA 15 MW run complete: ${run_dir}"
+    exit 0
 fi
 
 if [ "$requeue" = "1" ] && [ -n "${SLURM_JOB_ID:-}" ]; then
