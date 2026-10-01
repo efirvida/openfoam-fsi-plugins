@@ -810,6 +810,29 @@ class TestCaseSkeleton:
         assert "elementType actuatorSurfaceElement;" in selected
         assert "surfaceGeometry" in selected
 
+    def test_snappy_dict_refines_the_rotor_disk_without_a_surface(self, tmp_path):
+        text = (CASE_DIR / "system" / "snappyHexMeshDict").read_text(encoding="utf-8")
+        assert "castellatedMesh true;" in text
+        assert "snap false;" in text and "addLayers false;" in text
+        assert "searchableCylinder" in text
+        assert "levels ((1e15 3))" in text
+        # The STL must never be a refinementSurface: it is the actuator force
+        # surface, not a body. The castellated flood fill would treat the blade
+        # interior as enclosed, delete it and leave a solid wall.
+        assert "refinementSurfaces\n    {\n    }" in text
+        assert "triSurface" not in text
+        # Level is plumbed through.
+        case_dir = tmp_path / "snappy5"
+        assert (
+            generate_case.main(
+                ["--case-dir", str(case_dir), "--model", "asm-mesh", "--snappy-level", "5"]
+            )
+            == 0
+        )
+        assert "levels ((1e15 5))" in (
+            case_dir / "system" / "snappyHexMeshDict"
+        ).read_text(encoding="utf-8")
+
     def test_flow_axis_x_is_the_openfast_orientation(self, tmp_path):
         case_dir = tmp_path / "x"
         assert (

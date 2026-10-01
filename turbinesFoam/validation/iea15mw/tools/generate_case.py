@@ -225,6 +225,14 @@ ASM_ELEMENT = "actuatorSurfaceElement"
 SURFACE_GEOMETRY = "constant/triSurface/iea15mw_blade.stl"
 #: Chordwise strips for the actuator surface (Phase VI used 5).
 DEFAULT_N_CHORDWISE = 5
+
+#: Rotor-disk refinement cylinder for the actuator-surface meshes: the castellated
+#: snappyHexMesh refines it so the local cell resolves the blade chord. The disk
+#: half-thickness [m] covers the blade's axial extent (max chord + prebend), and
+#: the default level 3 takes the background fine cell (ROTOR_DIAMETER/32 = 7.5 m)
+#: to ~0.94 m, i.e. ~6 cells across the 5.77 m max chord.
+ASM_DISK_HALF_THICKNESS = 6.0
+DEFAULT_SNAPPY_LEVEL = 3
 #: Default orientation. ``y`` = the Aeroelast/FSI frame the IEA 15 MW case exists
 #: for (fluid +Y, rotor axis about Y, blade axis +Z); ``x`` = OpenFAST.
 DEFAULT_FLOW_AXIS = "y"
@@ -1080,6 +1088,126 @@ def _polars_include_dir(case_dir: Path) -> str:
     return Path(os.path.relpath(POLARS_DIR, Path(case_dir) / "system")).as_posix()
 
 
+def render_snappy_dict(
+    flow_axis: str = DEFAULT_FLOW_AXIS,
+    level: int = DEFAULT_SNAPPY_LEVEL,
+) -> str:
+    """Castellated-only snappyHexMeshDict refining the rotor disk for the ASM.
+
+    The actuator-surface twins spread the blade force over ``nChordwise`` chord
+    strips, so the local cell has to resolve the chord. The background fine cell
+    is ``ROTOR_DIAMETER/32`` (7.5 m); a level-3 castellated cylinder brings the
+    rotor disk to ~0.94 m.
+
+    There is deliberately **no** ``refinementSurface``: the STL is the actuator
+    force surface (``surfaceGeometry``), not a body. Adding it here would make
+    the castellated flood fill treat the blade interior as enclosed, delete
+    those cells and leave a solid wall where the actuator surface must stay
+    transparent to the flow.
+    """
+    if int(level) < 0:
+        raise ValueError("snappy level must be non-negative")
+    axis = rotor_axis(flow_axis)
+    origin = turbine_origin()
+    point1 = tuple(origin[i] - ASM_DISK_HALF_THICKNESS * axis[i] for i in range(3))
+    point2 = tuple(origin[i] + ASM_DISK_HALF_THICKNESS * axis[i] for i in range(3))
+    inside = tuple(origin[i] - 2.0 * ROTOR_DIAMETER * axis[i] for i in range(3))
+    return foam_header("snappyHexMeshDict") + f"""castellatedMesh true;
+snap false;
+addLayers false;
+
+geometry
+{{
+    rotorDisk
+    {{
+        type searchableCylinder;
+        point1 {foam_vector(point1)};
+        point2 {foam_vector(point2)};
+        radius {ROTOR_RADIUS:.8g};
+    }}
+}}
+
+castellatedMeshControls
+{{
+    maxLocalCells 40000000;
+    maxGlobalCells 60000000;
+    minRefinementCells 0;
+    nCellsBetweenLevels 2;
+
+    features ();
+
+    refinementSurfaces
+    {{
+    }}
+
+    resolveFeatureAngle 30;
+
+    refinementRegions
+    {{
+        rotorDisk
+        {{
+            mode inside;
+            levels ((1e15 {int(level)}));
+        }}
+    }}
+
+    locationInMesh {foam_vector(inside)};
+    allowFreeStandingZoneFaces true;
+}}
+
+snapControls
+{{
+    nSmoothPatch 3;
+    tolerance 2.0;
+    nSolveIter 30;
+    nRelaxIter 5;
+}}
+
+addLayersControls
+{{
+    relativeSizes true;
+    layers {{}}
+    expansionRatio 1.0;
+    finalLayerThickness 0.3;
+    minThickness 0.1;
+    nGrow 0;
+    featureAngle 60;
+    slipFeatureAngle 30;
+    nRelaxIter 5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals 3;
+    nSmoothThickness 10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedianAxisAngle 90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter 50;
+}}
+
+meshQualityControls
+{{
+    maxNonOrtho 65;
+    maxBoundarySkewness 20;
+    maxInternalSkewness 4;
+    maxConcave 80;
+    minVol 1e-13;
+    minTetQuality 1e-15;
+    minArea -1;
+    minTwist 0.02;
+    minDeterminant 0.001;
+    minFaceWeight 0.02;
+    minVolRatio 0.01;
+    minTriangleTwist -1;
+    nSmoothScale 4;
+    errorReduction 0.75;
+    relaxed {{}}
+}}
+
+debug 0;
+mergeTolerance 1e-6;
+"""
+
+
 def outputs(
     speed: float = RATED_SPEED,
     rpm: float = RATED_RPM,
@@ -1098,6 +1226,7 @@ def outputs(
     rotation: str = "ccw",
     model: str = "alm",
     n_chordwise: int | None = None,
+    snappy_level: int = DEFAULT_SNAPPY_LEVEL,
 ) -> dict[Path, str]:
     domain = _as_domain(domain)
     case_dir = Path(case_dir)
@@ -1133,6 +1262,7 @@ def outputs(
             n_chordwise,
             SURFACE_GEOMETRY if model == "asm-mesh" else "",
         ),
+        system / "snappyHexMeshDict": render_snappy_dict(flow_axis, snappy_level),
         constant / "transportProperties": render_transport_properties(),
         constant / "turbulenceProperties": render_turbulence_properties(),
     }
@@ -1269,6 +1399,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="actuator-surface chordwise strips (default 5)",
     )
+    parser.add_argument(
+        "--snappy-level",
+        type=int,
+        default=DEFAULT_SNAPPY_LEVEL,
+        help="snappyHexMesh castellated level over the rotor disk (asm-mesh)",
+    )
     parser.add_argument("--case-dir", type=Path, default=DEFAULT_CASE_DIR)
     parser.add_argument(
         "--check",
@@ -1305,6 +1441,7 @@ def main(argv: list[str] | None = None) -> int:
             args.rotation,
             args.model,
             args.n_chordwise,
+            args.snappy_level,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)

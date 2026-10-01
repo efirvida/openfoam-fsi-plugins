@@ -61,6 +61,9 @@ domain_args=(--mesh "$mesh" --ranks "$ranks" --model "${PHASEVI_MODEL:-alm}")
 if [ -n "${PHASEVI_N_CHORDWISE:-}" ]; then
     domain_args+=(--n-chordwise "$PHASEVI_N_CHORDWISE")
 fi
+if [ -n "${PHASEVI_SNAPPY_LEVEL:-}" ]; then
+    domain_args+=(--snappy-level "$PHASEVI_SNAPPY_LEVEL")
+fi
 write_deg="${PHASEVI_WRITE_DEG:-}"
 if [ -n "$write_deg" ]; then
     domain_args+=(--write-interval-deg "$write_deg")
@@ -154,6 +157,16 @@ if [ ! -d constant/polyMesh ]; then
     if ! blockMesh > log.blockMesh 2>&1; then
         tail -30 log.blockMesh >&2
         echo "ERROR: blockMesh failed" >&2
+        exit 3
+    fi
+fi
+# ASM-mesh: castellate the rotor-disk cylinder so the local cell resolves the
+# blade chord. --overwrite replaces blockMesh's polyMesh in place, and the guard
+# above means a resumed run (polyMesh already snapped) skips both.
+if [ "${PHASEVI_MODEL:-alm}" = "asm-mesh" ]; then
+    if ! snappyHexMesh -overwrite > log.snappyHexMesh 2>&1; then
+        tail -40 log.snappyHexMesh >&2
+        echo "ERROR: snappyHexMesh failed" >&2
         exit 3
     fi
 fi
