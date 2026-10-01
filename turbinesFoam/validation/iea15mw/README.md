@@ -357,9 +357,9 @@ tower, no hub, no nacelle** — and objects are added only when scaling:
 The domain is **ground-anchored**: the rotor/hub sits at the origin `(0 0 0)`,
 the floor (ground, `bottom` = `wall`, no-slip with `kOmegaSST` wall functions)
 at `z = -HUB_HEIGHT = -150 m`, and the top at `+DEFAULT_DOMAIN_TOP = +603.4 m`
-(`--domain-top`, configurable). Horizontally 20D streamwise x 8D lateral around
-the rotor, `D = 241.35064632 m`. This makes the case ready for ABL /
-parameterisation studies, not just a bare rotor.
+(`--domain-top`, configurable). The default horizontal box is 20D streamwise x
+8D lateral around the rotor (`D = 241.35064632 m`); both are configurable. This
+makes the case ready for ABL / parameterisation studies, not just a bare rotor.
 
 The mesh is **parametric** (`--mesh` and the `--domain-*` extents):
 
