@@ -18,6 +18,30 @@ placeholder has `Cl = 0` exactly and takes the early `==` return.
 
 **Fix:** return the nearest sample when the interpolation denominator is zero.
 
+#### 3. Fix the reported blade-surface force being multiplied by the rank count
+
+**Files:**
+- `turbinesFoam/src/fvOptions/bladeSurface/bladeSurfaceSource.C`
+
+**Problem:** `bladeSurfaceSource::distribute()` reported the blade force with
+`bladeForce = returnReduce(total, sumOp<vector>())`, but the sampler's node set
+is replicated on every rank: each rank holds all 100 236 STL nodes and only the
+candidate cells it owns, so the accumulation loop already produced the complete
+force on each rank. The reported force was therefore multiplied by
+`numberOfSubdomains` — measured 48.4x on a 48-rank asm-mesh run, which made the
+rotor drag coefficient read ~53 instead of ~1.1. Only the force was affected:
+`moment()` iterates the same replicated list without reducing, so the moment and
+hence `cp` stayed correct — that asymmetry is what located the bug. The mesh and
+the time step were red herrings: the coarse mesh with a surface already showed
+it, and correcting the Courant number from 4.19 to 0.31 changed nothing.
+
+**Fix:** assign the accumulated total directly (`bladeForce = total;`) and
+document that the node set is replicated so it must not be reduced. Verified on
+a dev asm-mesh smoke: the blade-2 axial force returns from 45 183 696 to
+932 585 (the ASM reference is 934 410) and the drag coefficient from 52.2 to
+0.94-1.06. Note the neighbouring `lastCandidateTotal_` reduce IS correct: the
+candidate lists are partitioned across ranks even though the nodes are not.
+
 ### New Features
 
 #### 2. AeroDyn blade shape (prebend, sweep, curve angle) in the ALM

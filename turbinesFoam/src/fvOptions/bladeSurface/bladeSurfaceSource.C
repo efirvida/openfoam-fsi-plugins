@@ -311,9 +311,16 @@ void Foam::fv::bladeSurfaceSource::distribute
     // 'fsi' sub-dictionary is absent)
     sampler_.writeForceField(distributed);
 
-    // Distributed total (global). It replaces the element-loop total so the
-    // reported blade force matches the applied load; in the incompressible
-    // reference partition of unity makes it equal the summed element forces
+    // Distributed total. It replaces the element-loop total so the reported
+    // blade force matches the applied load; in the incompressible reference
+    // partition of unity makes it equal the summed element forces.
+    //
+    // Do NOT reduce this: the sampler's node set is replicated on every rank (a
+    // rank owns only the candidate cells for those nodes), so the loop below
+    // already accumulates the FULL blade force on each rank. returnReduce()
+    // multiplied the reported force by the rank count -- measured 48.4x at 48
+    // ranks. Only the force was affected because moment() is not reduced, which
+    // is why cp stayed correct while drag came out ~50x too high.
     vector total = vector::zero;
 
     forAll(distributed, i)
@@ -321,7 +328,7 @@ void Foam::fv::bladeSurfaceSource::distribute
         total += distributed[i];
     }
 
-    bladeForce = returnReduce(total, sumOp<vector>());
+    bladeForce = total;
 
     // Per-addSup instrumentation (D6, spec "Bounded distribution and
     // performance measurement"): candidate entries and wall seconds. The
