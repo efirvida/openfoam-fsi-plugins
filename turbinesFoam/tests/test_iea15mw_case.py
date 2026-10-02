@@ -859,6 +859,40 @@ class TestCaseSkeleton:
             case_dir / "system" / "controlDict"
         ).read_text(encoding="utf-8")
 
+    def test_snappy_refines_the_tower_and_its_shadow(self, tmp_path):
+        # The rotor-disk cylinder alone left the tower unrefined and, worse, its
+        # wake -- the shadow the blades cross at the bottom of the rotation -- at
+        # the background cell size, so the tower shadow was not measurable.
+        case_dir = tmp_path / "tower"
+        assert (
+            generate_case.main(
+                ["--case-dir", str(case_dir), "--model", "asm-mesh", "--snappy", "on"]
+            )
+            == 0
+        )
+        text = (case_dir / "system" / "snappyHexMeshDict").read_text(encoding="utf-8")
+        assert "towerWake" in text
+        assert "type searchableBox;" in text
+        marker = "type searchableBox;"
+        body = text[text.index(marker) :]
+        low = [float(v) for v in body.split("min (")[1].split(")")[0].split()]
+        high = [float(v) for v in body.split("max (")[1].split(")")[0].split()]
+        overhang = generate_case.blade_geometry.read_tower_overhang()
+        # Upwind of the rotor: same sign as the ALM tower rows' axialDistance
+        assert low[1] < -overhang < high[1]
+        # The shadow reaches well downstream of the rotor plane
+        assert high[1] > generate_case.ROTOR_DIAMETER
+        # Vertical span covers the tower (hub-frame z) with margin
+        tower_z = [
+            station["z"] - generate_case.HUB_HEIGHT
+            for station in generate_case.blade_geometry.read_tower_table()
+        ]
+        assert low[2] < min(tower_z) and high[2] > max(tower_z)
+        assert high[0] > 0.0 > low[0]
+        # The wake region is coarser than the rotor disk
+        assert "levels ((1e15 3))" in text
+        assert "levels ((1e15 2))" in text
+
     def test_snappy_dict_refines_the_rotor_disk_without_a_surface(self, tmp_path):
         text = (CASE_DIR / "system" / "snappyHexMeshDict").read_text(encoding="utf-8")
         assert "castellatedMesh true;" in text

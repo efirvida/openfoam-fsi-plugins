@@ -27,6 +27,13 @@ geometry
         point2 (0 -6 0);
         radius 120.67532;
     }
+
+    towerWake
+    {
+        type searchableBox;
+        min (-20 -32.0313 -145);
+        max (20 470.669993 4.386);
+    }
 }
 
 castellatedMeshControls
@@ -50,6 +57,12 @@ castellatedMeshControls
         {
             mode inside;
             levels ((1e15 3));
+        }
+
+        towerWake
+        {
+            mode inside;
+            levels ((1e15 2));
         }
     }
 

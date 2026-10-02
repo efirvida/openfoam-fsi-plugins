@@ -246,6 +246,19 @@ DEFAULT_N_CHORDWISE = 5
 #: to ~0.94 m, i.e. ~6 cells across the 5.77 m max chord.
 ASM_DISK_HALF_THICKNESS = 6.0
 DEFAULT_SNAPPY_LEVEL = 3
+
+#: Tower + tower-shadow refinement. The rotor-disk cylinder alone left the
+#: tower unrefined and, worse, its wake -- the shadow the blades fly through at
+#: the bottom of the rotation -- at the background cell size, so the tower
+#: shadow could not be measured. The tower region is a box spanning the tower's
+#: height plus a margin and, axially, from upstream of the tower to
+#: ``ASM_WAKE_DOWNSTREAM_D`` rotor diameters downstream of it.
+ASM_TOWER_LATERAL_FACTOR = 2.0   # tower-box half-width = factor x max diameter
+ASM_TOWER_AXIAL_MARGIN = 20.0    # tower-box upstream extent [m]
+ASM_TOWER_Z_MARGIN = 10.0        # tower-box vertical margin [m]
+ASM_WAKE_DOWNSTREAM_D = 2.0      # tower-shadow extent downstream [rotor D]
+#: The wake region is one castellation level coarser than the rotor disk.
+ASM_WAKE_LEVEL_OFFSET = 1
 #: Default orientation. ``y`` = the Aeroelast/FSI frame the IEA 15 MW case exists
 #: for (fluid +Y, rotor axis about Y, blade axis +Z); ``x`` = OpenFAST.
 DEFAULT_FLOW_AXIS = "y"
@@ -1131,6 +1144,36 @@ def render_snappy_dict(
     point1 = tuple(origin[i] - ASM_DISK_HALF_THICKNESS * axis[i] for i in range(3))
     point2 = tuple(origin[i] + ASM_DISK_HALF_THICKNESS * axis[i] for i in range(3))
     inside = tuple(origin[i] - 2.0 * ROTOR_DIAMETER * axis[i] for i in range(3))
+
+    # Tower + tower shadow. The tower sits `overhang` upstream of the rotor
+    # plane (WindIO drivetrain.overhang) and spans the ground up to just below
+    # the hub; its wake is the shadow the blades cross at the bottom of the
+    # rotation. Both used to fall outside the rotor-disk cylinder and therefore
+    # ran at the background cell size, so the tower shadow was not resolved.
+    overhang = blade_geometry.read_tower_overhang()
+    tower = blade_geometry.read_tower_table()
+    tower_z = [station["z"] - HUB_HEIGHT for station in tower]
+    lateral = ASM_TOWER_LATERAL_FACTOR * max(station["diameter"] for station in tower)
+    # The rotor axis helper points UPWIND (opposite the inflow), and the IEA
+    # tower stands upwind of the rotor plane, so the tower centre is
+    # `origin + overhang * rotor_axis` -- i.e. at -overhang along the flow, the
+    # same sign as the ALM tower rows' axialDistance.
+    tower_centre = tuple(origin[i] + overhang * axis[i] for i in range(3))
+    box_min: list[float] = []
+    box_max: list[float] = []
+    for i in range(3):
+        if abs(axis[i]) > 0.5:
+            # Streamwise: from upstream of the tower to well past it downstream
+            box_min.append(tower_centre[i] - ASM_TOWER_AXIAL_MARGIN)
+            box_max.append(tower_centre[i] + ASM_WAKE_DOWNSTREAM_D * ROTOR_DIAMETER)
+        elif i == 2:
+            # Vertical is global Z (the ground-anchored domain's gravity axis)
+            box_min.append(min(tower_z) - ASM_TOWER_Z_MARGIN)
+            box_max.append(max(tower_z) + ASM_TOWER_Z_MARGIN)
+        else:
+            box_min.append(tower_centre[i] - lateral)
+            box_max.append(tower_centre[i] + lateral)
+    wake_level = max(0, int(level) - ASM_WAKE_LEVEL_OFFSET)
     return foam_header("snappyHexMeshDict") + f"""castellatedMesh true;
 snap false;
 addLayers false;
@@ -1143,6 +1186,13 @@ geometry
         point1 {foam_vector(point1)};
         point2 {foam_vector(point2)};
         radius {ROTOR_RADIUS:.8g};
+    }}
+
+    towerWake
+    {{
+        type searchableBox;
+        min {foam_vector(box_min)};
+        max {foam_vector(box_max)};
     }}
 }}
 
@@ -1167,6 +1217,12 @@ castellatedMeshControls
         {{
             mode inside;
             levels ((1e15 {int(level)}));
+        }}
+
+        towerWake
+        {{
+            mode inside;
+            levels ((1e15 {wake_level}));
         }}
     }}
 
