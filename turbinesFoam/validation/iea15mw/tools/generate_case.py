@@ -1246,15 +1246,20 @@ def outputs(
     model: str = "alm",
     n_chordwise: int | None = None,
     snappy_level: int = DEFAULT_SNAPPY_LEVEL,
+    snappy: str | None = None,
 ) -> dict[Path, str]:
     domain = _as_domain(domain)
     case_dir = Path(case_dir)
     system = case_dir / "system"
     constant = case_dir / "constant"
     zero = case_dir / "0.org"
+    # Is the rotor disk castellated? Defaults to "yes iff the model is
+    # asm-mesh", but the model comparison (ALM vs ASM vs ASM-mesh) needs all
+    # three on the SAME refined mesh, so it is explicit here.
+    refined = (model == "asm-mesh") if snappy is None else (snappy == "on")
     # deltaT follows the castellated rotor-disk cell ONLY when the run actually
-    # uses it: an ALM run on the background mesh keeps the background step.
-    dt_level = int(snappy_level) if model == "asm-mesh" else 0
+    # uses it: a run on the background mesh keeps the background step.
+    dt_level = int(snappy_level) if refined else 0
     rendered: dict[Path, str] = {
         system / "blockMeshDict": render_block_mesh(domain, flow_axis),
         system / "topoSetDict": render_toposet(flow_axis),
@@ -1422,6 +1427,12 @@ def main(argv: list[str] | None = None) -> int:
         help="actuator-surface chordwise strips (default 5)",
     )
     parser.add_argument(
+        "--snappy",
+        choices=("on", "off"),
+        default=None,
+        help="castellate the rotor disk; default on for asm-mesh, off otherwise",
+    )
+    parser.add_argument(
         "--snappy-level",
         type=int,
         default=DEFAULT_SNAPPY_LEVEL,
@@ -1464,6 +1475,7 @@ def main(argv: list[str] | None = None) -> int:
             args.model,
             args.n_chordwise,
             args.snappy_level,
+            args.snappy,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)

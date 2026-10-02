@@ -824,6 +824,41 @@ class TestCaseSkeleton:
             control = (case_dir / "system" / "controlDict").read_text(encoding="utf-8")
             assert f"purgeWrite {snaps};" in control
 
+    def test_snappy_flag_decouples_the_refined_mesh_from_the_model(self, tmp_path):
+        # The model comparison (ALM vs ASM vs ASM-mesh) needs all three on the
+        # SAME castellated mesh, so the refinement must be selectable on its own.
+        base = generate_case.delta_t(generate_case.domain_spec("coarse"))
+        refined = generate_case.delta_t(generate_case.domain_spec("coarse"), snappy_level=3)
+        for model in ("alm", "asm"):
+            # default: not refined, so the background time step
+            case_dir = tmp_path / f"{model}-bg"
+            assert generate_case.main(["--case-dir", str(case_dir), "--model", model]) == 0
+            assert f"deltaT {base:.8g};" in (
+                case_dir / "system" / "controlDict"
+            ).read_text(encoding="utf-8")
+            # forced on: same model, refined time step
+            case_dir = tmp_path / f"{model}-ref"
+            assert (
+                generate_case.main(
+                    ["--case-dir", str(case_dir), "--model", model, "--snappy", "on"]
+                )
+                == 0
+            )
+            assert f"deltaT {refined:.8g};" in (
+                case_dir / "system" / "controlDict"
+            ).read_text(encoding="utf-8")
+        # forced off on asm-mesh gives the background step back
+        case_dir = tmp_path / "asmmesh-bg"
+        assert (
+            generate_case.main(
+                ["--case-dir", str(case_dir), "--model", "asm-mesh", "--snappy", "off"]
+            )
+            == 0
+        )
+        assert f"deltaT {base:.8g};" in (
+            case_dir / "system" / "controlDict"
+        ).read_text(encoding="utf-8")
+
     def test_snappy_dict_refines_the_rotor_disk_without_a_surface(self, tmp_path):
         text = (CASE_DIR / "system" / "snappyHexMeshDict").read_text(encoding="utf-8")
         assert "castellatedMesh true;" in text

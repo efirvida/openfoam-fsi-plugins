@@ -134,3 +134,39 @@ problem, not a whole-domain one.
 - Etapa B2: fondo paramétrico + `snappyHexMesh` refinando alrededor de la pala
   (cuerda resuelta, tip 0.5 m) → recién ahí la corrida ASM es físicamente
   comparable contra ALM/OLAF.
+
+### Etapa C — comparacion ASM vs ALM vs ASM-mesh
+
+**Objetivo**: comparar los tres modelos sobre LA MISMA malla (fondo coarse +
+castellated del disco, nivel 3), para que la unica diferencia entre los casos sea
+el modelo de fuerza, no la resolucion.
+
+**Casos armados** (`runs/iea15mw-asmcmp-*`, generados con
+`--snappy on --snappy-level 3 --write-interval-deg 60`):
+
+| caso | elementType | nChordwise | surfaceGeometry | deltaT |
+| --- | --- | --- | --- | --- |
+| alm | actuatorLineElement | - | - | 0.00937 |
+| asm | actuatorSurfaceElement | 5 | no | 0.00937 |
+| asm-mesh | actuatorSurfaceElement | 5 | si | 0.00937 |
+
+**Cambio de generador que hizo falta**: `--snappy {on,off}` desacopla el
+refinado del modelo. Antes el snappy estaba atado a `asm-mesh`, asi que ALM y ASM
+no podian correr sobre la malla refinada, y su `deltaT` habria quedado en el del
+fondo (7.5 m) dando Courant ~4 sobre celdas de 0.94 m. Ahora el refinado es
+explicito y el `deltaT` lo sigue (`dt_level`), con default "on iff asm-mesh" para
+no cambiar los casos existentes.
+
+**Bloqueante para correrlos**: `scripts/run_iea15mw_case.sh` todavia ejecuta
+`snappyHexMesh` solo cuando `PHASEVI_MODEL=asm-mesh`. Necesita un
+`PHASEVI_SNAPPY` (default: on iff asm-mesh) para que los tres usen la misma
+malla. No se puede editar con los P3 en vuelo (bash re-lee por offset).
+
+**Salida esperada**: cp y empuje de rotor, mas las cargas spanwise
+(`postProcessing/actuatorLineElements/<t0>/...` para el ALM y
+`postProcessing/actuatorLines/<t0>/...` para los ASM) contra la referencia
+OLAF/BEM y WISDEM.
+
+**Nota de fisica**: los tres comparten `epsilon` del ASM segun celda
+(`2*cbrt(V)*meshFactor`), que en la malla refinada da ~1.9 m frente a la cuerda
+maxima de 5.77 m, asi que las tiras de cuerda (`nChordwise 5`) quedan resueltas.
