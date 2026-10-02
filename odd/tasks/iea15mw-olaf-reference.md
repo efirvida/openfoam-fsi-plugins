@@ -20,9 +20,17 @@ algebraic, OLAF is a free vortex wake, ours resolves the wake in the mesh.
 
 | model | V (m/s) | rpm | thrust (MN) | torque (MN·m) | Cp | Ct | TSR |
 |---|---|---|---|---|---|---|---|
-| **OLAF** (free vortex wake) | 10.659 | 7.518 | **2.972** | **24.75** | **0.590** | **0.861** | 8.957 |
+| **OLAF** (free vortex wake) | 10.659 | 7.518 | **2.868** | **22.26** | **0.5312** | **0.8288** | 8.962 |
 | OpenFAST BEM | 10.59 | 7.56 | 2.748 | 19.51 | 0.482 | 0.803 | 9.19 |
 | WISDEM (published) | 10.659 | 7.518 | 2.457 | 19.91 | 0.4618 | 0.7718 | 8.913 |
+
+**These supersede the first OLAF numbers.** The earlier reference (Cp 0.590 /
+Ct 0.861 / 2.972 MN) came from the attempt that hit the 4 h wall at t = 98 s of
+the 120 s TMax, i.e. 12.3 of 15 revolutions, and was **not converged** — the
+rotor loading was still falling. The completed 15-rev run (job 11605824, 5:24)
+lands ~10 % lower on Cp and ~4 % lower on Ct. Any comparison drawn against the
+old numbers was optimistic; the P3 ALM baseline (Cp 0.633) is **+19 %** over the
+converged OLAF, not the ~+1 % the stale reference suggested.
 
 The cross-code spread is wide: OLAF thrust is **+21 %** vs WISDEM and **+8 %**
 vs BEM; OLAF torque is **+24 %** vs WISDEM and **+27 %** vs BEM; OLAF Ct is
