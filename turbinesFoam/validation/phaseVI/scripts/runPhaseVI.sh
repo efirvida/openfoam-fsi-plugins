@@ -52,7 +52,7 @@
 #      combination or a --ranks value that differs from SLURM_NTASKS)
 #   3  environment, blockMesh/checkMesh, solver or STL staging failure
 #   4  generated case stale
-#   5  long-queue authorization gate (PHASEVI_LONG_QUEUE_AUTHORIZED=1 required)
+#   5  long-queue authorization gate (TURBINE_LONG_QUEUE_AUTHORIZED=1 required)
 set -eu
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -460,9 +460,9 @@ if [ "$run" -eq 1 ]; then
     # 11603591) ran all three of {baseline, pml ucx, btl ^openib} successfully,
     # which is why the failure is intermittent rather than node-count
     # deterministic -- but excluding the crashing BTL removes the possibility.
-    # Override with PHASEVI_MPI_MCA (space-separated --mca flags); set it empty
+    # Override with TURBINE_MPI_MCA (space-separated --mca flags); set it empty
     # to fall back to the site default.
-    mpi_mca="${PHASEVI_MPI_MCA---mca pml ucx --mca btl ^openib}"
+    mpi_mca="${TURBINE_MPI_MCA---mca pml ucx --mca btl ^openib}"
     # shellcheck disable=SC2086
     if ! mpirun $mpi_mca -np "$ranks" pimpleFoam -parallel > log.pimpleFoam 2>&1; then
         tail -40 log.pimpleFoam >&2
@@ -475,9 +475,9 @@ elif [ "$submit" -eq 1 ]; then
         echo "Submitting the Stage 0 job (development queue)"
         sbatch "$here/slurm/stage0.slurm"
     else
-        if [ "${PHASEVI_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
+        if [ "${TURBINE_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
             echo "ERROR: production submission is gated; export" >&2
-            echo "  PHASEVI_LONG_QUEUE_AUTHORIZED=1 to submit to the long queue." >&2
+            echo "  TURBINE_LONG_QUEUE_AUTHORIZED=1 to submit to the long queue." >&2
             exit 5
         fi
         # Production is blocked until the 7 m/s sign gate has passed (design

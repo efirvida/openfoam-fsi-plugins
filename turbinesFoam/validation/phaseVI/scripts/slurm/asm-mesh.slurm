@@ -7,7 +7,7 @@
 # headline run.
 #
 # PREPARED ONLY. This file refuses to run without
-# PHASEVI_LONG_QUEUE_AUTHORIZED=1 and is never submitted by this change.
+# TURBINE_LONG_QUEUE_AUTHORIZED=1 and is never submitted by this change.
 # runPhaseVI.sh --submit refuses -m asm-mesh and points here.
 #
 # Gate procedure (design sections 6.5 and 8.4): task 0 (asm-mesh:7:coarse:H,
@@ -49,7 +49,7 @@
 
 set -eu
 
-if [ "${PHASEVI_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
+if [ "${TURBINE_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
     echo "ERROR: long-queue authorization not granted; this file is prepared only." >&2
     exit 5
 fi
@@ -78,9 +78,9 @@ export LD_LIBRARY_PATH=$FOAM_USER_LIBBIN:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/l
 # Slurm executes a spooled copy of this script (/var/spool/slurmd/...), so
 # BASH_SOURCE does not point into the repository; resolve the package from the
 # submission directory instead (same fix as stage0.slurm/production.slurm).
-pkg_dir="${PHASEVI_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
+pkg_dir="${TURBINE_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
 if [ ! -x "${pkg_dir}/scripts/runPhaseVI.sh" ]; then
-    echo "ERROR: ${pkg_dir}/scripts/runPhaseVI.sh not found; submit from the package directory or set PHASEVI_PKG_DIR." >&2
+    echo "ERROR: ${pkg_dir}/scripts/runPhaseVI.sh not found; submit from the package directory or set TURBINE_PKG_DIR." >&2
     exit 3
 fi
 

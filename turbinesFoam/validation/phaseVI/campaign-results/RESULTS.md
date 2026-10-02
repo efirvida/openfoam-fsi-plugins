@@ -344,7 +344,7 @@ and mesh-insensitivity claims.
   live in `postProcessing/` and are never purged.
 - The campaign script now (a) skips runs already recorded `OK` in
   `runs/campaign-logs/`, and (b) deletes each run's `processor*/` after it
-  reaches `endTime` (`PHASEVI_KEEP_FIELDS=1` disables the deletion).
+  reaches `endTime` (`TURBINE_KEEP_FIELDS=1` disables the deletion).
 - The shared `leahk` group quota (2 T) was exhausted repeatedly and caused
   `EDQUOT` failures; the above two measures keep the footprint bounded.
 

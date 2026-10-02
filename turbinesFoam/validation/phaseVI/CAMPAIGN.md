@@ -6,7 +6,7 @@ the full staged curve at D/32 plus a D/48 spot-check, for the three models
 at both Glauert root-effect settings with data.
 
 > **Prepared only.** The array is never submitted by the preparing change.
-> It refuses to run without `PHASEVI_LONG_QUEUE_AUTHORIZED=1` (exit 5). The
+> It refuses to run without `TURBINE_LONG_QUEUE_AUTHORIZED=1` (exit 5). The
 > launch order stays with the maintainer.
 
 ## Arms
@@ -130,16 +130,16 @@ design (the committed 48-way decomposition is preferred over ~223/751 ranks).
 
 ```sh
 cd turbinesFoam/validation/phaseVI
-PHASEVI_LONG_QUEUE_AUTHORIZED=1 \
+TURBINE_LONG_QUEUE_AUTHORIZED=1 \
     sbatch scripts/slurm/campaign-rotational-augmentation.slurm
 ```
 
-Without `PHASEVI_LONG_QUEUE_AUTHORIZED=1` the script prints the prepared-only
+Without `TURBINE_LONG_QUEUE_AUTHORIZED=1` the script prints the prepared-only
 error and exits **5**. Nothing in this package submits the array. A no-Slurm,
 no-OpenFOAM listing of every task → run mapping is available for review:
 
 ```sh
-PHASEVI_CAMPAIGN_DRY_RUN=1 sh scripts/slurm/campaign-rotational-augmentation.slurm
+TURBINE_CAMPAIGN_DRY_RUN=1 sh scripts/slurm/campaign-rotational-augmentation.slurm
 ```
 
 ### Association submit-limit caveat (verified 2026-09-24)
@@ -239,8 +239,8 @@ is documented in `README.md`.
 | Check | Result |
 |---|---|
 | `bash -n scripts/slurm/campaign-rotational-augmentation.slurm` | exit 0 |
-| Gate without `PHASEVI_LONG_QUEUE_AUTHORIZED` | exit 5, prepared-only message |
-| `PHASEVI_CAMPAIGN_DRY_RUN=1` listing | 7 tasks, 47 runs, every task → run row shown |
+| Gate without `TURBINE_LONG_QUEUE_AUTHORIZED` | exit 5, prepared-only message |
+| `TURBINE_CAMPAIGN_DRY_RUN=1` listing | 7 tasks, 47 runs, every task → run row shown |
 | `sbatch --test-only --array=0-6 <script>` | 7 tasks accepted by Slurm (job 11601050, 48 processors, `sequana_cpu`); `squeue -j` → *Invalid job id* (no job created) |
 | `sbatch --test-only` free-slot probe | at 15 queued: passes at 9 tasks, fails at 10; at 14 queued: passes at 10 tasks, fails at 11 — the 7-task array fits both |
 | `case_config.py --select` for the staged combinations | all accepted |

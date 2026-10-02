@@ -7,20 +7,20 @@
 # mesh and domain extents come from the environment and are forwarded to
 # tools/generate_case.py by scripts/run_iea15mw_case.sh:
 #
-#   PHASEVI_MESH        coarse | medium | fine        (default coarse)
-#   PHASEVI_UPSTREAM    upstream extent [D]           (default 5)
-#   PHASEVI_DOWNSTREAM  downstream extent [D]         (default 15)
-#   PHASEVI_LATERAL     lateral half-extent [D]       (default 4)
-#   PHASEVI_FINE_MAX    refined region downstream [D] (default 8)
-#   PHASEVI_FINE_LAT    refined region lateral [D]    (default 1.5)
-#   PHASEVI_DOMAIN_TOP  domain top [m] above the rotor (default 2.5D)
-#   PHASEVI_RUN_DIR     run dir (default runs/iea15mw-rated-<mesh>)
+#   TURBINE_MESH        coarse | medium | fine        (default coarse)
+#   TURBINE_UPSTREAM    upstream extent [D]           (default 5)
+#   TURBINE_DOWNSTREAM  downstream extent [D]         (default 15)
+#   TURBINE_LATERAL     lateral half-extent [D]       (default 4)
+#   TURBINE_FINE_MAX    refined region downstream [D] (default 8)
+#   TURBINE_FINE_LAT    refined region lateral [D]    (default 1.5)
+#   TURBINE_DOMAIN_TOP  domain top [m] above the rotor (default 2.5D)
+#   TURBINE_RUN_DIR     run dir (default runs/iea15mw-rated-<mesh>)
 #
 # Example: a compact medium mesh, 10D x 6D around the rotor (P5 mesh sweep):
 #
 #   cd turbinesFoam/validation/iea15mw
-#   PHASEVI_MESH=medium PHASEVI_UPSTREAM=2.5 PHASEVI_DOWNSTREAM=7.5 \
-#   PHASEVI_LATERAL=3.0 PHASEVI_LONG_QUEUE_AUTHORIZED=1 \
+#   TURBINE_MESH=medium TURBINE_UPSTREAM=2.5 TURBINE_DOWNSTREAM=7.5 \
+#   TURBINE_LATERAL=3.0 TURBINE_LONG_QUEUE_AUTHORIZED=1 \
 #   sbatch scripts/slurm/production.slurm
 #
 # Cores only: no --nodes and no --mem.
@@ -33,18 +33,18 @@
 
 set -eu
 
-if [ "${PHASEVI_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
+if [ "${TURBINE_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
     echo "ERROR: long-queue authorization not granted." >&2
     exit 5
 fi
 
-pkg_dir="${PHASEVI_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
+pkg_dir="${TURBINE_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
 if [ ! -f "${pkg_dir}/scripts/run_iea15mw_case.sh" ]; then
-    echo "ERROR: submit from turbinesFoam/validation/iea15mw (or set PHASEVI_PKG_DIR)." >&2
+    echo "ERROR: submit from turbinesFoam/validation/iea15mw (or set TURBINE_PKG_DIR)." >&2
     exit 3
 fi
 
-export PHASEVI_PKG_DIR="$pkg_dir"
+export TURBINE_PKG_DIR="$pkg_dir"
 # 96 h fits the whole run in one allocation (no slicing/requeue needed).
-export PHASEVI_REQUEUE=0
+export TURBINE_REQUEUE=0
 exec bash "${pkg_dir}/scripts/run_iea15mw_case.sh"

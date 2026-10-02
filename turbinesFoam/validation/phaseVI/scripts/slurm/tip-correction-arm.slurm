@@ -22,7 +22,7 @@
 # Submit from the validation package directory (Slurm spools the script, so the
 # package is resolved from $SLURM_SUBMIT_DIR):
 #   cd turbinesFoam/validation/phaseVI
-#   PHASEVI_LONG_QUEUE_AUTHORIZED=1 sbatch scripts/slurm/tip-correction-arm.slurm
+#   TURBINE_LONG_QUEUE_AUTHORIZED=1 sbatch scripts/slurm/tip-correction-arm.slurm
 #SBATCH -p sequana_cpu
 #SBATCH --ntasks=48
 #SBATCH -J phaseVI-tipcorr
@@ -32,9 +32,9 @@
 
 set -eu
 
-if [ "${PHASEVI_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
+if [ "${TURBINE_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
     echo "ERROR: long-queue authorization not granted; export" >&2
-    echo "  PHASEVI_LONG_QUEUE_AUTHORIZED=1 to submit." >&2
+    echo "  TURBINE_LONG_QUEUE_AUTHORIZED=1 to submit." >&2
     exit 5
 fi
 
@@ -63,10 +63,10 @@ export LD_LIBRARY_PATH=/scratch/app/gcc/14.2.0/lib64:$FOAM_USER_LIBBIN:$WM_PROJE
 
 # Slurm executes a spooled copy, so BASH_SOURCE does not point into the
 # repository; resolve the package from the submission directory instead.
-pkg_dir="${PHASEVI_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
+pkg_dir="${TURBINE_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
 if [ ! -x "${pkg_dir}/scripts/runPhaseVI.sh" ]; then
     echo "ERROR: ${pkg_dir}/scripts/runPhaseVI.sh not found; submit from the" >&2
-    echo "  package directory or set PHASEVI_PKG_DIR." >&2
+    echo "  package directory or set TURBINE_PKG_DIR." >&2
     exit 3
 fi
 cd "$pkg_dir"

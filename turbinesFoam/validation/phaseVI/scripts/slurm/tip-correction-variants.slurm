@@ -4,7 +4,7 @@
 # submission so several can run concurrently:
 #
 #   cd turbinesFoam/validation/phaseVI
-#   PHASEVI_LONG_QUEUE_AUTHORIZED=1 sbatch scripts/slurm/tip-correction-variants.slurm <variant>
+#   TURBINE_LONG_QUEUE_AUTHORIZED=1 sbatch scripts/slurm/tip-correction-variants.slurm <variant>
 #
 # Variants (all keep arm A's physics: rotational augmentation on, Glauert tip
 # loss off, tip correction on; they differ only in the named switch):
@@ -45,9 +45,9 @@ case "$variant" in
     *) echo "ERROR: unknown variant '$variant'" >&2; exit 2 ;;
 esac
 
-if [ "${PHASEVI_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
+if [ "${TURBINE_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
     echo "ERROR: long-queue authorization not granted; export" >&2
-    echo "  PHASEVI_LONG_QUEUE_AUTHORIZED=1 to submit." >&2
+    echo "  TURBINE_LONG_QUEUE_AUTHORIZED=1 to submit." >&2
     exit 5
 fi
 
@@ -67,10 +67,10 @@ set -eu
 export FOAM_USER_LIBBIN=$WM_PROJECT_USER_DIR/platforms/$WM_OPTIONS/lib
 export LD_LIBRARY_PATH=/scratch/app/gcc/14.2.0/lib64:$FOAM_USER_LIBBIN:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib/sys-openmpi:$LD_LIBRARY_PATH
 
-pkg_dir="${PHASEVI_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
+pkg_dir="${TURBINE_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
 if [ ! -x "${pkg_dir}/scripts/runPhaseVI.sh" ]; then
     echo "ERROR: ${pkg_dir}/scripts/runPhaseVI.sh not found; submit from the" >&2
-    echo "  package directory or set PHASEVI_PKG_DIR." >&2
+    echo "  package directory or set TURBINE_PKG_DIR." >&2
     exit 3
 fi
 cd "$pkg_dir"

@@ -141,7 +141,7 @@ commit, OpenFOAM version, config sha256, variant, solver, `n_chordwise`,
   `mpirun -np <ranks> pimpleFoam -parallel` (inside a Slurm allocation;
   48 subdomains by default).
 - `--submit` with `--stage0` submits `slurm/stage0.slurm` to the development
-  queue. Without `--stage0` it requires `PHASEVI_LONG_QUEUE_AUTHORIZED=1`
+  queue. Without `--stage0` it requires `TURBINE_LONG_QUEUE_AUTHORIZED=1`
   **and** a passing `results/U7-H/sign_gate.json`; otherwise it exits 5. It
   refuses to carry `--solver iddes`, `--nchordwise` or `--ranks` (Stage 3 has
   its own prepared arrays).
@@ -201,7 +201,7 @@ until the long-queue authorization is granted. 20 m/s stays renderable but is
 deliberately not staged, so no blanket job array can pick it up.
 `slurm/production.slurm` is a **prepared-only** array: one task per (model,
 speed, mesh, sequence), 48 ranks, ≤ 96 h per task, restart from `latestTime`.
-It refuses to run without `PHASEVI_LONG_QUEUE_AUTHORIZED=1`, and no script
+It refuses to run without `TURBINE_LONG_QUEUE_AUTHORIZED=1`, and no script
 submits it automatically.
 
 The rotational-augmentation candidate campaign (three models, the full staged
@@ -215,12 +215,12 @@ association's `MaxSubmitJobs=24`. Its matrix, task→run table, resource
 arithmetic (48 ranks vs the 30k cells/core heuristic), launch command, baseline
 and gap notes, acceptance criteria and the association submit-limit caveat are
 documented in `CAMPAIGN.md`. It is prepared only and refuses to run without
-`PHASEVI_LONG_QUEUE_AUTHORIZED=1`.
+`TURBINE_LONG_QUEUE_AUTHORIZED=1`.
 
 ### Stage 3 arrays (prepared only)
 
 Two prepared-only arrays cover Stage 3; both refuse to run without
-`PHASEVI_LONG_QUEUE_AUTHORIZED=1` and resolve the package from
+`TURBINE_LONG_QUEUE_AUTHORIZED=1` and resolve the package from
 `$SLURM_SUBMIT_DIR` (Slurm spools the script, so `BASH_SOURCE` is not usable —
 same fix as `stage0.slurm`/`production.slurm`). Submit them from the package
 directory with `sbatch scripts/slurm/stage3.slurm` (or `stage3-d64.slurm`).
@@ -245,7 +245,7 @@ node, `--time=24:00:00` (the delta's at-most-24 h bound, stricter than the
 untouched 96 h `production.slurm`), `--array=0-1`, both tasks `--restart --run`.
 Task 0 is `asm-mesh:7:coarse:H` — the **D/32 performance measurement gate** —
 and task 1 is `asm-mesh:7:fine:H`, the headline run. The script refuses to run
-without `PHASEVI_LONG_QUEUE_AUTHORIZED=1` (exit 5) and resolves the package from
+without `TURBINE_LONG_QUEUE_AUTHORIZED=1` (exit 5) and resolves the package from
 `$SLURM_SUBMIT_DIR`, so it is **prepared only**: the D/32 task is executed and
 reviewed (proceed / harden the candidate query / restrict the campaign) before
 any D/48 preparation, and no automated step of this change submits it. The

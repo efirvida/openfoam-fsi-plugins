@@ -21,17 +21,17 @@
 
 set -eu
 
-pkg_dir="${PHASEVI_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
+pkg_dir="${TURBINE_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
 if [ ! -f "${pkg_dir}/scripts/run_iea15mw_case.sh" ]; then
-    echo "ERROR: submit from turbinesFoam/validation/iea15mw (or set PHASEVI_PKG_DIR)." >&2
+    echo "ERROR: submit from turbinesFoam/validation/iea15mw (or set TURBINE_PKG_DIR)." >&2
     exit 3
 fi
 
-export PHASEVI_PKG_DIR="$pkg_dir"
-export PHASEVI_SLURM_SCRIPT="${pkg_dir}/scripts/slurm/coarse-dev.slurm"
-export PHASEVI_REQUEUE=1
-export PHASEVI_SLICE_REVS="${PHASEVI_SLICE_REVS:-0.5}"
+export TURBINE_PKG_DIR="$pkg_dir"
+export TURBINE_SLURM_SCRIPT="${pkg_dir}/scripts/slurm/coarse-dev.slurm"
+export TURBINE_REQUEUE=1
+export TURBINE_SLICE_REVS="${TURBINE_SLICE_REVS:-0.5}"
 # 15 revs: the IEA 15 MW rotor needs ~10-15 revs to reach a quasi-steady state
 # (the 3-rev P2 check is a first look, not converged). See README.
-export PHASEVI_TOTAL_REVS="${PHASEVI_TOTAL_REVS:-15}"
+export TURBINE_TOTAL_REVS="${TURBINE_TOTAL_REVS:-15}"
 exec bash "${pkg_dir}/scripts/run_iea15mw_case.sh"

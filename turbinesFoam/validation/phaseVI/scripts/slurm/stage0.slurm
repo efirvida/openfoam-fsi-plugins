@@ -44,10 +44,10 @@ export LD_LIBRARY_PATH=$FOAM_USER_LIBBIN:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/l
 # that copy, so BASH_SOURCE[0] points outside the repository and cannot locate
 # the validation package. $SLURM_SUBMIT_DIR is the directory sbatch was invoked
 # from (the package dir when submitting from turbinesFoam/validation/phaseVI);
-# PHASEVI_PKG_DIR overrides it for direct execution. Extra arguments are
+# TURBINE_PKG_DIR overrides it for direct execution. Extra arguments are
 # forwarded to stage0.sh (e.g. --mesh-only / --runs-only to split Stage 0 under
 # the 20 min development-queue limit).
-pkg_dir="${PHASEVI_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
+pkg_dir="${TURBINE_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
 stage0="$pkg_dir/scripts/stage0.sh"
 if [ ! -x "$stage0" ]; then
     echo "ERROR: Stage 0 driver not found: $stage0" >&2

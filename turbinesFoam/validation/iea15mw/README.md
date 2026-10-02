@@ -392,7 +392,7 @@ Verified with a loaded OpenFOAM v2506 environment on the rendered coarse case:
 
 **Running the finer meshes**: they do not fit the 20-minute development queue,
 so `scripts/slurm/production.slurm` runs the whole case (96 h) for a given
-`PHASEVI_MESH` / `PHASEVI_*` domain, while `scripts/slurm/coarse-dev.slurm`
+`TURBINE_MESH` / `TURBINE_*` domain, while `scripts/slurm/coarse-dev.slurm`
 keeps the 20-minute sliced/self-requeuing path for the coarse mesh.
 
 ## Known limitations

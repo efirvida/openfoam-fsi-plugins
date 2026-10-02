@@ -100,7 +100,7 @@ problem, not a whole-domain one.
 ### Etapa A — ASM sin malla ✅ (commit `9a49c37`)
 - `generate_case.py --model {alm,asm,asm-mesh}` con los tres twins
   (`fvOptions.ALM`, `.ASM`, `.ASM-MESH`); `--model` instala el elegido como
-  `system/fvOptions`. El runner reenvía `PHASEVI_MODEL` / `PHASEVI_N_CHORDWISE`.
+  `system/fvOptions`. El runner reenvía `TURBINE_MODEL` / `TURBINE_N_CHORDWISE`.
 - Smoke dev 11605633 (0.05 rev, coarse): `elementType actuatorSurfaceElement;
   nChordwise 5;`, coeficientes emitidos, `IEA 15 MW run complete`. ✅
 - Caveat: en D/32 el `ε` del ASM es por celda (`2·∛V·meshFactor` ≈ 15 m) y la
@@ -158,8 +158,8 @@ explicito y el `deltaT` lo sigue (`dt_level`), con default "on iff asm-mesh" par
 no cambiar los casos existentes.
 
 **Bloqueante para correrlos**: `scripts/run_iea15mw_case.sh` todavia ejecuta
-`snappyHexMesh` solo cuando `PHASEVI_MODEL=asm-mesh`. Necesita un
-`PHASEVI_SNAPPY` (default: on iff asm-mesh) para que los tres usen la misma
+`snappyHexMesh` solo cuando `TURBINE_MODEL=asm-mesh`. Necesita un
+`TURBINE_SNAPPY` (default: on iff asm-mesh) para que los tres usen la misma
 malla. No se puede editar con los P3 en vuelo (bash re-lee por offset).
 
 **Salida esperada**: cp y empuje de rotor, mas las cargas spanwise

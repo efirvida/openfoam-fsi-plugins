@@ -8,7 +8,7 @@
 # 3 revolutions. The heavy lifting lives in scripts/run_iea15mw_case.sh.
 #
 #   cd turbinesFoam/validation/iea15mw
-#   PHASEVI_LONG_QUEUE_AUTHORIZED=1 sbatch scripts/slurm/coarse.slurm
+#   TURBINE_LONG_QUEUE_AUTHORIZED=1 sbatch scripts/slurm/coarse.slurm
 #
 # Cores only: no --nodes and no --mem.
 #SBATCH -p sequana_cpu
@@ -21,18 +21,18 @@
 
 set -eu
 
-if [ "${PHASEVI_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
+if [ "${TURBINE_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
     echo "ERROR: long-queue authorization not granted." >&2
     exit 5
 fi
 
-pkg_dir="${PHASEVI_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
+pkg_dir="${TURBINE_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
 if [ ! -f "${pkg_dir}/scripts/run_iea15mw_case.sh" ]; then
-    echo "ERROR: submit from turbinesFoam/validation/iea15mw (or set PHASEVI_PKG_DIR)." >&2
+    echo "ERROR: submit from turbinesFoam/validation/iea15mw (or set TURBINE_PKG_DIR)." >&2
     exit 3
 fi
 
-export PHASEVI_PKG_DIR="$pkg_dir"
+export TURBINE_PKG_DIR="$pkg_dir"
 # 96 h fits the whole run in one allocation.
-export PHASEVI_REQUEUE=0
+export TURBINE_REQUEUE=0
 exec bash "${pkg_dir}/scripts/run_iea15mw_case.sh"

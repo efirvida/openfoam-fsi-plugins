@@ -3,28 +3,28 @@
 # IEA 15-240-RWT rated-point run body, shared by the production wrapper
 # (slurm/coarse.slurm) and the development wrapper (slurm/coarse-dev.slurm).
 #
-# The run is split into slices of PHASEVI_SLICE_REVS revolutions. Each slice
+# The run is split into slices of TURBINE_SLICE_REVS revolutions. Each slice
 # sets the OpenFOAM endTime to the slice end and stops *cleanly* there (OpenFOAM
 # always writes the final time), so a requeue resumes from a written, consistent
 # time directory. This avoids killing the solver mid-write on the 20-minute
 # development queue.
 #
 # Environment:
-#   PHASEVI_PKG_DIR            package dir (default $SLURM_SUBMIT_DIR)
-#   PHASEVI_RUN_DIR            run dir (default runs/iea15mw-rated-<mesh>)
-#   PHASEVI_MESH               coarse | medium | fine (default coarse)
-#   PHASEVI_UPSTREAM           upstream extent [D] (default 5)
-#   PHASEVI_DOWNSTREAM         downstream extent [D] (default 15)
-#   PHASEVI_LATERAL            lateral half-extent [D] (default 4)
-#   PHASEVI_FINE_MAX           refined region downstream end [D] (default 8)
-#   PHASEVI_FINE_LAT           refined region lateral half-width [D] (default 1.5)
-#   PHASEVI_DOMAIN_TOP         domain top [m] above the rotor (default 2.5D)
-#   PHASEVI_RANKS              ranks (default 48)
-#   PHASEVI_TOTAL_REVS         total revolutions (default 3)
-#   PHASEVI_SLICE_REVS         revolutions per allocation (default 0.5)
-#   PHASEVI_REQUEUE            1 = requeue to continue a long run (default 1)
-#   PHASEVI_SOLVER_TIME_BUDGET safety wall timeout in seconds (default: Slurm)
-#   PHASEVI_MPI_MCA            override the mpirun MCA flags
+#   TURBINE_PKG_DIR            package dir (default $SLURM_SUBMIT_DIR)
+#   TURBINE_RUN_DIR            run dir (default runs/iea15mw-rated-<mesh>)
+#   TURBINE_MESH               coarse | medium | fine (default coarse)
+#   TURBINE_UPSTREAM           upstream extent [D] (default 5)
+#   TURBINE_DOWNSTREAM         downstream extent [D] (default 15)
+#   TURBINE_LATERAL            lateral half-extent [D] (default 4)
+#   TURBINE_FINE_MAX           refined region downstream end [D] (default 8)
+#   TURBINE_FINE_LAT           refined region lateral half-width [D] (default 1.5)
+#   TURBINE_DOMAIN_TOP         domain top [m] above the rotor (default 2.5D)
+#   TURBINE_RANKS              ranks (default 48)
+#   TURBINE_TOTAL_REVS         total revolutions (default 3)
+#   TURBINE_SLICE_REVS         revolutions per allocation (default 0.5)
+#   TURBINE_REQUEUE            1 = requeue to continue a long run (default 1)
+#   TURBINE_SOLVER_TIME_BUDGET safety wall timeout in seconds (default: Slurm)
+#   TURBINE_MPI_MCA            override the mpirun MCA flags
 #
 # Submit from the package directory so $SLURM_SUBMIT_DIR resolves the package.
 set -eu
@@ -46,35 +46,44 @@ export FOAM_USER_LIBBIN=$WM_PROJECT_USER_DIR/platforms/$WM_OPTIONS/lib
 export LD_LIBRARY_PATH=/scratch/app/gcc/14.2.0/lib64:$FOAM_USER_LIBBIN:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib/sys-openmpi:$LD_LIBRARY_PATH
 export PYTHON=${PYTHON:-/scratch/leahk/eduardo.donestevez/venv/bin/python}
 
-pkg_dir="${PHASEVI_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
+pkg_dir="${TURBINE_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
 if [ ! -f "${pkg_dir}/tools/generate_case.py" ]; then
-    echo "ERROR: submit from turbinesFoam/validation/iea15mw (or set PHASEVI_PKG_DIR)." >&2
+    echo "ERROR: submit from turbinesFoam/validation/iea15mw (or set TURBINE_PKG_DIR)." >&2
     exit 3
 fi
 cd "$pkg_dir"
 
-run_dir="${PHASEVI_RUN_DIR:-runs/iea15mw-rated-${PHASEVI_MESH:-coarse}}"
-mesh="${PHASEVI_MESH:-coarse}"
-ranks="${PHASEVI_RANKS:-48}"
+run_dir="${TURBINE_RUN_DIR:-runs/iea15mw-rated-${TURBINE_MESH:-coarse}}"
+mesh="${TURBINE_MESH:-coarse}"
+ranks="${TURBINE_RANKS:-48}"
 
-domain_args=(--mesh "$mesh" --ranks "$ranks" --model "${PHASEVI_MODEL:-alm}")
-if [ -n "${PHASEVI_N_CHORDWISE:-}" ]; then
-    domain_args+=(--n-chordwise "$PHASEVI_N_CHORDWISE")
+model="${TURBINE_MODEL:-alm}"
+# Castellate the rotor disk? Defaults to "on iff the model is asm-mesh", matching
+# tools/generate_case.py. The model comparison (ALM vs ASM vs ASM-mesh) forces it
+# on so all three share one mesh, and passing --snappy keeps the generator's
+# deltaT in sync with the mesh actually built.
+snappy="${TURBINE_SNAPPY:-}"
+if [ -z "$snappy" ]; then
+    if [ "$model" = "asm-mesh" ]; then snappy=on; else snappy=off; fi
 fi
-if [ -n "${PHASEVI_SNAPPY_LEVEL:-}" ]; then
-    domain_args+=(--snappy-level "$PHASEVI_SNAPPY_LEVEL")
+domain_args=(--mesh "$mesh" --ranks "$ranks" --model "$model" --snappy "$snappy")
+if [ -n "${TURBINE_N_CHORDWISE:-}" ]; then
+    domain_args+=(--n-chordwise "$TURBINE_N_CHORDWISE")
 fi
-write_deg="${PHASEVI_WRITE_DEG:-}"
+if [ -n "${TURBINE_SNAPPY_LEVEL:-}" ]; then
+    domain_args+=(--snappy-level "$TURBINE_SNAPPY_LEVEL")
+fi
+write_deg="${TURBINE_WRITE_DEG:-}"
 if [ -n "$write_deg" ]; then
     domain_args+=(--write-interval-deg "$write_deg")
 fi
 for pair in \
-    "PHASEVI_UPSTREAM:--domain-upstream" \
-    "PHASEVI_DOWNSTREAM:--domain-downstream" \
-    "PHASEVI_LATERAL:--domain-lateral" \
-    "PHASEVI_FINE_MAX:--domain-fine-max" \
-    "PHASEVI_FINE_LAT:--domain-fine-lat" \
-    "PHASEVI_DOMAIN_TOP:--domain-top"; do
+    "TURBINE_UPSTREAM:--domain-upstream" \
+    "TURBINE_DOWNSTREAM:--domain-downstream" \
+    "TURBINE_LATERAL:--domain-lateral" \
+    "TURBINE_FINE_MAX:--domain-fine-max" \
+    "TURBINE_FINE_LAT:--domain-fine-lat" \
+    "TURBINE_DOMAIN_TOP:--domain-top"; do
     var="${pair%%:*}"
     flag="${pair##*:}"
     value="${!var:-}"
@@ -82,8 +91,8 @@ for pair in \
         domain_args+=("$flag" "$value")
     fi
 done
-total_revs="${PHASEVI_TOTAL_REVS:-3}"
-requeue="${PHASEVI_REQUEUE:-1}"
+total_revs="${TURBINE_TOTAL_REVS:-3}"
+requeue="${TURBINE_REQUEUE:-1}"
 
 # The ALM writes a per-step `angleDeg.<name>` into the current time directory,
 # creating field-less time dirs that `startFrom latestTime` would pick (and,
@@ -98,7 +107,7 @@ if [ -d "${run_dir}/processor0" ]; then
 fi
 # Without requeue the whole run must fit in one allocation.
 if [ "$requeue" = "1" ]; then
-    slice_revs="${PHASEVI_SLICE_REVS:-0.5}"
+    slice_revs="${TURBINE_SLICE_REVS:-0.5}"
 else
     slice_revs="$total_revs"
 fi
@@ -143,7 +152,7 @@ fi
 
 # ASM-mesh: stage the committed blade STL the twin references as surfaceGeometry
 # so restarts/relocated runs resolve their own surface (sha256-checked).
-if [ "${PHASEVI_MODEL:-alm}" = "asm-mesh" ]; then
+if [ "$model" = "asm-mesh" ]; then
     if ! "$PYTHON" tools/stage_blade_stl.py --run-dir "$run_dir" > "$run_dir/log.stage-blade-stl" 2>&1; then
         cat "$run_dir/log.stage-blade-stl" >&2
         echo "ERROR: staging the blade STL for asm-mesh failed" >&2
@@ -163,7 +172,7 @@ fi
 # ASM-mesh: castellate the rotor-disk cylinder so the local cell resolves the
 # blade chord. --overwrite replaces blockMesh's polyMesh in place, and the guard
 # above means a resumed run (polyMesh already snapped) skips both.
-if [ "${PHASEVI_MODEL:-alm}" = "asm-mesh" ]; then
+if [ "$snappy" = "on" ]; then
     if ! snappyHexMesh -overwrite > log.snappyHexMesh 2>&1; then
         tail -40 log.snappyHexMesh >&2
         echo "ERROR: snappyHexMesh failed" >&2
@@ -196,8 +205,8 @@ fi
 # 11604860 with "requested more processes than the ppr for this topology can
 # support" when Slurm granted only 3 nodes. The project policy forbids capping
 # --nodes, so the mapping follows the allocation instead.
-if [ "${PHASEVI_MPI_MCA+x}" = "x" ]; then
-    mpi_mca="$PHASEVI_MPI_MCA"
+if [ "${TURBINE_MPI_MCA+x}" = "x" ]; then
+    mpi_mca="$TURBINE_MPI_MCA"
 else
     mpi_mca="-mca pml ucx --mca btl ^openib"
     # Do NOT force --map-by ppr:N:node: OpenMPI then requires exactly N slots on
@@ -207,7 +216,7 @@ else
 fi
 
 # Safety wall budget: the slice endTime normally stops the solver first.
-budget="${PHASEVI_SOLVER_TIME_BUDGET:-}"
+budget="${TURBINE_SOLVER_TIME_BUDGET:-}"
 if [ -z "$budget" ] && [ -n "${SLURM_JOB_ID:-}" ]; then
     end=$(scontrol show job "$SLURM_JOB_ID" 2>/dev/null | tr ' ' '\n' | sed -n 's/^EndTime=//p' | head -1)
     if [ -n "$end" ] && end_s=$(date -d "$end" +%s 2>/dev/null); then

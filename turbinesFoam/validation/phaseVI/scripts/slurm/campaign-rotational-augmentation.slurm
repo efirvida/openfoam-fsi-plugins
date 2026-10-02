@@ -77,16 +77,16 @@
 # preserved 2026-09-21 baselines under results/U*-H/ are never overwritten.
 #
 # PREPARED ONLY. This file refuses to run without
-# PHASEVI_LONG_QUEUE_AUTHORIZED=1 and is never submitted by the preparing
+# TURBINE_LONG_QUEUE_AUTHORIZED=1 and is never submitted by the preparing
 # change. `runPhaseVI.sh --submit` does not launch this array.
 #
 # Dry-run listing (no Slurm, no OpenFOAM; prints every task->run mapping):
-#   PHASEVI_CAMPAIGN_DRY_RUN=1 sh scripts/slurm/campaign-rotational-augmentation.slurm
+#   TURBINE_CAMPAIGN_DRY_RUN=1 sh scripts/slurm/campaign-rotational-augmentation.slurm
 #
 # Submit from the validation package directory (Slurm spools the script, so the
 # package is resolved from $SLURM_SUBMIT_DIR):
 #   cd turbinesFoam/validation/phaseVI
-#   PHASEVI_LONG_QUEUE_AUTHORIZED=1 sbatch scripts/slurm/campaign-rotational-augmentation.slurm
+#   TURBINE_LONG_QUEUE_AUTHORIZED=1 sbatch scripts/slurm/campaign-rotational-augmentation.slurm
 #SBATCH -p sequana_cpu
 #SBATCH --ntasks=48
 # No --nodes and no --mem: request only the 48 cores and let Slurm place them.
@@ -191,7 +191,7 @@ expand_scheme() {
 
 # Dry-run: print the whole task -> run map and exit 0, before touching Slurm or
 # OpenFOAM. Used by the verification and documentation.
-if [ "${PHASEVI_CAMPAIGN_DRY_RUN:-0}" = "1" ]; then
+if [ "${TURBINE_CAMPAIGN_DRY_RUN:-0}" = "1" ]; then
     task_id=0
     while [ "$task_id" -lt "$n_tasks" ]; do
         map_task "$task_id"
@@ -210,7 +210,7 @@ if [ "${PHASEVI_CAMPAIGN_DRY_RUN:-0}" = "1" ]; then
     exit 0
 fi
 
-if [ "${PHASEVI_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
+if [ "${TURBINE_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
     echo "ERROR: long-queue authorization not granted; this file is prepared only." >&2
     exit 5
 fi
@@ -242,9 +242,9 @@ export LD_LIBRARY_PATH=/scratch/app/gcc/14.2.0/lib64:$FOAM_USER_LIBBIN:$WM_PROJE
 # Slurm executes a spooled copy of this script (/var/spool/slurmd/...), so
 # BASH_SOURCE does not point into the repository; resolve the package from the
 # submission directory instead (same fix as production.slurm/asm-mesh.slurm).
-pkg_dir="${PHASEVI_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
+pkg_dir="${TURBINE_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
 if [ ! -x "${pkg_dir}/scripts/runPhaseVI.sh" ]; then
-    echo "ERROR: ${pkg_dir}/scripts/runPhaseVI.sh not found; submit from the package directory or set PHASEVI_PKG_DIR." >&2
+    echo "ERROR: ${pkg_dir}/scripts/runPhaseVI.sh not found; submit from the package directory or set TURBINE_PKG_DIR." >&2
     exit 3
 fi
 
@@ -318,8 +318,8 @@ run_one() {
         # never purged by purgeWrite) and are all the validation needs, so the
         # decomposed fields under processor*/ are dead weight once the run
         # reached endTime.  Dropping them keeps the shared group quota bounded
-        # as runs accumulate.  Set PHASEVI_KEEP_FIELDS=1 to keep them.
-        if [ "${PHASEVI_KEEP_FIELDS:-0}" != "1" ]; then
+        # as runs accumulate.  Set TURBINE_KEEP_FIELDS=1 to keep them.
+        if [ "${TURBINE_KEEP_FIELDS:-0}" != "1" ]; then
             rm -rf "${pkg_dir}/runs/${run_token}"/processor*
         fi
     else

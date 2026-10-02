@@ -107,8 +107,8 @@ Both in job `11603576` (tasks 7 and 8).
   node-count-deterministic failure. Excluding that BTL still removes the
   possibility.
 - **2026-09-29 — MPI fix applied.** `scripts/runPhaseVI.sh` now runs
-  `mpirun ${PHASEVI_MPI_MCA---mca pml ucx --mca btl ^openib} -np <ranks>`,
-  overridable via `PHASEVI_MPI_MCA` (empty = site default). Verified: `bash -n`
+  `mpirun ${TURBINE_MPI_MCA---mca pml ucx --mca btl ^openib} -np <ranks>`,
+  overridable via `TURBINE_MPI_MCA` (empty = site default). Verified: `bash -n`
   OK; the expansion yields the default when unset, empty when set empty, and the
   custom value otherwise.
 - **2026-09-29 — A′ fine relaunched** (`runs/alm-U7-fine-aug-on-tip-off-root-off`
@@ -176,11 +176,11 @@ A 1.5× ε reduction changed the answer by **0.1 %** → the base over-shoot is
 ## Evidence log
 
 - **2026-09-28 — script change verified.** `bash -n` passes. Dry-run
-  (`PHASEVI_CAMPAIGN_DRY_RUN=1`) gives exactly three runs for task 7:
+  (`TURBINE_CAMPAIGN_DRY_RUN=1`) gives exactly three runs for task 7:
   `alm U7/U10/U13 coarse --rotational-augmentation on --root-effects off
   --tip-effects off --run-label aug-on-tip-off-root-off`. Arm A (task 0) is
   unchanged (5 coarse + 2 fine). Total run count 47 → 50.
-- **2026-09-28 — launched.** `PHASEVI_LONG_QUEUE_AUTHORIZED=1 sbatch --array=7`
+- **2026-09-28 — launched.** `TURBINE_LONG_QUEUE_AUTHORIZED=1 sbatch --array=7`
   → job `11603351_[7]`, **PENDING, Reason=Priority, StartTime +32 h**.
 - **2026-09-28 — SBATCH policy fix (project-wide).** The job was pending because
   of the SBATCH header, not the script logic:

@@ -7,7 +7,7 @@
 # it up. Stage 3 (optional IDDES, nChordwise sweep, D/64) is intentionally not
 # in this array.
 #
-# Guarded by PHASEVI_LONG_QUEUE_AUTHORIZED=1; runPhaseVI.sh --submit enforces
+# Guarded by TURBINE_LONG_QUEUE_AUTHORIZED=1; runPhaseVI.sh --submit enforces
 # the same gate.
 #SBATCH -p sequana_cpu
 #SBATCH --ntasks=48
@@ -19,7 +19,7 @@
 
 set -eu
 
-if [ "${PHASEVI_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
+if [ "${TURBINE_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
     echo "ERROR: long-queue authorization not granted; this file is prepared only." >&2
     exit 5
 fi
@@ -48,9 +48,9 @@ export LD_LIBRARY_PATH=$FOAM_USER_LIBBIN:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/l
 # Slurm executes a spooled copy of this script (/var/spool/slurmd/...), so
 # BASH_SOURCE does not point into the repository; resolve the package from the
 # submission directory instead (same fix as stage0.slurm).
-pkg_dir="${PHASEVI_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
+pkg_dir="${TURBINE_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
 if [ ! -x "${pkg_dir}/scripts/runPhaseVI.sh" ]; then
-    echo "ERROR: ${pkg_dir}/scripts/runPhaseVI.sh not found; submit from the package directory or set PHASEVI_PKG_DIR." >&2
+    echo "ERROR: ${pkg_dir}/scripts/runPhaseVI.sh not found; submit from the package directory or set TURBINE_PKG_DIR." >&2
     exit 3
 fi
 

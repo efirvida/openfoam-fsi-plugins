@@ -10,7 +10,7 @@
 # system/fvOptions model DuSelig -> model Lindenburg, then runs it.
 #
 #   cd turbinesFoam/validation/phaseVI
-#   PHASEVI_LONG_QUEUE_AUTHORIZED=1 sbatch scripts/slurm/tip-correction-lindenburg.slurm [speed]
+#   TURBINE_LONG_QUEUE_AUTHORIZED=1 sbatch scripts/slurm/tip-correction-lindenburg.slurm [speed]
 #SBATCH -p sequana_cpu
 #SBATCH --ntasks=48
 #SBATCH -J phaseVI-linden
@@ -23,7 +23,7 @@ set -eu
 speed="${1:-7}"
 label="tipcorr-lindenburg"
 
-if [ "${PHASEVI_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
+if [ "${TURBINE_LONG_QUEUE_AUTHORIZED:-0}" != "1" ]; then
     echo "ERROR: long-queue authorization not granted." >&2
     exit 5
 fi
@@ -44,9 +44,9 @@ set -eu
 export FOAM_USER_LIBBIN=$WM_PROJECT_USER_DIR/platforms/$WM_OPTIONS/lib
 export LD_LIBRARY_PATH=/scratch/app/gcc/14.2.0/lib64:$FOAM_USER_LIBBIN:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib/sys-openmpi:$LD_LIBRARY_PATH
 
-pkg_dir="${PHASEVI_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
+pkg_dir="${TURBINE_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
 if [ ! -x "${pkg_dir}/scripts/runPhaseVI.sh" ]; then
-    echo "ERROR: submit from the package directory (or set PHASEVI_PKG_DIR)." >&2
+    echo "ERROR: submit from the package directory (or set TURBINE_PKG_DIR)." >&2
     exit 3
 fi
 cd "$pkg_dir"
@@ -85,7 +85,7 @@ rm -rf processor*
 if ! decomposePar -force > log.decomposePar 2>&1; then
     tail -30 log.decomposePar >&2; echo "ERROR: decomposePar failed" >&2; exit 3
 fi
-mpi_mca="${PHASEVI_MPI_MCA---mca pml ucx --mca btl ^openib}"
+mpi_mca="${TURBINE_MPI_MCA---mca pml ucx --mca btl ^openib}"
 # shellcheck disable=SC2086
 if ! mpirun $mpi_mca -np 48 pimpleFoam -parallel > log.pimpleFoam 2>&1; then
     tail -40 log.pimpleFoam >&2

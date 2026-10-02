@@ -324,7 +324,7 @@ job — only the 48-rank single-node production array existed.
    `solver`, `n_chordwise` and `ranks`, and inside Slurm a `--ranks` that
    differs from `SLURM_NTASKS` fails with exit 2. `--submit` refuses the new
    Stage 3 flags (Stage 3 has its own arrays).
-4. Two prepared-only arrays, guarded by `PHASEVI_LONG_QUEUE_AUTHORIZED=1` and
+4. Two prepared-only arrays, guarded by `TURBINE_LONG_QUEUE_AUTHORIZED=1` and
    resolved from `$SLURM_SUBMIT_DIR` (never `BASH_SOURCE`):
    `slurm/stage3.slurm` (4 nodes / 192 ranks, 96 h, 6 tasks: IDDES ALM/ASM on
    coarse+fine and ASM `nChordwise` 1/3 on fine, all at 7 m/s) and
@@ -510,7 +510,7 @@ also had no way to request the render-time root-effect ablation
 each index to a `(model, speed, mesh)` tuple — the full staged curve at D/32
 (7/10/13/15/25 m/s for all three models) plus a D/48 spot-check at 7 and 13 m/s
 — and invokes `runPhaseVI.sh --rotational-augmentation on --root-effects off
---run` behind the `PHASEVI_LONG_QUEUE_AUTHORIZED=1` gate (exit 5 otherwise,
+--run` behind the `TURBINE_LONG_QUEUE_AUTHORIZED=1` gate (exit 5 otherwise,
 never submitted). The runner gains `--root-effects on|off`, validated and
 forwarded to `generate_case.py` in the same way as `--rotational-augmentation`,
 and a runner contract test covers it. `CAMPAIGN.md` records the matrix, launch
@@ -1213,7 +1213,7 @@ risked being submitted.
    ablation.
 4. `scripts/slurm/asm-mesh.slurm` is a prepared-only 2-task array (D/32
    measurement gate then D/48 headline, 48 ranks, ≤ 24 h, restartable), guarded
-   by `PHASEVI_LONG_QUEUE_AUTHORIZED=1`; no job is submitted by this change.
+   by `TURBINE_LONG_QUEUE_AUTHORIZED=1`; no job is submitted by this change.
 5. Tests pin the three-twin diff, model selection, the stage matrix, the
    committed twin, the staging helper and the three-way merge including the
    real `bladeSurface` CSV schema.
