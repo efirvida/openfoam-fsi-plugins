@@ -153,9 +153,9 @@ void Foam::fv::turbineALSource::createOutputFile()
 // OpenFOAM idiom for "read it if the start time directory has it, otherwise
 // default" is IOobject::READ_IF_PRESENT at the current time instance, which
 // under startFrom latestTime is the latest written time directory.
-void Foam::fv::turbineALSource::createAngleDegField()
+void Foam::fv::turbineALSource::createAngleRadField()
 {
-    const word fieldName("angleDeg." + name_);
+    const word fieldName("angleRad." + name_);
 
     IOobject io
     (
@@ -170,7 +170,7 @@ void Foam::fv::turbineALSource::createAngleDegField()
     // that time directory (READ_IF_PRESENT)
     const bool haveAngle = io.typeHeaderOk<uniformDimensionedScalarField>(true);
 
-    angleDegField_.reset
+    angleRadField_.reset
     (
         new uniformDimensionedScalarField
         (
@@ -181,7 +181,10 @@ void Foam::fv::turbineALSource::createAngleDegField()
 
     if (haveAngle)
     {
-        angle0_ = angleDegField_->value();
+        // The persisted value follows the OpenFOAM dimensionless convention
+        // (radians); the source works in degrees internally. Reading it as
+        // degrees would inflate the resumed azimuth by 180/pi.
+        angle0_ = radToDeg(angleRadField_->value());
         t0_ = time_.value();
 
         Info<< "Resuming azimuth of " << name_ << " from " << fieldName
@@ -336,13 +339,20 @@ void Foam::fv::turbineALSource::rotate()
     lastRotationTime_ = t;
     updateTSROmega();
 
-    // Persist every step (not only at write intervals) so a restart or a
-    // preCICE rollback to an arbitrary time can restore the azimuth; these
-    // per-step angleDeg.<name> files are the checkpoint record
-    if (angleDegField_.valid())
+    // Persist the azimuth checkpoint at the field write times only. A time
+    // directory whose sole content is the angle field breaks
+    // `startFrom latestTime` -- OpenFOAM picks the newest directory and it has
+    // no p/U, so the solver aborts -- and it is invisible to purgeWrite, which
+    // is what left hundreds of useless directories per run.
+    //
+    // The azimuth is a pure function of (t0_, angle0_, t), so a restart or a
+    // preCICE rollback to an arbitrary time recomputes it and does not need a
+    // per-step record. Only an omega override, whose history cannot be
+    // recovered from those three values, still writes every step.
+    if (angleRadField_.valid() && (time_.writeTime() || hasOmegaOverride_))
     {
-        angleDegField_->value() = angleDeg_;
-        angleDegField_->write();
+        angleRadField_->value() = degToRad(angleDeg_);
+        angleRadField_->write();
     }
 }
 
@@ -411,10 +421,10 @@ Foam::fv::turbineALSource::turbineALSource
     hasOmegaOverride_(false),
     omegaOverrideField_(word::null),
     omegaOverrideFieldPtr_(),
-    angleDegField_()
+    angleRadField_()
 {
     // Register the persisted azimuth field and seed the restart state
-    createAngleDegField();
+    createAngleRadField();
 
     forceField_.write();
 }

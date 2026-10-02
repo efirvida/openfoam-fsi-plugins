@@ -173,8 +173,11 @@ protected:
         //- Owner of the omega override field when created by this source
         autoPtr<uniformDimensionedScalarField> omegaOverrideFieldPtr_;
 
-        //- Persisted azimuth field, "angleDeg.<name>" (degrees, dimensionless)
-        autoPtr<uniformDimensionedScalarField> angleDegField_;
+        //- Persisted azimuth checkpoint, "angleRad.<name>". OpenFOAM's
+        //  dimensionless angle convention is radians, so the value is stored in
+        //  radians while the source works in degrees internally. Written at the
+        //  field write times (plus every step under an omega override).
+        autoPtr<uniformDimensionedScalarField> angleRadField_;
 
         //- Individual blade moments about turbine origin
         List<vector> bladeMoments_;
@@ -205,7 +208,7 @@ protected:
         scalar azimuth(const scalar t) const;
 
         //- Initialise the persisted azimuth field and the restart state
-        void createAngleDegField();
+        void createAngleRadField();
 
         //- Create the omega override field if it does not already exist
         void createOmegaOverrideField();

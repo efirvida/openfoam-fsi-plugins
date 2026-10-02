@@ -42,6 +42,35 @@ a dev asm-mesh smoke: the blade-2 axial force returns from 45 183 696 to
 0.94-1.06. Note the neighbouring `lastCandidateTotal_` reduce IS correct: the
 candidate lists are partitioned across ranks even though the nodes are not.
 
+#### 4. Persist the azimuth checkpoint as radians and only at write times
+
+**Files:**
+- `turbinesFoam/src/fvOptions/turbineALSource/turbineALSource.C`
+- `turbinesFoam/src/fvOptions/turbineALSource/turbineALSource.H`
+
+**Problem:** the ALM wrote `angleDeg.<name>` on EVERY step as its restart
+checkpoint. Two defects (issue #2). (a) With `writeInterval` much larger than
+`deltaT` this created one time directory per step whose only content was the
+angle field; those field-less directories break `startFrom latestTime` —
+OpenFOAM picks the newest directory, which has no `p`/`U`, and the solver aborts
+— and they are invisible to `purgeWrite`, so they accumulate across a campaign.
+(b) The field declared `dimensions [0 0 0 0 0 0 0]` (dimensionless, i.e. radians
+in OpenFOAM) while storing degrees, so any reader using the unit system misread
+the value by 180/pi.
+
+**Fix:** the field is renamed `angleRad.<name>` and stores radians — the member
+became `angleRadField_` and the creator `createAngleRadField()`, converting at
+the read/write — and it is written only at the field write times
+(`time_.writeTime()`), so it lands in the same directories as `p`/`U` and
+`purgeWrite` removes it together with them. The per-step write survives only
+under an omega override, whose history cannot be reconstructed from
+`(t0_, angle0_, t)`; the plain azimuth is a pure function of those three, so a
+restart or a preCICE rollback still restores it without a per-step record.
+
+Verified on a dev ALM smoke: `processor0` holds only the written times (0, 0.15,
+0.3, 0.375), each with the full field set plus `angleRad.turbine` =
+0.2952311789 rad at t = 0.375 s (16.9 deg), and no `angleDeg.*` remains.
+
 ### New Features
 
 #### 2. AeroDyn blade shape (prebend, sweep, curve angle) in the ALM
