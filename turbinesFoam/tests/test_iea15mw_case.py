@@ -1142,3 +1142,68 @@ class TestCheckMode:
         expected = generate_case.tip_speed_ratio(9.0, 6.0)
         assert f"tipSpeedRatio {expected:.8g};" in text
         assert "freeStreamVelocity (0 9 0);" in text
+
+
+class TestMeshFactor:
+    """The ``GaussianCoeffs/meshFactor`` knob (ALM/ASM projection width).
+
+    The factor scales epsilon = 2*cbrt(V_cell)*meshFactor; the published
+    optimum is epsilon = 0.25*c, so the default 1.0 (1.89 m at mid-span) has to
+    be selectable without touching the runner that the live jobs execute.
+    """
+
+    def test_default_constant_and_committed_case_unchanged(self, monkeypatch):
+        monkeypatch.delenv(generate_case.MESH_FACTOR_ENV, raising=False)
+        assert generate_case.DEFAULT_MESH_FACTOR == pytest.approx(1.0)
+        assert generate_case.MESH_FACTOR_ENV == "TURBINE_MESH_FACTOR"
+        assert generate_case.resolve_mesh_factor() == pytest.approx(1.0)
+        # The committed case still carries meshFactor 1 (regeneration is a
+        # separate, deliberate change); --check pins that in TestCheckMode.
+        text = (CASE_DIR / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "meshFactor 1;" in text
+
+    def test_cli_flag_reaches_every_twin(self, tmp_path, monkeypatch):
+        monkeypatch.delenv(generate_case.MESH_FACTOR_ENV, raising=False)
+        case_dir = tmp_path / "case"
+        assert (
+            generate_case.main(["--case-dir", str(case_dir), "--mesh-factor", "0.5"])
+            == 0
+        )
+        for name in (
+            "fvOptions",
+            "fvOptions.ALM",
+            "fvOptions.ASM",
+            "fvOptions.ASM-MESH",
+        ):
+            text = (case_dir / "system" / name).read_text(encoding="utf-8")
+            assert "meshFactor 0.5;" in text, name
+            assert "meshFactor 1;" not in text, name
+
+    def test_env_bridge_changes_the_default_render(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(generate_case.MESH_FACTOR_ENV, "0.5")
+        case_dir = tmp_path / "case"
+        assert generate_case.main(["--case-dir", str(case_dir)]) == 0
+        text = (case_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "meshFactor 0.5;" in text
+
+    def test_cli_flag_beats_the_env_bridge(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(generate_case.MESH_FACTOR_ENV, "0.25")
+        case_dir = tmp_path / "case"
+        assert (
+            generate_case.main(["--case-dir", str(case_dir), "--mesh-factor", "0.5"])
+            == 0
+        )
+        text = (case_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "meshFactor 0.5;" in text
+        assert "meshFactor 0.25;" not in text
+
+    def test_resolve_precedence(self, monkeypatch):
+        monkeypatch.delenv(generate_case.MESH_FACTOR_ENV, raising=False)
+        assert generate_case.resolve_mesh_factor() == pytest.approx(
+            generate_case.DEFAULT_MESH_FACTOR
+        )
+        assert generate_case.resolve_mesh_factor(0.5) == pytest.approx(0.5)
+        monkeypatch.setenv(generate_case.MESH_FACTOR_ENV, "0.25")
+        assert generate_case.resolve_mesh_factor() == pytest.approx(0.25)
+        # An explicit flag wins over the environment.
+        assert generate_case.resolve_mesh_factor(0.5) == pytest.approx(0.5)

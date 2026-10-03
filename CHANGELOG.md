@@ -181,6 +181,31 @@ the nested geometry for both `--flow-axis y` and `x` and that
 `refinementSurfaces` stays empty; the committed case was regenerated so
 `--check` passes.
 
+#### 8. Make the ALM/ASM Gaussian force-kernel width selectable
+
+**Files:**
+- `turbinesFoam/validation/iea15mw/tools/generate_case.py`
+- `turbinesFoam/tests/test_iea15mw_case.py`
+
+**Problem:** the rendered `GaussianCoeffs` pinned `meshFactor 1`, i.e. the
+projection epsilon `2*cbrt(V_cell)*meshFactor` = 1.89 m inside the rotor disk
+(2x the castellated cell). Martinez-Tossas et al. 2023 (Wind Energy) require
+`epsilon_opt = 0.25*c` for agreement with high-fidelity simulations, which is
+1.05 m at mid-span (`c = 4.21 m`), and the wider kernel weakens the near-wake
+induction -- our inferred axial induction is 0.25 at mid-span against the BEM's
+0.31. The runner (`scripts/run_iea15mw_case.sh`) cannot be edited while three
+live jobs execute it, and the queued job must keep the current value, so the
+knob had to be reachable without a default change.
+
+**Fix:** add `DEFAULT_MESH_FACTOR = 1.0` and render
+`meshFactor {float(mesh_factor):g}` in every `GaussianCoeffs` block (ALM, ASM,
+ASM-mesh and the installed twin), so the committed default stays byte-identical
+and `--check` still passes. A new `--mesh-factor` flag reaches the rendered
+value, and a documented temporary `TURBINE_MESH_FACTOR` environment bridge
+covers the running jobs until the campaign frees the runner to forward it with
+the existing `TURBINE_*` -> flag loop. Precedence is explicit flag, else
+environment, else 1.0.
+
 ## [Unreleased] — 2026-04-02
 
 ### New Features

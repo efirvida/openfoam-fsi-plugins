@@ -39,8 +39,14 @@ stale, without writing anything.
 Usage:
     generate_case.py [--speed 10.659] [--rpm 7.518] [--pitch 0]
                      [--mesh coarse] [--n-elements 147] [--cone-angle 4]
-                     [--end-revs 3] [--start-from startTime|latestTime]
+                     [--mesh-factor F] [--end-revs 3]
+                     [--start-from startTime|latestTime]
                      [--flow-axis x|y] [--case-dir DIR] [--check]
+
+Force-kernel width: the rendered ``GaussianCoeffs/meshFactor`` (default 1.0)
+scales the ALM/ASM projection epsilon. Published guidance is
+``epsilon_opt = 0.25*c``; ``meshFactor 1`` gives 1.89 m inside the disk against
+1.05 m at mid-span, and too wide a kernel weakens the near-wake induction.
 """
 
 from __future__ import annotations
@@ -82,6 +88,26 @@ PRECONE_DEG = 4.0
 #: WindIO nacelle overhang (hub-to-yaw-axis distance) is the tower offset source.
 #: Tower ALM elements: the WindIO tower table has 11 unique stations (10 segments).
 TOWER_N_ELEMENTS = 40
+
+# --- Gaussian force-kernel width ---------------------------------------------
+#: ``meshFactor`` in every rendered ``GaussianCoeffs`` block. The ALM/ASM
+#: projection epsilon is ``2*cbrt(V_cell)*meshFactor``; at ``meshFactor 1``
+#: inside the rotor disk (castellated cell ~0.94 m) that is epsilon = 1.89 m,
+#: i.e. 2x the local cell. Martinez-Tossas et al. 2023 (Wind Energy, in
+#: ``articles/``) find agreement with high-fidelity simulations needs
+#: ``epsilon_opt = 0.25*c`` -- 1.05 m at mid-span (c = 4.21 m). A wider kernel
+#: weakens the near-wake induction (our inferred a = 0.25 vs the BEM's 0.31 at
+#: mid-span), so the factor must be selectable. The committed default stays 1.0
+#: for the in-flight campaign.
+DEFAULT_MESH_FACTOR = 1.0
+#: Environment bridge for ``meshFactor``. The runner
+#: (``scripts/run_iea15mw_case.sh``) must not be edited while live jobs execute
+#: it, so a non-default value is injected through the environment and reaches
+#: the generator subprocess (sbatch inherits the submitting environment). Once
+#: the campaign frees the runner, forward it explicitly with the existing
+#: ``TURBINE_*`` -> flag loop (the ``for pair in "TURBINE_UPSTREAM:--domain-
+#: upstream" ...`` block) as ``"TURBINE_MESH_FACTOR:--mesh-factor"``.
+MESH_FACTOR_ENV = "TURBINE_MESH_FACTOR"
 
 # --- Domain and mesh (ground-anchored, parametric) ---------------------------
 #: Horizontal mesh resolutions: cells across the rotor diameter.
@@ -956,6 +982,7 @@ def render_fv_options(
     element_type: str = ALM_ELEMENT,
     n_chordwise: int | None = None,
     surface_geometry: str = "",
+    mesh_factor: float = DEFAULT_MESH_FACTOR,
 ) -> str:
     """The neutral-baseline ``axialFlowTurbineALSource``.
 
@@ -1032,7 +1059,7 @@ def render_fv_options(
                 {{
                     chordFactor 0.25;
                     dragFactor 1.0;
-                    meshFactor 1;
+                    meshFactor {float(mesh_factor):g};
                 }}
                 #include "{polars}/{name}.dat"
             }}"""
@@ -1359,6 +1386,7 @@ def outputs(
     n_chordwise: int | None = None,
     snappy_level: int = DEFAULT_SNAPPY_LEVEL,
     snappy: str | None = None,
+    mesh_factor: float = DEFAULT_MESH_FACTOR,
 ) -> dict[Path, str]:
     domain = _as_domain(domain)
     case_dir = Path(case_dir)
@@ -1384,15 +1412,18 @@ def outputs(
         system / "fvOptions.ALM": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
             flow_axis, tower, hub, rotation, ALM_ELEMENT,
+            mesh_factor=mesh_factor,
         ),
         system / "fvOptions.ASM": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
             flow_axis, tower, hub, rotation, ASM_ELEMENT, n_chordwise,
+            mesh_factor=mesh_factor,
         ),
         system / "fvOptions.ASM-MESH": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
             flow_axis, tower, hub, rotation, ASM_ELEMENT, n_chordwise,
             SURFACE_GEOMETRY,
+            mesh_factor=mesh_factor,
         ),
         system / "fvOptions": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
@@ -1400,6 +1431,7 @@ def outputs(
             ASM_ELEMENT if model in ("asm", "asm-mesh") else ALM_ELEMENT,
             n_chordwise,
             SURFACE_GEOMETRY if model == "asm-mesh" else "",
+            mesh_factor=mesh_factor,
         ),
         system / "snappyHexMeshDict": render_snappy_dict(flow_axis, snappy_level),
         constant / "transportProperties": render_transport_properties(),
@@ -1437,6 +1469,22 @@ def _display(path: Path, case_dir: Path) -> str:
         return str(path.relative_to(case_dir))
     except ValueError:
         return str(path)
+
+
+def resolve_mesh_factor(cli_value: float | None = None) -> float:
+    """Resolve the rendered ``meshFactor``.
+
+    Precedence: an explicit ``--mesh-factor`` wins, else the
+    ``TURBINE_MESH_FACTOR`` environment bridge, else ``DEFAULT_MESH_FACTOR``.
+    The env bridge is temporary: the runner cannot be edited while live jobs
+    execute it (see ``MESH_FACTOR_ENV``).
+    """
+    if cli_value is not None:
+        return float(cli_value)
+    env_value = os.environ.get(MESH_FACTOR_ENV)
+    if env_value is not None and env_value.strip():
+        return float(env_value)
+    return DEFAULT_MESH_FACTOR
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1550,6 +1598,17 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_SNAPPY_LEVEL,
         help="snappyHexMesh castellated level over the rotor disk (asm-mesh)",
     )
+    parser.add_argument(
+        "--mesh-factor",
+        type=float,
+        default=None,
+        help=(
+            "GaussianCoeffs/meshFactor for every profile (effective default "
+            f"{DEFAULT_MESH_FACTOR:g}); turns the ALM/ASM projection epsilon "
+            "into 2*cbrt(V_cell)*meshFactor. Explicit flag beats "
+            f"{MESH_FACTOR_ENV}, which beats {DEFAULT_MESH_FACTOR:g}"
+        ),
+    )
     parser.add_argument("--case-dir", type=Path, default=DEFAULT_CASE_DIR)
     parser.add_argument(
         "--check",
@@ -1559,6 +1618,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        mesh_factor = resolve_mesh_factor(args.mesh_factor)
         domain = domain_spec(
             args.mesh,
             args.domain_upstream,
@@ -1588,6 +1648,7 @@ def main(argv: list[str] | None = None) -> int:
             args.n_chordwise,
             args.snappy_level,
             args.snappy,
+            mesh_factor,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)
