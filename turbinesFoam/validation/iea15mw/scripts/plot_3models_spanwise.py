@@ -58,6 +58,57 @@ dormant; it is retained so the script stays correct if a force model stops
 writing the coefficients.  (Cross-check at element 43 of the ALM run: the
 fallback reproduces the written ``c_ref_n``/``c_ref_t`` to <= 3e-4.)
 
+Blade-resolved references (digitized, PLOT-ONLY)
+------------------------------------------------
+The two published blade-resolved references overlaid on this figure are
+VISUALLY DIGITIZED from rendered page images under ``/tmp/iea15mw_art/fig/``
+(read-only), at roughly 15-27 stations per curve, with an estimated reading
+uncertainty of +/-10 %.  No point is invented: straight segments between the
+recorded stations are linear interpolations of points that were read.
+
+1. de Oliveira et al., OMAE2023-105084, FIGURE 6 (``omae_p8.png``):
+   "R15Mesh-1 ... mean distributed forces along the blade span, benchmarked
+   against the OpenFAST results", panels (a) Normal force and (b) Tangential
+   force, x axis ``Radius [m]`` (0-120), so ``r/R = radius/120.67532``.
+   Condition: V = 10 m/s uniform, rotor-only, 35.4M cells, y+ 60-350, first
+   cell 1 mm (a blade-resolved URANS with walls and a boundary layer).  Curves
+   read: ``R15Mesh-1 URANS CFL=2`` (green triangles) and ``OpenFAST - AeroDyn
+   v15`` (grey solid).  The CFL=1 and CFL=4 curves are NOT read (the authors
+   recommend CFL=2; CFL=4 is not temporally converged).
+
+2. Yi et al., Applied Ocean Research (2026) 104935, Fig. 13 (``yi_p11.png``):
+   "(a) Normal force per unit length, Fn; (b) Torque per unit length, Q"
+   versus ``r/R`` for ``ws=8m/s`` and ``ws=9m/s``.  The 9 m/s pair is read:
+   ``ws=9m/s-Present`` (their blade-resolved URANS, dashed) and
+   ``ws=9m/s-BEMT`` (open circles).  The 8 m/s pair is a different wind speed
+   and is NOT read here.
+
+UNITS.  de Oliveira's y axis is labelled ``[kN]`` but the values (0-12 over a
+~120 m blade) are per unit span, i.e. kN/m -- the same quantity as CCBlade's
+Np/Tp in N/m and the ALM ``f_ref_n/dr``.  Yi's ``Fn`` is explicitly kN/m and
+``Q`` is a torque per unit length (kN.m/m), so the tangential force per unit
+length is ``Q/r``.  All reference forces are therefore treated as per unit
+length.
+
+NORMALISATION.  Both references run at a different wind speed than our point
+(V = 10.659 m/s).  Their forces are rescaled by the dynamic-pressure ratio
+``(V_RATED/V_ref)**2`` (de Oliveira 10 m/s -> x1.136; Yi 9 m/s -> x1.402) so
+the levels are directly comparable to ours.
+
+COEFFICIENTS.  To enter the ``c_n``/``c_t`` panels the reference forces are
+converted with the local relative dynamic pressure and the blade chord from
+``data/iea15mw_blade.csv``::
+
+    W(r) = sqrt(V_RATED**2 + (Omega*r)**2),   Omega = RPM_RATED*2*pi/60
+    c_n  = f_n / (0.5*rho*W**2 * chord(r))
+    c_t  = f_t / (0.5*rho*W**2 * chord(r)),   f_t = Q/r  (Yi only)
+
+with ``r = (r/R)*ROTOR_RADIUS`` and ``chord(r)`` linearly interpolated on the
+``r_over_R`` column of the blade geometry.  This is an approximate but
+self-consistent conversion (the references report section forces), so the
+resulting coefficients are directly comparable to the model
+``c_ref_n``/``c_ref_t``.
+
 CCBlade BEM reference (embedded, reproducible)
 ----------------------------------------------
 The BEM arrays below were produced once from the maintainer's Aeroelast, from
@@ -100,6 +151,7 @@ ROOT = SCRIPTS.parent
 RUNS_DIR = ROOT / "runs"
 BLADE_CSV = ROOT / "data" / "iea15mw_blade.csv"
 DEFAULT_OUT = RUNS_DIR / "spanwise-3models.png"
+REFERENCES_OUT = RUNS_DIR / "spanwise-references.png"
 
 ELEMENT_DIR = Path("postProcessing") / "actuatorLineElements" / "0"
 TURBINE_CSV = Path("postProcessing") / "turbines" / "0" / "turbine.csv"
@@ -178,6 +230,119 @@ BEM_CT = (
 BEM_CP = 0.49098
 BEM_CT_ROTOR = 0.79341
 
+#: Shaft speed implied by the rated TSR (rad/s), used for the reference dynamic
+#: pressure W(r) = sqrt(V**2 + (Omega r)**2).
+OMEGA_RATED = RPM_RATED * 2.0 * math.pi / 60.0
+
+# --- Digitized blade-resolved references ---------------------------------
+# All arrays below are VISUALLY DIGITIZED from the published figures (see the
+# module docstring for the panels, the case and the +/-10 % reading
+# uncertainty).  Forces are per unit span in kN/m (tangential force for Yi).
+# ``*_RADIUS`` values are read straight off the reference x axes (metres or
+# r/R); ``*_FORCE`` are the matching y values.  No invented points.
+
+#: Dynamic-pressure rescaling to our rated speed.  de Oliveira runs at 10 m/s,
+#: Yi at 9 m/s; ours is V_RATED = 10.659 m/s.
+REF_RESCALE_DEOLIV = (V_RATED / 10.0) ** 2  # = 1.136
+REF_RESCALE_YI = (V_RATED / 9.0) ** 2  # = 1.402
+
+# de Oliveira et al. (OMAE2023-105084), FIGURE 6(a): normal force [kN/m],
+# Radius [m]; R15Mesh-1 URANS CFL=2 (green) and OpenFAST-AeroDyn v15 (grey).
+DEOLIV_CN_CFL2_R_M = (
+    4.3, 8.6, 13.0, 17.3, 21.6, 25.9, 30.3, 34.6, 38.9, 43.2, 47.6, 51.9,
+    56.2, 60.5, 64.9, 73.5, 77.8, 82.2, 86.5, 90.8, 95.1, 99.5, 103.8,
+    108.1, 112.4, 116.8,
+)
+DEOLIV_CN_CFL2 = (
+    0.54, 0.84, 0.69, 1.25, 1.82, 2.15, 2.66, 3.07, 3.45, 3.91, 4.17, 4.41,
+    4.60, 5.28, 6.27, 7.46, 8.06, 8.48, 9.10, 9.85, 10.33, 10.33, 10.03,
+    9.70, 8.75, 6.99,
+)
+DEOLIV_CN_FAST_R_M = (
+    5.9, 10.3, 14.6, 18.9, 23.2, 27.6, 31.9, 36.2, 40.5, 44.9, 49.2, 53.5,
+    57.8, 62.2, 66.5, 70.8, 75.1, 79.5, 83.8, 88.1, 92.4, 96.8, 101.1,
+    105.4, 109.7, 114.1,
+)
+DEOLIV_CN_FAST = (
+    0.18, 0.48, 1.25, 1.94, 2.66, 3.28, 3.85, 4.33, 4.84, 5.34, 5.82, 6.30,
+    6.78, 7.25, 7.73, 8.21, 8.69, 9.16, 9.64, 10.21, 10.78, 11.13, 11.16,
+    10.90, 10.24, 8.75,
+)
+
+# de Oliveira et al. (OMAE2023-105084), FIGURE 6(b): tangential force [kN/m],
+# Radius [m]; same two curves.
+DEOLIV_CT_CFL2_R_M = (
+    4.4, 8.8, 13.3, 17.7, 22.1, 26.5, 31.0, 35.4, 39.8, 44.2, 48.7, 53.1,
+    57.5, 61.9, 66.4, 70.8, 75.2, 79.6, 84.1, 88.5, 92.9, 97.3, 101.8,
+    106.2, 110.6, 115.0,
+)
+DEOLIV_CT_CFL2 = (
+    0.306, 0.446, 0.408, 0.657, 0.739, 0.749, 0.767, 0.749, 0.780, 0.753,
+    0.712, 0.722, 0.691, 0.722, 0.811, 0.818, 0.852, 0.835, 0.828, 0.775,
+    0.701, 0.597, 0.534, 0.470, 0.390, 0.145,
+)
+DEOLIV_CT_FAST_R_M = (
+    1.7, 6.1, 10.5, 14.9, 19.4, 23.8, 28.2, 32.6, 37.1, 41.5, 45.9, 50.3,
+    54.7, 59.2, 63.6, 68.0, 72.4, 76.9, 81.3, 85.7, 90.1, 94.6, 99.0,
+    103.4, 107.8, 112.3, 116.7,
+)
+DEOLIV_CT_FAST = (
+    -0.025, -0.012, 0.268, 0.640, 0.794, 0.903, 0.954, 0.961, 0.965,
+    0.965, 0.961, 0.961, 0.958, 0.951, 0.947, 0.941, 0.941, 0.937, 0.941,
+    0.941, 0.934, 0.927, 0.906, 0.869, 0.794, 0.640, 0.036,
+)
+
+# Yi et al. (2026), Fig. 13, the ws = 9 m/s pair.  Panel (a) Fn [kN/m],
+# panel (b) Q [kN.m/m] (torque per unit length -> f_t = Q/r).
+YI_FN_PRESENT_RR = (
+    0.119, 0.163, 0.202, 0.222, 0.241, 0.261, 0.418, 0.438, 0.457, 0.477,
+    0.496, 0.536, 0.555, 0.575, 0.594, 0.614, 0.634, 0.653, 0.673, 0.692,
+    0.712, 0.732, 0.751, 0.771, 0.830, 0.869, 0.888, 0.908, 0.928, 0.947,
+)
+YI_FN_PRESENT = (
+    0.70, 0.85, 1.03, 1.28, 1.51, 1.76, 3.81, 4.05, 4.28, 4.50, 4.69,
+    5.14, 5.40, 5.61, 5.83, 6.04, 6.26, 6.49, 6.74, 7.01, 7.27, 7.52,
+    7.79, 8.02, 8.26, 8.11, 7.90, 7.46, 6.80, 5.38,
+)
+YI_FN_BEMT_RR = (
+    0.119, 0.156, 0.190, 0.234, 0.268, 0.305, 0.340, 0.377, 0.420, 0.452,
+    0.494, 0.530, 0.565, 0.600, 0.638, 0.675, 0.712, 0.749, 0.788, 0.825,
+    0.860, 0.900, 0.933,
+)
+YI_FN_BEMT = (
+    0.22, 1.01, 1.59, 2.16, 2.69, 3.15, 3.57, 3.99, 4.41, 4.82, 5.23,
+    5.66, 6.08, 6.48, 6.91, 7.32, 7.77, 8.28, 8.75, 9.00, 8.94, 8.58,
+    7.80,
+)
+YI_Q_PRESENT_RR = (
+    0.209, 0.234, 0.259, 0.284, 0.309, 0.384, 0.409, 0.434, 0.459, 0.484,
+    0.509, 0.534, 0.559, 0.708, 0.733, 0.758, 0.783, 0.808, 0.833, 0.858,
+    0.883, 0.908, 0.933,
+)
+YI_Q_PRESENT = (
+    11.0, 13.3, 16.1, 19.6, 22.4, 30.6, 32.7, 35.1, 37.5, 39.4, 41.8,
+    44.1, 46.3, 59.6, 61.6, 62.5, 63.3, 63.3, 64.1, 63.9, 61.8, 56.7,
+    44.5,
+)
+YI_Q_BEMT_RR = (
+    0.122, 0.160, 0.237, 0.267, 0.305, 0.340, 0.378, 0.415, 0.452, 0.490,
+    0.526, 0.568, 0.600, 0.640, 0.665, 0.680, 0.710, 0.733, 0.758, 0.783,
+    0.808, 0.833, 0.858, 0.883, 0.908, 0.933,
+)
+YI_Q_BEMT = (
+    -0.2, 3.3, 8.0, 10.7, 13.1, 15.9, 19.3, 23.0, 26.9, 31.3, 36.3, 41.5,
+    47.7, 53.3, 57.0, 60.5, 70.0, 75.9, 83.8, 94.9, 100.4, 103.7, 105.5,
+    103.1, 99.0, 84.0,
+)
+
+#: Reference style: (label, colour, linestyle, marker).
+REF_STYLES = {
+    "deoliv_cfl2": ("de Oliveira 10 m/s CFL=2 (rescaled)", "firebrick", "-", "v"),
+    "deoliv_fast": ("de Oliveira OpenFAST (rescaled)", "0.35", "-", None),
+    "yi_present": ("Yi 9 m/s Present URANS (rescaled)", "saddlebrown", "--", None),
+    "yi_bemt": ("Yi 9 m/s BEMT (rescaled)", "mediumpurple", "-.", "o"),
+}
+
 #: Element CSV columns that must be present for each reading mode.
 DIRECT_POLARS = ("time", "root_dist", "alpha_deg", "c_ref_n", "c_ref_t")
 DERIVED_POLARS = ("time", "root_dist", "alpha_deg", "cl", "cd")
@@ -216,6 +381,103 @@ def pitch_at(radii, pitch, radius: float) -> float:
     if not radii:
         return 0.0
     return float(np.interp(radius, radii, pitch))
+
+
+# --- digitized-reference helpers ------------------------------------------
+def load_chord_table(path: Path):
+    """Return ``(r_over_R, chord_m)`` from ``data/iea15mw_blade.csv``.
+
+    Used to convert the digitized reference forces (per unit span) into
+    section coefficients with the same geometry the models use.
+    """
+    rr: list[float] = []
+    chord: list[float] = []
+    if not path.is_file():
+        return np.array(rr), np.array(chord)
+    with path.open(encoding="utf-8", newline="") as stream:
+        lines = [line for line in stream if not line.startswith("#")]
+    reader = csv.DictReader(lines)
+    for row in reader:
+        try:
+            rr.append(float(row["r_over_R"]))
+            chord.append(float(row["chord_m"]))
+        except (TypeError, ValueError, KeyError):
+            continue
+    return np.array(rr), np.array(chord)
+
+
+def reference_coefficients(rr, force_kN_per_m, rescale, chord_table,
+                           torque: bool = False):
+    """Convert a digitized per-span force into a section coefficient.
+
+    ``force_kN_per_m`` is in kN per metre of span.  ``torque=True`` means the
+    digitized quantity is a torque per unit length (kN.m/m, Yi's ``Q``) and is
+    divided by the radius to obtain the tangential force.  ``rescale`` is the
+    dynamic-pressure ratio ``(V_RATED/V_ref)**2``.  ``chord_table`` is
+    ``(r_over_R, chord_m)``.  The local relative dynamic pressure is
+    ``0.5*rho*(V_RATED**2 + (Omega*r)**2)``.
+    """
+    rr = np.asarray(rr, dtype=float)
+    force = np.asarray(force_kN_per_m, dtype=float) * rescale
+    radius = rr * ROTOR_RADIUS
+    w = np.sqrt(V_RATED * V_RATED + (OMEGA_RATED * radius) ** 2)
+    q = 0.5 * RHO * w * w
+    chord = np.interp(rr, chord_table[0], chord_table[1])
+    force_span = force * 1000.0  # kN/m -> N/m
+    if torque:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            force_span = force_span / radius
+    return force_span / (q * chord)
+
+
+def reference_series(chord_table) -> list[dict]:
+    """The four digitized references as coefficient series.
+
+    Each entry is a dict with ``key``, ``label``, ``color``, ``ls``, ``marker``
+    and the ``rr_cn``/``cn`` and ``rr_ct``/``ct`` arrays (the normal and
+    tangential digitizations live on different span grids).
+    """
+    out = []
+
+    def add(key, rr_cn, force_cn, rr_ct, force_ct, rescale, ct_torque):
+        label, color, ls, marker = REF_STYLES[key]
+        out.append({
+            "key": key,
+            "label": label,
+            "color": color,
+            "ls": ls,
+            "marker": marker,
+            "rr_cn": np.asarray(rr_cn, dtype=float),
+            "cn": reference_coefficients(
+                rr_cn, force_cn, rescale, chord_table),
+            "rr_ct": np.asarray(rr_ct, dtype=float),
+            "ct": reference_coefficients(
+                rr_ct, force_ct, rescale, chord_table, torque=ct_torque),
+        })
+
+    # de Oliveira reports a tangential force per unit span (kN/m): ct_torque
+    # is False.  Yi reports a torque per unit length Q (kN.m/m): divide by r.
+    add(
+        "deoliv_cfl2",
+        np.asarray(DEOLIV_CN_CFL2_R_M) / ROTOR_RADIUS, DEOLIV_CN_CFL2,
+        np.asarray(DEOLIV_CT_CFL2_R_M) / ROTOR_RADIUS, DEOLIV_CT_CFL2,
+        REF_RESCALE_DEOLIV, False,
+    )
+    add(
+        "deoliv_fast",
+        np.asarray(DEOLIV_CN_FAST_R_M) / ROTOR_RADIUS, DEOLIV_CN_FAST,
+        np.asarray(DEOLIV_CT_FAST_R_M) / ROTOR_RADIUS, DEOLIV_CT_FAST,
+        REF_RESCALE_DEOLIV, False,
+    )
+    add(
+        "yi_present", YI_FN_PRESENT_RR, YI_FN_PRESENT,
+        YI_Q_PRESENT_RR, YI_Q_PRESENT, REF_RESCALE_YI, True,
+    )
+    add(
+        "yi_bemt", YI_FN_BEMT_RR, YI_FN_BEMT,
+        YI_Q_BEMT_RR, YI_Q_BEMT, REF_RESCALE_YI, True,
+    )
+    return out
 
 
 # --- live-run reader (same conventions as compare_spanwise.py) -------------
@@ -508,7 +770,76 @@ def print_offsets(profiles) -> None:
 
 
 # --- figure ---------------------------------------------------------------
-def make_figure(profiles, out_png: Path) -> None:
+def _print_digitized(name, panel, unit, rr, values) -> None:
+    """Print one digitized reference curve as paste-ready arrays."""
+    print(f"\n  [{name}]")
+    print(f"    panel   : {panel}")
+    print(f"    units   : {unit}   (VISUALLY DIGITIZED, +/-10 %)")
+    print("    r/R : " + ", ".join(f"{v:.4f}" for v in rr))
+    print("    val : " + ", ".join(f"{v:g}" for v in values))
+
+
+def print_digitized_tables() -> None:
+    """Print the raw digitized reference arrays, marked as digitized."""
+    print("\n" + "=" * 78)
+    print("DIGITIZED BLADE-RESOLVED REFERENCES  (visually read, +/-10 %)")
+    print("=" * 78)
+    print("  Both references are rescaled to our V = "
+          f"{V_RATED:g} m/s by the dynamic-pressure ratio:")
+    print(f"    de Oliveira (10 m/s) x{REF_RESCALE_DEOLIV:.4f}   "
+          f"Yi (9 m/s) x{REF_RESCALE_YI:.4f}")
+    _print_digitized(
+        "de Oliveira OMAE2023-105084 Fig.6(a) Normal force, R15Mesh-1 CFL=2",
+        "Fig.6(a) Normal force [kN/m], R15Mesh-1 URANS CFL=2, V=10 m/s",
+        "kN/m", np.asarray(DEOLIV_CN_CFL2_R_M) / ROTOR_RADIUS, DEOLIV_CN_CFL2,
+    )
+    _print_digitized(
+        "de Oliveira OMAE2023-105084 Fig.6(a) Normal force, OpenFAST",
+        "Fig.6(a) Normal force [kN/m], OpenFAST-AeroDyn v15, V=10 m/s",
+        "kN/m", np.asarray(DEOLIV_CN_FAST_R_M) / ROTOR_RADIUS, DEOLIV_CN_FAST,
+    )
+    _print_digitized(
+        "de Oliveira OMAE2023-105084 Fig.6(b) Tangential force, R15Mesh-1 CFL=2",
+        "Fig.6(b) Tangential force [kN/m], R15Mesh-1 URANS CFL=2, V=10 m/s",
+        "kN/m", np.asarray(DEOLIV_CT_CFL2_R_M) / ROTOR_RADIUS, DEOLIV_CT_CFL2,
+    )
+    _print_digitized(
+        "de Oliveira OMAE2023-105084 Fig.6(b) Tangential force, OpenFAST",
+        "Fig.6(b) Tangential force [kN/m], OpenFAST-AeroDyn v15, V=10 m/s",
+        "kN/m", np.asarray(DEOLIV_CT_FAST_R_M) / ROTOR_RADIUS, DEOLIV_CT_FAST,
+    )
+    _print_digitized(
+        "Yi 2026 Fig.13(a) Present (URANS), ws=9 m/s",
+        "Fig.13(a) Normal force per unit length Fn, ws=9 m/s Present",
+        "kN/m", YI_FN_PRESENT_RR, YI_FN_PRESENT,
+    )
+    _print_digitized(
+        "Yi 2026 Fig.13(a) BEMT, ws=9 m/s",
+        "Fig.13(a) Normal force per unit length Fn, ws=9 m/s BEMT",
+        "kN/m", YI_FN_BEMT_RR, YI_FN_BEMT,
+    )
+    _print_digitized(
+        "Yi 2026 Fig.13(b) Present (URANS), ws=9 m/s",
+        "Fig.13(b) Torque per unit length Q, ws=9 m/s Present",
+        "kN.m/m (torque per unit length; f_t = Q/r)",
+        YI_Q_PRESENT_RR, YI_Q_PRESENT,
+    )
+    _print_digitized(
+        "Yi 2026 Fig.13(b) BEMT, ws=9 m/s",
+        "Fig.13(b) Torque per unit length Q, ws=9 m/s BEMT",
+        "kN.m/m (torque per unit length; f_t = Q/r)",
+        YI_Q_BEMT_RR, YI_Q_BEMT,
+    )
+
+
+def _draw_reference(ax, rr, values, ref, width, markersize):
+    """Draw one reference curve on ``ax`` with its style."""
+    ax.plot(rr, values, color=ref["color"], linewidth=width,
+            linestyle=ref["ls"], marker=ref["marker"],
+            markersize=markersize, markevery=1, alpha=0.95)
+
+
+def make_figure(profiles, refs, out_png: Path) -> None:
     """Draw the four-panel three-model comparison and save it."""
     bem_rr = np.array(BEM_RR)
     bem_alpha = np.array(BEM_ALPHA_DEG)
@@ -522,7 +853,7 @@ def make_figure(profiles, out_png: Path) -> None:
         bem_ratio[keep],
     )
 
-    fig = plt.figure(figsize=(14.0, 10.5))
+    fig = plt.figure(figsize=(14.0, 11.2))
     gs = fig.add_gridspec(2, 2, hspace=0.30, wspace=0.22)
     ax_alpha = fig.add_subplot(gs[0, 0])
     ax_cn = fig.add_subplot(gs[0, 1])
@@ -562,6 +893,17 @@ def make_figure(profiles, out_png: Path) -> None:
     ax_ct.plot(bem_rr, bem_ct, color=BEM_COLOR, linewidth=1.6, linestyle="--")
     ax_ratio.plot(bem_rr, bem_ratio, color=BEM_COLOR, linewidth=1.6,
                   linestyle="--")
+
+    # Digitized blade-resolved references on the coefficient panels only.
+    ref_handles = []
+    for ref in refs:
+        _draw_reference(ax_cn, ref["rr_cn"], ref["cn"], ref, 1.1, 3.0)
+        _draw_reference(ax_ct, ref["rr_ct"], ref["ct"], ref, 1.1, 3.0)
+        ref_handles.append(
+            Line2D([], [], color=ref["color"], linewidth=1.1,
+                   linestyle=ref["ls"], marker=ref["marker"],
+                   markersize=3.0, label=ref["label"])
+        )
 
     ratio_handle = Line2D([], [], color=RATIO_COLOR, linewidth=1.0,
                           linestyle="--", label="model/BEM (right axis)")
@@ -617,9 +959,9 @@ def make_figure(profiles, out_png: Path) -> None:
         bbox={"boxstyle": "round", "fc": "white", "ec": "0.6", "alpha": 0.9},
     )
 
-    handles = model_handles + [bem_handle, ratio_handle]
-    fig.legend(handles=handles, loc="upper center", ncol=len(handles),
-               fontsize=9.5, framealpha=0.9, bbox_to_anchor=(0.5, 0.955))
+    handles = model_handles + [bem_handle, ratio_handle] + ref_handles
+    fig.legend(handles=handles, loc="upper center", ncol=5,
+               fontsize=8.5, framealpha=0.9, bbox_to_anchor=(0.5, 0.945))
 
     fig.suptitle(
         "IEA 15-240-RWT spanwise comparison: ALM vs ASM vs ASM-mesh vs "
@@ -639,15 +981,91 @@ def make_figure(profiles, out_png: Path) -> None:
             f"{profile['revs_to_end']:.1f} rev to date)"
         )
     fig.text(
-        0.5, 0.013,
-        "Windows: last 2 revs per run (same rule, run-specific times).  "
-        + "   ".join(caption) + ".\n"
-        "No extrapolation: each model is plotted only where its live "
-        "transient data exists (the ASM-mesh run is the shortest, ~4 rev).",
+        0.5, 0.010,
+        "Windows: last 2 revs per run (same rule, run-specific times):\n"
+        + "   ".join(caption)
+        + ".  No extrapolation: each model is plotted only where its live\n"
+        "transient data exists (ASM-mesh is the shortest, ~4 rev).  "
+        "References (de Oliveira Fig.6, Yi Fig.13) are VISUALLY DIGITIZED\n"
+        "from the published figures (+/-10 %), rescaled to 10.659 m/s and "
+        "converted to coefficients.",
         ha="center", va="bottom", fontsize=8, color="0.3",
     )
 
-    fig.subplots_adjust(left=0.070, right=0.925, top=0.895, bottom=0.085)
+    fig.subplots_adjust(left=0.070, right=0.925, top=0.885, bottom=0.100)
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_png, dpi=150)
+    plt.close(fig)
+
+
+def make_reference_figure(profiles, refs, out_png: Path) -> None:
+    """Two panels: our three models against the digitized references only.
+
+    No BEM and no ratio axes here -- this figure isolates the model-vs-
+    blade-resolved-reference comparison in the coefficient panels.
+    """
+    fig, (ax_cn, ax_ct) = plt.subplots(1, 2, figsize=(13.0, 7.2))
+
+    handles = []
+    for label, _, color, marker in MODELS:
+        profile = next((p for p in profiles if p["label"] == label), None)
+        if profile is None:
+            continue
+        ax_cn.plot(profile["rr"], profile["cn"], color=color, linewidth=1.7,
+                   marker=marker, markersize=3.2, markevery=6)
+        ax_ct.plot(profile["rr"], profile["ct"], color=color, linewidth=1.7,
+                   marker=marker, markersize=3.2, markevery=6)
+        handles.append(
+            Line2D([], [], color=color, linewidth=1.7, marker=marker,
+                   markersize=3.2, label=label)
+        )
+
+    for ref in refs:
+        _draw_reference(ax_cn, ref["rr_cn"], ref["cn"], ref, 1.4, 4.0)
+        _draw_reference(ax_ct, ref["rr_ct"], ref["ct"], ref, 1.4, 4.0)
+        handles.append(
+            Line2D([], [], color=ref["color"], linewidth=1.4,
+                   linestyle=ref["ls"], marker=ref["marker"],
+                   markersize=4.0, label=ref["label"])
+        )
+
+    for ax, ylabel, title in (
+        (ax_cn, r"$c_n$  [-]",
+         r"(a) normal/thrust coefficient $c_n$  (references digitized)"),
+        (ax_ct, r"$c_t$  [-]",
+         r"(b) tangential/torque coefficient $c_t$  (references digitized)"),
+    ):
+        ax.grid(True, alpha=0.3, linewidth=0.6)
+        ax.set_xlim(0.0, 1.0)
+        ax.set_xlabel(r"$r/R$  [-]")
+        ax.set_ylabel(ylabel)
+        ax.set_title(title, fontsize=11)
+    ax_cn.set_ylim(bottom=0.0)
+    ax_ct.set_ylim(bottom=0.0)
+
+    fig.legend(handles=handles, loc="upper center", ncol=4, fontsize=8.5,
+               framealpha=0.9, bbox_to_anchor=(0.5, 0.905))
+    fig.suptitle(
+        "IEA 15-240-RWT spanwise: ALM / ASM / ASM-mesh vs blade-resolved "
+        "references\n"
+        f"V = {V_RATED:g} m/s   {RPM_RATED:g} rpm   pitch 0$^\\circ$   "
+        f"uniform inflow   precone {PRECONE_DEG:g}$^\\circ$   "
+        f"TSR {TSR_RATED:g}   |   references rescaled from their own "
+        "wind speed by $(V/V_{ref})^2$",
+        fontsize=12, y=0.985,
+    )
+    fig.text(
+        0.5, 0.010,
+        "DIGITIZED references (+/-10 %): de Oliveira OMAE2023-105084 "
+        f"Fig.6 (10 m/s URANS CFL=2 and OpenFAST, x{REF_RESCALE_DEOLIV:.3f})"
+        ", Yi 2026 Fig.13 ws=9 m/s (Present URANS and BEMT, "
+        f"x{REF_RESCALE_YI:.3f}).  Forces per unit span (kN/m; Yi Q is\n"
+        "torque per unit length -> f_t = Q/r), converted to coefficients "
+        "with W(r)=sqrt(V^2+(Omega r)^2) and the blade chord.",
+        ha="center", va="bottom", fontsize=8, color="0.3",
+    )
+    fig.subplots_adjust(left=0.060, right=0.985, top=0.775, bottom=0.115,
+                        wspace=0.18)
     out_png.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_png, dpi=150)
     plt.close(fig)
@@ -674,8 +1092,20 @@ def main(argv: list[str] | None = None) -> int:
     print_model_report(profiles)
     print_station_table(profiles)
     print_offsets(profiles)
-    make_figure(profiles, args.out)
+    print_digitized_tables()
+
+    chord_table = load_chord_table(BLADE_CSV)
+    if chord_table[0].size:
+        refs = reference_series(chord_table)
+    else:
+        print(f"warning: {BLADE_CSV}: no chord table; references skipped")
+        refs = []
+
+    make_figure(profiles, refs, args.out)
     print(f"\nwrote {args.out.resolve()} ({args.out.stat().st_size} bytes)")
+    make_reference_figure(profiles, refs, REFERENCES_OUT)
+    print(f"wrote {REFERENCES_OUT.resolve()} "
+          f"({REFERENCES_OUT.stat().st_size} bytes)")
     return 0
 
 
