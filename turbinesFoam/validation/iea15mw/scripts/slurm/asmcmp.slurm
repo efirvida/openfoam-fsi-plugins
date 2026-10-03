@@ -17,19 +17,19 @@
 # so the three jobs stay distinguishable in squeue.
 #
 # The comparison conditions below are overridable defaults; 112 cores, no
-# --nodes and no --mem.
-# The castellated mesh is built by a SERIAL snappyHexMesh before decomposePar,
-# so the batch step needs far more than the 8 GB/CPU partition default on the
-# node it lands on: job 11606555 (asm) was OOM-killed mid-refinement at that
-# default while its siblings survived. 16 GB/CPU reserves the step's memory
-# instead of racing the node's co-tenants; the measured peak for the 11.6 M-cell
-# castellation is 15.5 GB (smoke 11606577).
+# --nodes and no --mem: the partition's own DefMemPerCPU governs the request.
+# NOTE on memory: the castellated mesh is built by a SERIAL snappyHexMesh before
+# decomposePar, so that step's peak lands on ONE node. Measured peak for the
+# 11.6 M-cell castellation: 15.5 GB (smoke 11606577). Job 11606555 (asm) was
+# OOM-killed mid-refinement at the partition default, but that is co-tenancy
+# pressure on the node (the kernel OOM-killer picks the largest process when the
+# node runs out), not the job's own limit; no --mem-per-cpu override is
+# requested, so the accounting stays the partition default.
 # 112 ranks because the mesh grew: the comparison mesh went 6.90 M -> 11.61 M
 # cells, and 56 ranks would leave 207 k cells per rank against the 123 k the
 # earlier 56-rank batch ran at. 112 ranks restores ~104 k per rank.
 #SBATCH -p sequana_cpu
 #SBATCH --ntasks=112
-#SBATCH --mem-per-cpu=16G
 #SBATCH -J iea15mw-asmcmp
 #SBATCH --time=96:00:00
 #SBATCH --no-requeue
