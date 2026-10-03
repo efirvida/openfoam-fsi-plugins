@@ -16,15 +16,19 @@
 # -J is passed at submit time (an #SBATCH directive cannot read the environment),
 # so the three jobs stay distinguishable in squeue.
 #
-# The comparison conditions below are overridable defaults; 56 cores, no
+# The comparison conditions below are overridable defaults; 112 cores, no
 # --nodes and no --mem.
 # The castellated mesh is built by a SERIAL snappyHexMesh before decomposePar,
 # so the batch step needs far more than the 8 GB/CPU partition default on the
 # node it lands on: job 11606555 (asm) was OOM-killed mid-refinement at that
-# default while its siblings survived. 16 GB/CPU gives the step ~110 GB per
-# node, which is what the ~7 M-cell castellation actually needs.
+# default while its siblings survived. 16 GB/CPU reserves the step's memory
+# instead of racing the node's co-tenants; the measured peak for the 11.6 M-cell
+# castellation is 15.5 GB (smoke 11606577).
+# 112 ranks because the mesh grew: the comparison mesh went 6.90 M -> 11.61 M
+# cells, and 56 ranks would leave 207 k cells per rank against the 123 k the
+# earlier 56-rank batch ran at. 112 ranks restores ~104 k per rank.
 #SBATCH -p sequana_cpu
-#SBATCH --ntasks=56
+#SBATCH --ntasks=112
 #SBATCH --mem-per-cpu=16G
 #SBATCH -J iea15mw-asmcmp
 #SBATCH --time=96:00:00
@@ -63,7 +67,7 @@ export TURBINE_SNAPPY="${TURBINE_SNAPPY:-on}"
 export TURBINE_SNAPPY_LEVEL="${TURBINE_SNAPPY_LEVEL:-3}"
 export TURBINE_TOTAL_REVS="${TURBINE_TOTAL_REVS:-20}"
 export TURBINE_WRITE_DEG="${TURBINE_WRITE_DEG:-60}"
-export TURBINE_RANKS="${TURBINE_RANKS:-56}"
+export TURBINE_RANKS="${TURBINE_RANKS:-112}"
 # 96 h fits the whole 20-rev run in one allocation (no slicing/requeue needed).
 export TURBINE_REQUEUE="${TURBINE_REQUEUE:-0}"
 exec bash "${pkg_dir}/scripts/run_iea15mw_case.sh"
