@@ -893,6 +893,71 @@ class TestCaseSkeleton:
         assert "levels ((1e15 3))" in text
         assert "levels ((1e15 2))" in text
 
+    def test_snappy_refines_the_rotor_wake_downstream(self, tmp_path):
+        # Downstream of the rotor disk nothing above the tower band (z ~ +4.4 m)
+        # was refined, so the rotor wake -- which reaches z = +R -- ran at the
+        # background cell size. The rotorWake cylinder covers it one level below
+        # the disk, along DOWNSTREAM = -rotor_axis (never a hardcoded +1).
+        origin = generate_case.turbine_origin()
+        for flow_axis, downstream in (("y", (0.0, 1.0, 0.0)), ("x", (1.0, 0.0, 0.0))):
+            case_dir = tmp_path / flow_axis
+            assert (
+                generate_case.main(
+                    [
+                        "--case-dir",
+                        str(case_dir),
+                        "--flow-axis",
+                        flow_axis,
+                        "--model",
+                        "asm-mesh",
+                        "--snappy",
+                        "on",
+                    ]
+                )
+                == 0
+            )
+            parsed = _parse_foam(
+                (case_dir / "system" / "snappyHexMeshDict").read_text(
+                    encoding="utf-8"
+                )
+            )
+            wake = parsed["geometry"]["rotorWake"]
+            assert wake["type"] == "searchableCylinder"
+            assert float(wake["radius"]) == pytest.approx(
+                generate_case.ROTOR_RADIUS, abs=1e-4
+            )
+            assert [float(v) for v in wake["point1"]] == pytest.approx(
+                [float(v) for v in origin], abs=1e-9
+            )
+            expected = [
+                origin[i]
+                + generate_case.ASM_ROTOR_WAKE_DOWNSTREAM_D
+                * generate_case.ROTOR_DIAMETER
+                * downstream[i]
+                for i in range(3)
+            ]
+            assert [float(v) for v in wake["point2"]] == pytest.approx(
+                expected, abs=1e-6
+            )
+            # The downstream point moves with the fluid: +y for the default y
+            # axis, +x for the OpenFAST x axis (the sign cannot silently flip).
+            streamwise = 1 if flow_axis == "y" else 0
+            assert float(wake["point2"][streamwise]) > 0.0
+            regions = parsed["castellatedMeshControls"]["refinementRegions"]
+            assert int(regions["rotorWake"]["levels"][0][1]) == 2
+            # The wake adds no refinement surface either (see the disk test).
+            assert parsed["castellatedMeshControls"]["refinementSurfaces"] == {}
+
+    def test_snappy_rotor_wake_level_follows_the_disk(self):
+        # The wake is one castellation level coarser than the rotor disk
+        # (2 when the disk is 3) and clamps to 0 for a disk at level <= 1.
+        for level, expected in ((5, 4), (3, 2), (2, 1), (1, 0), (0, 0)):
+            regions = _parse_foam(generate_case.render_snappy_dict(level=level))[
+                "castellatedMeshControls"
+            ]["refinementRegions"]
+            assert int(regions["rotorDisk"]["levels"][0][1]) == level
+            assert int(regions["rotorWake"]["levels"][0][1]) == expected
+
     def test_snappy_dict_refines_the_rotor_disk_without_a_surface(self, tmp_path):
         text = (CASE_DIR / "system" / "snappyHexMeshDict").read_text(encoding="utf-8")
         assert "castellatedMesh true;" in text

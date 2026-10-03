@@ -257,6 +257,11 @@ ASM_TOWER_LATERAL_FACTOR = 2.0   # tower-box half-width = factor x max diameter
 ASM_TOWER_AXIAL_MARGIN = 20.0    # tower-box upstream extent [m]
 ASM_TOWER_Z_MARGIN = 10.0        # tower-box vertical margin [m]
 ASM_WAKE_DOWNSTREAM_D = 2.0      # tower-shadow extent downstream [rotor D]
+#: Rotor-wake refinement cylinder. The tower-shadow box already reaches ~2D
+#: downstream of the rotor plane, so the rotor wake is refined over the same
+#: axial extent; the cylinder runs from the rotor plane to
+#: ``ASM_ROTOR_WAKE_DOWNSTREAM_D`` rotor diameters downstream of it.
+ASM_ROTOR_WAKE_DOWNSTREAM_D = 2.0
 #: The wake region is one castellation level coarser than the rotor disk.
 ASM_WAKE_LEVEL_OFFSET = 1
 #: Default orientation. ``y`` = the Aeroelast/FSI frame the IEA 15 MW case exists
@@ -1131,6 +1136,13 @@ def render_snappy_dict(
     is ``ROTOR_DIAMETER/32`` (7.5 m); a level-3 castellated cylinder brings the
     rotor disk to ~0.94 m.
 
+    Two regions resolve what the blades see beyond the disk. ``towerWake``
+    covers the tower and its shadow -- the band the blades cross at the bottom
+    of the rotation. ``rotorWake`` extends the disk cylinder
+    ``ASM_ROTOR_WAKE_DOWNSTREAM_D`` diameters downstream so the rotor wake,
+    which rises to z = +R well above the tower band, is not left at the
+    background cell size. Both run one level below the disk.
+
     There is deliberately **no** ``refinementSurface``: the STL is the actuator
     force surface (``surfaceGeometry``), not a body. Adding it here would make
     the castellated flood fill treat the blade interior as enclosed, delete
@@ -1143,6 +1155,13 @@ def render_snappy_dict(
     origin = turbine_origin()
     point1 = tuple(origin[i] - ASM_DISK_HALF_THICKNESS * axis[i] for i in range(3))
     point2 = tuple(origin[i] + ASM_DISK_HALF_THICKNESS * axis[i] for i in range(3))
+    # The rotor axis helper points UPWIND (opposite the inflow), so the wake
+    # extends DOWNSTREAM = -rotor_axis (a real sign, not a symmetric span).
+    wake_point1 = origin
+    wake_point2 = tuple(
+        origin[i] - ASM_ROTOR_WAKE_DOWNSTREAM_D * ROTOR_DIAMETER * axis[i]
+        for i in range(3)
+    )
     inside = tuple(origin[i] - 2.0 * ROTOR_DIAMETER * axis[i] for i in range(3))
 
     # Tower + tower shadow. The tower sits `overhang` upstream of the rotor
@@ -1188,6 +1207,14 @@ geometry
         radius {ROTOR_RADIUS:.8g};
     }}
 
+    rotorWake
+    {{
+        type searchableCylinder;
+        point1 {foam_vector(wake_point1)};
+        point2 {foam_vector(wake_point2)};
+        radius {ROTOR_RADIUS:.8g};
+    }}
+
     towerWake
     {{
         type searchableBox;
@@ -1217,6 +1244,12 @@ castellatedMeshControls
         {{
             mode inside;
             levels ((1e15 {int(level)}));
+        }}
+
+        rotorWake
+        {{
+            mode inside;
+            levels ((1e15 {wake_level}));
         }}
 
         towerWake

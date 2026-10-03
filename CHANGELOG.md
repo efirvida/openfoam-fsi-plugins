@@ -94,6 +94,31 @@ table keeps the legacy zero curve angle (byte-identical). The IEA generator maps
 `curveAngle = BlCrvAng`, verified against the AeroDyn node locus to < 5 mm at
 the lifting stations.
 
+#### 5. Refine the rotor wake downstream of the rotor disk
+
+**Files:**
+- `turbinesFoam/validation/iea15mw/tools/generate_case.py`
+- `turbinesFoam/validation/iea15mw/case/system/snappyHexMeshDict`
+- `turbinesFoam/validation/iea15mw/scripts/slurm/asmcmp.slurm`
+- `turbinesFoam/validation/iea15mw/README.md`
+- `turbinesFoam/tests/test_iea15mw_case.py`
+
+**Problem:** the castellated `snappyHexMeshDict` refined only the rotor disk and
+the `towerWake` box, whose vertical band stops at z ~ +4.4 m. The rotor wake
+rises to z = +R (~121 m), so everything downstream of the disk above the tower
+band ran at the background cell size (7.5 m) and the wake was not resolved for
+the actuator-model comparison.
+
+**Fix:** add a `rotorWake` `searchableCylinder` of radius `R` from the rotor
+plane `ASM_ROTOR_WAKE_DOWNSTREAM_D = 2.0` rotor diameters downstream — the same
+axial extent as the tower shadow — registered in `refinementRegions` one
+castellation level below the disk (level 2, ~1.9 m at the default 3). The
+downstream direction is `-rotor_axis` (the rotor axis points upwind), so the
+cylinder points +y for the default Aeroelast axis and +x for `--flow-axis x`;
+the tests assert both so the sign cannot silently flip. The ALM / ASM / ASM-mesh
+comparison trio now shares this mesh via a versioned
+`scripts/slurm/asmcmp.slurm` in which only `TURBINE_MODEL` varies.
+
 ## [Unreleased] — 2026-04-02
 
 ### New Features

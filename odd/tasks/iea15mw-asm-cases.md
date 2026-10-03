@@ -170,3 +170,52 @@ OLAF/BEM y WISDEM.
 **Nota de fisica**: los tres comparten `epsilon` del ASM segun celda
 (`2*cbrt(V)*meshFactor`), que en la malla refinada da ~1.9 m frente a la cuerda
 maxima de 5.77 m, asi que las tiras de cuerda (`nChordwise 5`) quedan resueltas.
+
+## Etapa D — relanzamiento con dominio y refinado corregidos (2026-10-02)
+
+El bloqueante de la Etapa C quedo resuelto en `ab705b3` (rename `TURBINE_*` +
+`--snappy` desacoplado del modelo). Los 4 jobs de la primera tanda
+(`11606518-11606521`) se cancelaron a las 20:25 tras ~10 rev; el analisis de
+residencia mostro que ese horizonte no converge y el mantenedor fijo cuatro
+correcciones (transcript de la sesion previa, mensajes 1813 y 1823):
+
+| # | correccion | decision |
+| --- | --- | --- |
+| 1 | limpiar | solo los 3 `runs/iea15mw-asmcmp-*`; los CSV de `postProcessing/` se archivan, los campos y la malla se borran. `coarse-20rev` queda congelado |
+| 2 | revoluciones | **20** (= 159,2 s = 7,05 D de recorrido del fluido) |
+| 3 | dimensiones del dominio | **3D aguas arriba / 7D aguas abajo / ±3D lateral** (fondo 2,36 M celdas) |
+| 4 | refinado snappy | nueva region `rotorWake`: cilindro de radio R desde el plano del rotor hasta 2D aguas abajo, **nivel 2** |
+
+**Por que el punto 3**: con el dominio de 20D la residencia es 56,7 rev, asi que
+20 rev eran 0,35 residencias y el `cp` caia por llenado de estela, no por fisica
+del rotor. Con 3/7 el dominio mide 10D -> 28 rev de residencia y las 20 rev
+quedan en ~0,7, con el outlet a 7D (justo donde la estela sale a las 20 rev).
+Achicar el fondo (4,30 M -> 2,36 M celdas) ademas paga el refinado nuevo.
+
+**Por que el punto 4**: `towerWake` cubre `z in [-145, +4,4] m` (la banda de la
+torre) y ±20 m lateral. Aguas abajo del disco no habia refinado por encima de
+z ~ +4,4 m, asi que la estela del rotor (hasta z = +121 m) corria a la celda del
+fondo (7,5 m). La region nueva la cubre a nivel 2 (1,88 m), el mismo nivel que
+el tower shadow, para que estela y sombra sean comparables.
+
+**Juez externo (elegido)**: referencias cruzadas OLAF / BEM / WISDEM / tabla
+publicada — no un revisor LLM.
+
+### Tasks — Etapa D
+
+1. [ ] `render_snappy_dict`: emitir la region `rotorWake`
+       (`ASM_ROTOR_WAKE_DOWNSTREAM_D`, radio `ROTOR_RADIUS`, nivel
+       `level - ASM_WAKE_LEVEL_OFFSET`), aguas abajo = `-rotor_axis`.
+2. [ ] Tests en `turbinesFoam/tests/test_iea15mw_case.py`: geometria y nivel de
+       `rotorWake`, y que el caso commiteado siga limpio en `--check`.
+3. [ ] `scripts/slurm/asmcmp.slurm` versionado: los tres casos son la misma
+       malla y el mismo dominio, solo cambia `TURBINE_MODEL`.
+4. [ ] Regenerar el `case/` commiteado + README + `CHANGELOG.md`.
+5. [ ] Limpiar los 3 run dirs (archivar CSV, borrar campos/malla).
+6. [ ] Smoke en dev: conteo de celdas y `deltaT` esperados antes de gastar 31 h.
+7. [ ] Lanzar los 3 jobs de produccion y verificar el arranque.
+8. [ ] (post-run) Comparacion de `cp`, empuje y cargas spanwise contra OLAF /
+       BEM / WISDEM / tabla publicada.
+
+**Costo medido**: malla vieja 5,83 M celdas a 56 ranks = 0,74 rev/h (1,35 h/rev).
+Con 6,8 M celdas estimadas -> ~0,60 rev/h -> **~31 h para las 20 rev**.

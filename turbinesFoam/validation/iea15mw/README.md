@@ -390,6 +390,44 @@ Verified with a loaded OpenFOAM v2506 environment on the rendered coarse case:
 `blockMesh` reports `nCells: 4299792` (matching the analytic count) and
 `checkMesh` reports `Mesh OK` (non-orthogonality 3.1e-06).
 
+**Castellated refinement** (`--snappy on`, on by default for `asm-mesh`; level
+`--snappy-level`, default 3). The actuator-surface twins spread the blade force
+over chord strips, so the local cells must resolve the chord.
+`system/snappyHexMeshDict` is castellated-only (`snap false`, `addLayers false`,
+no `refinementSurfaces` — the STL is the actuator force surface, not a body) and
+refines three regions on the background mesh:
+
+- `rotorDisk` — a `searchableCylinder` of radius `R` spanning ±6 m
+  (`ASM_DISK_HALF_THICKNESS`) about the rotor plane, at the disk level. Level 3
+  takes the 7.5 m background fine cell to ~0.94 m, ~6 cells across the 5.77 m
+  max chord.
+- `towerWake` — a `searchableBox` over the tower band (its height plus margin,
+  ±`ASM_TOWER_LATERAL_FACTOR`× its max diameter laterally) from
+  `ASM_TOWER_AXIAL_MARGIN` upstream of the tower to `ASM_WAKE_DOWNSTREAM_D` rotor
+  diameters downstream.
+- `rotorWake` — a `searchableCylinder` of radius `R` from the rotor plane
+  `ASM_ROTOR_WAKE_DOWNSTREAM_D` rotor diameters downstream, so the rotor wake
+  (which rises to z = +R, well above the tower band) is refined over the same
+  axial extent as the tower shadow.
+
+Both wake regions run one level below the disk (level 2, ~1.9 m at the default
+3) so the wake and the tower shadow are comparable. Downstream is
+`-rotor_axis` — the rotor axis points upwind — so the cylinder points +y for the
+default Aeroelast axis and +x for `--flow-axis x`.
+
+**Actuator-model comparison** (`scripts/slurm/asmcmp.slurm`). The ALM / ASM /
+ASM-mesh trio runs on one mesh and one domain — 3D upstream / 7D downstream /
+±3D lateral, snappy level 3, 20 revolutions, a snapshot every 60°, 56 ranks — so
+`TURBINE_MODEL` is the only difference between the three cases and the only
+difference is the force model. Submit each with:
+
+```sh
+cd turbinesFoam/validation/iea15mw
+TURBINE_MODEL=alm      TURBINE_LONG_QUEUE_AUTHORIZED=1 sbatch -J iea15mw-asmcmp-alm      scripts/slurm/asmcmp.slurm
+TURBINE_MODEL=asm      TURBINE_LONG_QUEUE_AUTHORIZED=1 sbatch -J iea15mw-asmcmp-asm      scripts/slurm/asmcmp.slurm
+TURBINE_MODEL=asm-mesh TURBINE_LONG_QUEUE_AUTHORIZED=1 sbatch -J iea15mw-asmcmp-asm-mesh scripts/slurm/asmcmp.slurm
+```
+
 **Running the finer meshes**: they do not fit the 20-minute development queue,
 so `scripts/slurm/production.slurm` runs the whole case (96 h) for a given
 `TURBINE_MESH` / `TURBINE_*` domain, while `scripts/slurm/coarse-dev.slurm`
