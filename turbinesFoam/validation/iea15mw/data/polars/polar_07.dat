@@ -5,6 +5,9 @@
 // Cm is the quarter-chord pitching moment, positive nose-up, passed through unchanged: AirfoilInfo, the WindIO c_m and the profileData consumer share this convention (no sign conversion).
 // (alpha_deg Cl Cd Cm)
 Re 3e+06;
+// liftReCorrExp 0 disables ONLY the lift rescaling of profileData::updateRe: cl_new(alpha) = K*cl_org(alpha/K) with K = (Re/ReRef)^0.23 = 1.43 at the rated point (Re = 1.4e7, ReRef = 3.0e6) shifts the zero-lift angle by (K-1)*|alpha0| = 1.65 deg (alpha0 = -3.84 deg) and inflates cl by ~12.5 % there.
+// The zero-lift angle is a geometric, Re-independent property of the airfoil, so that lift shift is unphysical; only the drag half of the Re correction stays active.
+liftReCorrExp 0;
 data
 (
     (-180 1.5062163e-07 0.091460575 -1.5062163e-07)

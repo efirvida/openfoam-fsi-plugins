@@ -76,6 +76,20 @@ CM_NOTE = (
     "this convention (no sign conversion)."
 )
 
+#: Header note explaining the emitted ``liftReCorrExp 0``.  The lift rescaling
+#: of ``profileData::updateRe`` is unphysical because it moves the zero-lift
+#: angle, which is geometric; only the drag half of that correction is wanted.
+LIFT_RE_CORR_NOTE = (
+    "liftReCorrExp 0 disables ONLY the lift rescaling of profileData::updateRe:"
+    " cl_new(alpha) = K*cl_org(alpha/K) with K = (Re/ReRef)^0.23 = 1.43 at the"
+    " rated point (Re = 1.4e7, ReRef = 3.0e6) shifts the zero-lift angle by"
+    " (K-1)*|alpha0| = 1.65 deg (alpha0 = -3.84 deg) and inflates cl by ~12.5"
+    " % there.",
+    "The zero-lift angle is a geometric, Re-independent property of the airfoil,"
+    " so that lift shift is unphysical; only the drag half of the Re correction"
+    " stays active.",
+)
+
 
 class AirfoilInfoError(ValueError):
     """Raised when an AirfoilInfo file is not the expected format."""
@@ -133,7 +147,7 @@ def parse_airfoilinfo(path: Path | str) -> dict[str, Any]:
         raise AirfoilInfoError(
             f"{source}: NumAlf={num_alf} but found {len(rows)} data rows"
         )
-    if any(b[0] <= a[0] for a, b in zip(rows, rows[1:])):
+    if any(b[0] <= a[0] for a, b in zip(rows, rows[1:], strict=False)):
         raise AirfoilInfoError(f"{source}: alpha must be strictly increasing")
     return {
         "re_millions": re_millions,
@@ -159,6 +173,8 @@ def render_profile(
         f"// {CM_NOTE}",
         "// (alpha_deg Cl Cd Cm)",
         f"Re {re_millions * 1e6:g};",
+        *[f"// {note_line}" for note_line in LIFT_RE_CORR_NOTE],
+        "liftReCorrExp 0;",
         "data",
         "(",
     ]

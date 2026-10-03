@@ -71,6 +71,39 @@ Verified on a dev ALM smoke: `processor0` holds only the written times (0, 0.15,
 0.3, 0.375), each with the full field set plus `angleRad.turbine` =
 0.2952311789 rad at t = 0.375 s (16.9 deg), and no `angleDeg.*` remains.
 
+#### 7. Disable the unphysical lift half of the `profileData` Re correction
+
+**Files:**
+- `turbinesFoam/validation/iea15mw/scripts/buildPolars.py`
+- `turbinesFoam/validation/iea15mw/data/polars/polar_{00..49}.dat`
+- `turbinesFoam/tests/test_iea15mw_case.py`
+
+**Problem:** the IEA 15-240-RWT ALM over-predicted the rotor loads (`cp` 0.722
+vs the CCBlade/OpenFAST BEM 0.491; thrust ~3.1 MN vs 2.53 MN). The cause is the
+`profileData::updateRe` lift rescaling, which is active through its default
+`liftReCorrExp` of 0.23: with `K = (Re/ReRef)^0.23 = (1.4e7/3.0e6)^0.23 = 1.43`
+it rewrites the lift table as `cl_new(alpha) = K*cl_org(alpha/K)`. That leaves
+the lift slope unchanged but moves the zero-lift angle by `(K-1)*|alpha0| =
+0.43 * 3.84 deg = 1.65 deg` (`alpha0 = -3.84 deg` for the outboard FFA-W3),
+inflating `cl` by +12-14 % across the rated operating range. Measured on the live
+run at `r/R = 0.80`: the CSV reports `cl = 1.4493` where the raw AirfoilInfo
+polar at the same alpha gives `1.2884` (+12.5 %). The inflated `cl` feeds `c_n`
+and `c_t` and hence thrust and power, which is the whole `cp` discrepancy. The
+zero-lift angle of an airfoil is a geometric property that does not move with
+Reynolds number, so the lift half of the correction is unphysical.
+
+**Fix:** render `liftReCorrExp 0;` into every committed polar, next to its `Re`
+line. The lifted key gives `K = pow(x, 0) = 1`, so the lift table is left
+exactly as AeroDyn publishes it; the drag half of `updateRe` is untouched and
+stays active. The rendered header explains the shift and the rated-point
+numbers so a restarted run cannot be mistaken for the old physics, and the
+converter's round trip is unchanged: the only per-file diff is the header note
+plus the key. A regression test pins `liftReCorrExp 0;`, the source `Re` and the
+200-row source count for all 50 polars so the rescaling cannot silently return.
+Expected effect: `cl` at the rated point drops ~12-14 %, and `c_n`, `c_t`,
+thrust and `cp` fall proportionally (the `c_t`/`ct` sensitivity is the steepest
+because `c_t` is a small difference).
+
 ### New Features
 
 #### 2. AeroDyn blade shape (prebend, sweep, curve angle) in the ALM

@@ -339,6 +339,23 @@ class TestPolarConverter:
         text = (POLARS / "polar_00.dat").read_text(encoding="utf-8")
         assert "Re 3e+06;" in text
 
+    def test_lift_re_correction_is_disabled(self):
+        # profileData::updateRe rescales the lift table as
+        # cl_new(alpha) = K*cl_org(alpha/K) unless liftReCorrExp is 0. That
+        # shifts the zero-lift angle, a geometric and Re-independent property,
+        # so every committed polar must pin the key and keep the source Re and
+        # rows; otherwise the rescaling could silently come back on a rerun.
+        for name in (f"polar_{station:02d}.dat" for station in range(50)):
+            text = (POLARS / name).read_text(encoding="utf-8")
+            assert "liftReCorrExp 0;" in text, name
+        sources = _sources()
+        for station, source in sorted(sources.items()):
+            parsed = build_polars.parse_airfoilinfo(source)
+            path = POLARS / build_polars.OUTPUT_TEMPLATE.format(station=station)
+            text = path.read_text(encoding="utf-8")
+            assert f"Re {parsed['re_millions'] * 1e6:g};" in text
+            assert len(_read_emitted_rows(path)) == len(parsed["rows"]) == 200
+
     def test_check_mode_passes_for_committed_files(self):
         assert build_polars.main(["--check"]) == 0
 
