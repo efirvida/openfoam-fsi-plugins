@@ -439,6 +439,78 @@ so `scripts/slurm/production.slurm` runs the whole case (96 h) for a given
 `TURBINE_MESH` / `TURBINE_*` domain, while `scripts/slurm/coarse-dev.slurm`
 keeps the 20-minute sliced/self-requeuing path for the coarse mesh.
 
+## Spanwise diagnosis and how to reproduce it
+
+Three spanwise figures diagnose the ALM/ASM load level against the CCBlade BEM
+and two digitized blade-resolved references. They live in `analysis/`:
+
+| figure | script | what it shows |
+|---|---|---|
+| `analysis/spanwise-diagnosis.png` | `scripts/plot_spanwise_diagnosis.py` | single ALM run vs CCBlade BEM: `alpha`, `c_n`, `c_t`, `c_t/c_n`, axial induction `a` |
+| `analysis/spanwise-3models.png` | `scripts/plot_3models_spanwise.py` | ALM / ASM / ASM-mesh vs CCBlade BEM and the digitized references |
+| `analysis/spanwise-references.png` | `scripts/plot_3models_spanwise.py` | the three models vs the digitized references only |
+
+Two committed snapshots make the figures redrawable with **no live run**:
+`analysis/spanwise-profiles.csv` -- one row per model per element, the mean
+over each run's last two revolutions (the window bounds and the module
+`tsr`/`cp`/`ct` are extra columns) -- and
+`analysis/spanwise-references.csv` -- the CCBlade BEM arrays and the digitized
+published curves in long format. Both plot scripts read the reference snapshot
+at plot time, and `plot_spanwise_diagnosis.py` imports the reference loader
+from `plot_3models_spanwise.py`, so the arrays are defined in exactly one place
+(that module, the generator).
+
+```sh
+cd turbinesFoam/validation/iea15mw
+PY=/scratch/leahk/eduardo.donestevez/venv/bin/python
+
+# 1. refresh the snapshots from the live runs, then draw the live figures
+$PY scripts/compare_spanwise.py --profiles-out analysis/spanwise-profiles.csv
+$PY scripts/plot_3models_spanwise.py --write-references
+$PY scripts/plot_spanwise_diagnosis.py --out analysis/spanwise-diagnosis.png
+$PY scripts/plot_3models_spanwise.py \
+    --out analysis/spanwise-3models.png \
+    --references-out analysis/spanwise-references.png
+
+# 2. redraw from the committed snapshots alone (no run, no Aeroelast)
+$PY scripts/plot_spanwise_diagnosis.py --from-csv \
+    --out analysis/spanwise-diagnosis.png
+$PY scripts/plot_3models_spanwise.py --from-csv \
+    --out analysis/spanwise-3models.png \
+    --references-out analysis/spanwise-references.png
+
+# print one model's snapshot table and its rotor-coefficient closure
+$PY scripts/compare_spanwise.py --from-csv analysis/spanwise-profiles.csv \
+    --model alm
+```
+
+The committed CSVs are frozen while the runs are live, so a redraw now differs
+from the committed PNG wherever the runs have advanced past the snapshot
+window; the reference curves are byte-for-byte the same conversion.
+
+**Refreshing the BEM reference.** The CCBlade arrays are produced once with the
+maintainer's Aeroelast (`fem-shell`), embedded in `plot_3models_spanwise.py`,
+and exported by `--write-references`:
+
+```sh
+cd /scratch/leahk/eduardo.donestevez/fem-shell
+LD_LIBRARY_PATH=/scratch/app/gcc/14.2.0/lib64:$LD_LIBRARY_PATH PYTHONPATH=src \
+  /scratch/leahk/eduardo.donestevez/venv/bin/python - <<'EOF'
+from aeroelast.models.blade.aerodynamics import load_blade_aero
+from aeroelast.solvers.bem.engine import BEMSolver
+ba = load_blade_aero("tests/IEA-15-240-RWT.yaml", hub_radius=3.97, n_blades=3)
+r  = BEMSolver(ba, rho=1.225, precone=4.0, tilt=0.0, yaw=0.0,
+               hub_height=150.0, shear_exp=0.0).compute(10.659, 7.518, 0.0, 0.0)
+# self-check: CP 0.49098 / CT 0.79341
+EOF
+```
+
+Replace the `BEM_*` arrays in `scripts/plot_3models_spanwise.py` with the new
+`r.alpha`/`r.cn`/`r.ct`/`r.a` (and `r.CP`/`r.CT`), then re-run
+`plot_3models_spanwise.py --write-references`. `shear_exp=0` matches the
+uniform inflow. The digitized references (`deoliv_*`, `yi_*`, visually read
++/-10 %) are not regenerated.
+
 ## Known limitations
 
 See `PROVENANCE.md`: the `Re = 3.0e6` header is nominal for all 50 stations

@@ -32,10 +32,11 @@ the tangential induction ``a'`` neglected and ``c_t/c_n`` used as the proxy for
 ``tan(phi)``.  The BEM value is the solver's own ``a``.  The panel exposes the
 ~25 % deficit of the ALM induction at mid span.
 
-CCBlade BEM reference (embedded, reproducible)
-----------------------------------------------
-The BEM reference below was produced once with the maintainer's Aeroelast,
-from ``/scratch/leahk/eduardo.donestevez/fem-shell``::
+CCBlade BEM reference (from the committed snapshot)
+---------------------------------------------------
+The BEM arrays below are no longer embedded in this file: they live in
+``analysis/spanwise-references.csv``, generated once with the maintainer's
+Aeroelast from ``/scratch/leahk/eduardo.donestevez/fem-shell``::
 
     LD_LIBRARY_PATH=/scratch/app/gcc/14.2.0/lib64:$LD_LIBRARY_PATH PYTHONPATH=src \
       /scratch/leahk/eduardo.donestevez/venv/bin/python - <<'EOF'
@@ -48,11 +49,21 @@ from ``/scratch/leahk/eduardo.donestevez/fem-shell``::
     EOF
 
 which returned ``CP = 0.49098`` / ``CT = 0.79341`` (the self-check:
-0.4910 / 0.7934).  The arrays are embedded verbatim so this figure needs no
-Aeroelast import.
+0.4910 / 0.7934).  This script reads the reference snapshot at import time so
+it needs no Aeroelast import, and the snapshot generator lives in
+``plot_3models_spanwise.py`` (``--write-references``).
 
 Usage:
     plot_spanwise_diagnosis.py [--run-dir DIR] [--revs N] [--out FILE]
+    plot_spanwise_diagnosis.py --from-csv [--profiles-csv FILE]
+
+Regenerate the committed figure from the committed snapshot alone (no live
+run, no Aeroelast)::
+
+    /scratch/leahk/eduardo.donestevez/venv/bin/python \
+      turbinesFoam/validation/iea15mw/scripts/plot_spanwise_diagnosis.py \
+      --from-csv \
+      --out turbinesFoam/validation/iea15mw/analysis/spanwise-diagnosis.png
 """
 
 from __future__ import annotations
@@ -60,6 +71,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -71,9 +83,13 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 SCRIPTS = Path(__file__).resolve().parent
 ROOT = SCRIPTS.parent
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+import plot_3models_spanwise as _references  # noqa: E402
 
 DEFAULT_RUN_DIR = ROOT / "runs" / "iea15mw-asmcmp-alm"
 DEFAULT_OUT = ROOT / "runs" / "spanwise-diagnosis.png"
+PROFILES_CSV = ROOT / "analysis" / "spanwise-profiles.csv"
 
 ELEMENT_DIR = Path("postProcessing") / "actuatorLineElements" / "0"
 TURBINE_CSV = Path("postProcessing") / "turbines" / "0" / "turbine.csv"
@@ -99,59 +115,22 @@ MEAN_COLUMNS = ("root_dist", "alpha_deg", "c_ref_n", "c_ref_t")
 ANNOTATE_LO = 0.30
 ANNOTATE_HI = 0.90
 
-# --- CCBlade BEM reference (embedded) ------------------------------------
+# --- CCBlade BEM reference (loaded from the committed snapshot) -----------
+# ``plot_3models_spanwise.py --write-references`` generates
+# ``analysis/spanwise-references.csv`` from its module arrays; the loader is
+# imported here so both plot scripts share one reference source (no second
+# copy of the arrays).
+_BEM, _SCALARS, _DIGITIZED = _references.load_references_csv(
+    _references.REFERENCES_CSV)
 #: BEM stations as r/R (r in metres / ROTOR_RADIUS).
-BEM_RR = (
-    0.0328982, 0.0526848, 0.0724714, 0.092258, 0.112045, 0.131831, 0.151618,
-    0.171404, 0.191191, 0.210978, 0.230764, 0.250551, 0.270337, 0.290124,
-    0.309911, 0.329697, 0.349484, 0.369271, 0.389057, 0.408844, 0.42863,
-    0.448417, 0.468204, 0.48799, 0.507777, 0.527563, 0.54735, 0.567137,
-    0.586923, 0.60671, 0.626496, 0.646283, 0.66607, 0.685856, 0.705643,
-    0.725429, 0.745216, 0.765003, 0.784789, 0.804576, 0.824362, 0.844149,
-    0.863936, 0.883722, 0.903509, 0.923295, 0.943082, 0.962869, 0.982655,
-    0.987899, 0.992746, 0.997594, 1.00244,
-)
-BEM_ALPHA_DEG = (
-    53.6152, 49.2572, 41.7282, 35.6201, 30.7792, 19.8734, 16.7894, 14.5679,
-    12.9387, 11.7059, 9.7053, 8.96115, 8.37663, 7.95477, 7.64776, 7.59426,
-    7.41665, 7.25693, 7.10425, 7.16898, 7.02982, 6.91026, 6.80774, 6.71904,
-    6.82122, 6.75477, 6.69806, 6.64594, 6.59804, 6.554, 6.5192, 6.49632,
-    6.48831, 6.50127, 6.54112, 6.74763, 6.86167, 6.98679, 7.10874, 7.21126,
-    7.28075, 7.26879, 7.20829, 7.11455, 6.97915, 6.78887, 6.51595, 6.09108,
-    5.29659, 4.98498, 4.69045, 4.46822, 4.92292,
-)
-BEM_CN = (
-    0.327246, 0.316849, 0.294051, 0.270399, 0.24772, 1.5004, 1.57632,
-    1.59766, 1.58402, 1.55178, 1.63061, 1.57307, 1.52185, 1.48276, 1.45351,
-    1.4059, 1.38735, 1.37028, 1.3535, 1.30207, 1.28617, 1.27245, 1.26066,
-    1.25045, 1.21041, 1.20299, 1.1967, 1.19088, 1.18552, 1.18074, 1.17717,
-    1.17495, 1.17446, 1.17642, 1.18156, 1.16034, 1.1744, 1.1898, 1.20481,
-    1.21744, 1.22605, 1.22477, 1.2176, 1.20643, 1.19027, 1.16758, 1.13517,
-    1.08528, 0.994517, 0.959689, 0.927063, 0.902588, 0.952628,
-)
-BEM_CT = (
-    -0.124138, -0.148684, -0.189827, -0.222226, -0.247254, 0.804273,
-    0.749865, 0.666203, 0.579763, 0.501322, 0.516641, 0.455167, 0.405259,
-    0.365366, 0.333139, 0.307265, 0.284621, 0.264545, 0.246397, 0.231568,
-    0.216999, 0.204116, 0.192659, 0.182401, 0.171932, 0.163633, 0.156077,
-    0.149147, 0.142788, 0.138133, 0.132829, 0.128002, 0.123634, 0.119702,
-    0.116185, 0.114201, 0.111359, 0.108721, 0.106266, 0.103989, 0.101872,
-    0.0998347, 0.0977025, 0.0952526, 0.0922342, 0.0882905, 0.0827887,
-    0.0742553, 0.057719, 0.0515146, 0.0459012, 0.0420918, 0.0533293,
-)
-BEM_A = (
-    0.0732976, 0.0474435, 0.0311872, 0.0255551, 0.0229953, 0.169421,
-    0.193033, 0.212877, 0.229547, 0.243623, 0.291061, 0.299815, 0.305987,
-    0.311091, 0.315209, 0.30925, 0.311921, 0.314738, 0.31781, 0.306855,
-    0.309695, 0.31233, 0.31479, 0.31708, 0.304922, 0.306779, 0.308652,
-    0.310344, 0.311808, 0.313129, 0.314363, 0.315576, 0.316833, 0.318436,
-    0.320676, 0.309496, 0.314932, 0.32056, 0.325497, 0.328723, 0.329526,
-    0.325491, 0.319648, 0.314363, 0.310911, 0.311257, 0.318964, 0.342852,
-    0.418414, 0.452599, 0.485514, 0.507446, 0.423693,
-)
+BEM_RR = _BEM["rr"]
+BEM_ALPHA_DEG = _BEM["alpha_deg"]
+BEM_CN = _BEM["cn"]
+BEM_CT = _BEM["ct"]
+BEM_A = _BEM["a"]
 #: CCBlade self-check at the operating point (must be CP 0.4910 / CT 0.7934).
-BEM_CP = 0.49098
-BEM_CT_ROTOR = 0.79341
+BEM_CP = _SCALARS["cp"]
+BEM_CT_ROTOR = _SCALARS["ct"]
 
 
 # --- live-run reader (same conventions as compare_spanwise.py) -------------
@@ -203,7 +182,7 @@ def window_bounds(turbine_csv: Path, revs: float, rpm: float):
 
 def average_element(path: Path, t_start: float, t_end: float) -> dict:
     """Time-mean of :data:`MEAN_COLUMNS` for one element in the window."""
-    sums = {key: 0.0 for key in MEAN_COLUMNS}
+    sums = dict.fromkeys(MEAN_COLUMNS, 0.0)
     count = 0
     for row in _rows(path):
         try:
@@ -226,7 +205,7 @@ def average_element(path: Path, t_start: float, t_end: float) -> dict:
 def average_turbine(path: Path, t_start: float, t_end: float) -> dict:
     """Time-mean of the module-reported ``cp``/``cd``/``ct``/``tsr``."""
     keys = ("tsr", "cp", "cd", "ct")
-    sums = {key: 0.0 for key in keys}
+    sums = dict.fromkeys(keys, 0.0)
     count = 0
     for row in _rows(path):
         try:
@@ -297,6 +276,64 @@ def load_profile(run_dir: Path, revs: float, rpm: float):
         "n_elements": n,
         "dr": BLADE_SPAN / n,
         "window": (t_start, t_end, period),
+        "module": module,
+    }
+
+
+def load_profile_from_csv(csv_path: Path, model: str = "alm") -> dict:
+    """The same profile dict, read from ``analysis/spanwise-profiles.csv``.
+
+    The snapshot averages the same last-two-revolutions window; the induction
+    ``a`` is rebuilt exactly as :func:`load_profile` does, so the figure is the
+    same as a live redraw from the snapshot's data.
+    """
+    rr, alpha, cn, ct = [], [], [], []
+    window = (0.0, 0.0, 1.0)
+    module = {"tsr": 0.0, "cp": 0.0, "cd": 0.0, "ct": 0.0}
+    with csv_path.open(encoding="utf-8", newline="") as stream:
+        for row in csv.DictReader(stream):
+            if row.get("model") != model:
+                continue
+            rr.append(float(row["r_over_R"]))
+            alpha.append(float(row["alpha_deg"]))
+            cn.append(float(row["c_ref_n"]))
+            ct.append(float(row["c_ref_t"]))
+            t_start = float(row["window_start_s"])
+            t_end = float(row["window_end_s"])
+            revs = float(row["revs"])
+            window = (t_start, t_end, (t_end - t_start) / revs)
+            tsr = float(row["tsr"])
+            cp = float(row["cp_module"])
+            module = {
+                "tsr": tsr,
+                "cp": cp,
+                # The snapshot stores C_T (``ct_module``); C_Q follows from
+                # C_P = C_Q * TSR.
+                "cd": float(row["ct_module"]),
+                "ct": cp / tsr if tsr else float("nan"),
+            }
+    if not rr:
+        raise FileNotFoundError(f"{csv_path}: no rows for model {model!r}")
+    rr = np.array(rr)
+    alpha = np.array(alpha)
+    cn = np.array(cn)
+    ct = np.array(ct)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = np.where(cn != 0.0, ct / cn, np.nan)
+    a_ours = np.full(len(rr), np.nan)
+    for i in range(len(rr)):
+        if np.isfinite(ratio[i]) and ratio[i] > 0.0:
+            a_ours[i] = axial_induction(ratio[i], rr[i])
+    return {
+        "rr": rr,
+        "alpha": alpha,
+        "cn": cn,
+        "ct": ct,
+        "ratio": ratio,
+        "a": a_ours,
+        "n_elements": len(rr),
+        "dr": BLADE_SPAN / len(rr),
+        "window": window,
         "module": module,
     }
 
@@ -525,9 +562,16 @@ def make_figure(profile: dict, out_png: Path) -> None:
     )
 
     fig.subplots_adjust(left=0.075, right=0.985, top=0.925, bottom=0.065)
-    out_png.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_png, dpi=150)
+    _save_figure(fig, out_png)
     plt.close(fig)
+
+
+def _save_figure(fig, out) -> None:
+    """Save ``fig`` to a ``Path`` or a writable binary file-like object."""
+    parent = getattr(out, "parent", None)
+    if parent is not None:
+        parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=150)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -536,9 +580,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--revs", type=float, default=DEFAULT_REVS)
     parser.add_argument("--rpm", type=float, default=RPM_RATED)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument(
+        "--from-csv", action="store_true",
+        help="read the ALM profile from the committed profiles CSV instead "
+             "of the live run directory",
+    )
+    parser.add_argument("--profiles-csv", type=Path, default=PROFILES_CSV)
     args = parser.parse_args(argv)
 
-    profile = load_profile(args.run_dir.resolve(), args.revs, args.rpm)
+    if args.from_csv:
+        profile = load_profile_from_csv(args.profiles_csv, "alm")
+    else:
+        profile = load_profile(args.run_dir.resolve(), args.revs, args.rpm)
     print_table(profile)
     print_summary(profile)
     make_figure(profile, args.out)

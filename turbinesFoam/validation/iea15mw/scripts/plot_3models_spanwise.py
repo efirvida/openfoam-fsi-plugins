@@ -125,10 +125,38 @@ The BEM arrays below were produced once from the maintainer's Aeroelast, from
     EOF
 
 which returned ``CP = 0.49098`` / ``CT = 0.79341`` (self-check 0.4910 / 0.7934).
-The arrays are embedded verbatim so this figure needs no Aeroelast import.
+The arrays are still defined in this module (they are the generator), but at
+plot time the script reads them from the committed snapshot
+``analysis/spanwise-references.csv`` instead of the module constants, so the
+figure can be redrawn with no live run and no Aeroelast import.
+
+Committed snapshots (see README "Spanwise diagnosis and how to reproduce it")
+------------------------------------------------------------------------------
+* ``analysis/spanwise-profiles.csv`` -- one row per model per element, the
+  window means of the live runs.  ``--from-csv`` plots from this file instead
+  of the run directories.
+* ``analysis/spanwise-references.csv`` -- the long-format reference snapshot
+  (CCBlade BEM arrays + the digitized published curves).  Both plot scripts
+  read this file as the single runtime source of the references.
+
+The reference arrays are the generator for the CSV (``--write-references``);
+the committed CSV is the runtime source.  ``plot_spanwise_diagnosis.py``
+imports the BEM loader from this module so the two scripts do not carry a
+second copy of the arrays.
 
 Usage:
     plot_3models_spanwise.py [--revs N] [--rpm R] [--out FILE]
+    plot_3models_spanwise.py --from-csv
+    plot_3models_spanwise.py --write-references
+
+Regenerate the two committed figures from the committed snapshot alone (no
+live run, no Aeroelast)::
+
+    /scratch/leahk/eduardo.donestevez/venv/bin/python \
+      turbinesFoam/validation/iea15mw/scripts/plot_3models_spanwise.py \
+      --from-csv \
+      --out turbinesFoam/validation/iea15mw/analysis/spanwise-3models.png \
+      --references-out turbinesFoam/validation/iea15mw/analysis/spanwise-references.png
 """
 
 from __future__ import annotations
@@ -149,9 +177,13 @@ from matplotlib.lines import Line2D  # noqa: E402
 SCRIPTS = Path(__file__).resolve().parent
 ROOT = SCRIPTS.parent
 RUNS_DIR = ROOT / "runs"
+ANALYSIS_DIR = ROOT / "analysis"
 BLADE_CSV = ROOT / "data" / "iea15mw_blade.csv"
 DEFAULT_OUT = RUNS_DIR / "spanwise-3models.png"
 REFERENCES_OUT = RUNS_DIR / "spanwise-references.png"
+#: Committed snapshots (fixtures that let the figures be redrawn with no run).
+PROFILES_CSV = ANALYSIS_DIR / "spanwise-profiles.csv"
+REFERENCES_CSV = ANALYSIS_DIR / "spanwise-references.csv"
 
 ELEMENT_DIR = Path("postProcessing") / "actuatorLineElements" / "0"
 TURBINE_CSV = Path("postProcessing") / "turbines" / "0" / "turbine.csv"
@@ -225,6 +257,18 @@ BEM_CT = (
     0.116185, 0.114201, 0.111359, 0.108721, 0.106266, 0.103989, 0.101872,
     0.0998347, 0.0977025, 0.0952526, 0.0922342, 0.0882905, 0.0827887,
     0.0742553, 0.057719, 0.0515146, 0.0459012, 0.0420918, 0.0533293,
+)
+#: Axial induction (used by the single-model figure; carried in the snapshot
+#: so both plot scripts share one reference source).
+BEM_A = (
+    0.0732976, 0.0474435, 0.0311872, 0.0255551, 0.0229953, 0.169421,
+    0.193033, 0.212877, 0.229547, 0.243623, 0.291061, 0.299815, 0.305987,
+    0.311091, 0.315209, 0.30925, 0.311921, 0.314738, 0.31781, 0.306855,
+    0.309695, 0.31233, 0.31479, 0.31708, 0.304922, 0.306779, 0.308652,
+    0.310344, 0.311808, 0.313129, 0.314363, 0.315576, 0.316833, 0.318436,
+    0.320676, 0.309496, 0.314932, 0.32056, 0.325497, 0.328723, 0.329526,
+    0.325491, 0.319648, 0.314363, 0.310911, 0.311257, 0.318964, 0.342852,
+    0.418414, 0.452599, 0.485514, 0.507446, 0.423693,
 )
 #: CCBlade self-check at the operating point (must be CP 0.4910 / CT 0.7934).
 BEM_CP = 0.49098
@@ -347,6 +391,84 @@ REF_STYLES = {
 DIRECT_POLARS = ("time", "root_dist", "alpha_deg", "c_ref_n", "c_ref_t")
 DERIVED_POLARS = ("time", "root_dist", "alpha_deg", "cl", "cd")
 
+# --- reference snapshot (long format) -------------------------------------
+#: Header of ``analysis/spanwise-references.csv``.  One row per (source,
+#: quantity, station): ``r_over_R_or_radius_m`` is the station coordinate
+#: (r/R or radius in metres, see ``note``) and ``value`` the reference value.
+REFERENCE_HEADER = (
+    "source",
+    "quantity",
+    "r_over_R_or_radius_m",
+    "value",
+    "unit",
+    "note",
+)
+
+#: Note written on every CCBlade BEM row.
+BEM_NOTE = (
+    "CCBlade BEM (Aeroelast recipe in README); V=10.659 m/s, 7.518 rpm, "
+    "precone 4 deg, shear 0; r/R-grid; self-check CP 0.49098 / CT 0.79341"
+)
+
+#: Note written on every digitized row of a source.
+DIGITIZED_NOTES = {
+    "deoliv_cfl2": (
+        "de Oliveira OMAE2023-105084 Fig.6; R15Mesh-1 URANS CFL=2; "
+        "V=10 m/s; x=radius_m; visually digitized, +/-10%"
+    ),
+    "deoliv_fast": (
+        "de Oliveira OMAE2023-105084 Fig.6; OpenFAST-AeroDyn v15; "
+        "V=10 m/s; x=radius_m; visually digitized, +/-10%"
+    ),
+    "yi_present": (
+        "Yi et al. 2026 Fig.13; ws=9 m/s Present URANS; x=r_over_R; "
+        "visually digitized, +/-10%"
+    ),
+    "yi_bemt": (
+        "Yi et al. 2026 Fig.13; ws=9 m/s BEMT; x=r_over_R; "
+        "visually digitized, +/-10%"
+    ),
+}
+
+#: The digitized source/quantity series written to the snapshot.  Each tuple
+#: is ``(source, quantity, xs, values, unit, x_is_radius)``.
+DIGITIZED_SERIES = (
+    ("deoliv_cfl2", "normal_force_per_span", DEOLIV_CN_CFL2_R_M,
+     DEOLIV_CN_CFL2, "kN/m", True),
+    ("deoliv_cfl2", "tangential_force_per_span", DEOLIV_CT_CFL2_R_M,
+     DEOLIV_CT_CFL2, "kN/m", True),
+    ("deoliv_fast", "normal_force_per_span", DEOLIV_CN_FAST_R_M,
+     DEOLIV_CN_FAST, "kN/m", True),
+    ("deoliv_fast", "tangential_force_per_span", DEOLIV_CT_FAST_R_M,
+     DEOLIV_CT_FAST, "kN/m", True),
+    ("yi_present", "normal_force_per_span", YI_FN_PRESENT_RR,
+     YI_FN_PRESENT, "kN/m", False),
+    ("yi_present", "torque_per_span", YI_Q_PRESENT_RR,
+     YI_Q_PRESENT, "kN.m/m", False),
+    ("yi_bemt", "normal_force_per_span", YI_FN_BEMT_RR,
+     YI_FN_BEMT, "kN/m", False),
+    ("yi_bemt", "torque_per_span", YI_Q_BEMT_RR,
+     YI_Q_BEMT, "kN.m/m", False),
+)
+
+#: Per-source reference reconstruction: ``(quantity_normal,
+#: quantity_tangential, dynamic-pressure rescale, ct_is_torque, x_is_radius)``.
+#: de Oliveira publishes a tangential force per span (kN/m); Yi publishes a
+#: torque per unit length Q (kN.m/m), for which ``f_t = Q/r``.
+REFERENCE_CONFIG = {
+    "deoliv_cfl2": ("normal_force_per_span", "tangential_force_per_span",
+                    REF_RESCALE_DEOLIV, False, True),
+    "deoliv_fast": ("normal_force_per_span", "tangential_force_per_span",
+                    REF_RESCALE_DEOLIV, False, True),
+    "yi_present": ("normal_force_per_span", "torque_per_span",
+                   REF_RESCALE_YI, True, False),
+    "yi_bemt": ("normal_force_per_span", "torque_per_span",
+                REF_RESCALE_YI, True, False),
+}
+
+#: Display label -> ``model`` column of ``analysis/spanwise-profiles.csv``.
+CSV_MODEL_KEYS = {"ALM": "alm", "ASM": "asm", "ASM-mesh": "asm-mesh"}
+
 
 # --- geometry helper ------------------------------------------------------
 def load_pitch_table(path: Path):
@@ -430,16 +552,92 @@ def reference_coefficients(rr, force_kN_per_m, rescale, chord_table,
     return force_span / (q * chord)
 
 
-def reference_series(chord_table) -> list[dict]:
+def write_references_csv(path: Path) -> int:
+    """Write the embedded BEM + digitized arrays to the long-format CSV.
+
+    The module constants are the generator; the committed CSV is the runtime
+    source for both plot scripts.  Returns the number of data rows written.
+    """
+    rows = []
+    for i, rr in enumerate(BEM_RR):
+        for quantity, value, unit in (
+            ("alpha_deg", BEM_ALPHA_DEG[i], "deg"),
+            ("cn", BEM_CN[i], "-"),
+            ("ct", BEM_CT[i], "-"),
+            ("a", BEM_A[i], "-"),
+        ):
+            rows.append(("ccblade-bem", quantity, f"{rr:.10g}",
+                         f"{value:.10g}", unit, BEM_NOTE))
+    for quantity, value in (("cp_rotor", BEM_CP), ("ct_rotor", BEM_CT_ROTOR)):
+        rows.append(("ccblade-bem", quantity, "", f"{value:.10g}", "-",
+                     BEM_NOTE))
+    for source, quantity, xs, values, unit, _ in DIGITIZED_SERIES:
+        note = DIGITIZED_NOTES[source]
+        for x, value in zip(xs, values, strict=True):
+            rows.append((source, quantity, f"{x:.10g}", f"{value:.10g}",
+                         unit, note))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(REFERENCE_HEADER)
+        writer.writerows(rows)
+    return len(rows)
+
+
+def load_references_csv(path: Path):
+    """Read ``analysis/spanwise-references.csv``.
+
+    Returns ``(bem, scalars, digitized)`` where ``bem`` holds the CCBlade
+    arrays (``rr``/``alpha_deg``/``cn``/``ct``/``a`` plus the ``cp`` and
+    ``ct`` rotor scalars), ``scalars`` the two rotor scalars and ``digitized``
+    a ``(source, quantity) -> (xs, values)`` mapping.
+    """
+    bem = {key: [] for key in ("rr", "alpha_deg", "cn", "ct", "a")}
+    scalars: dict[str, float] = {}
+    digitized: dict[tuple[str, str], list[list[float]]] = {}
+    with path.open(encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream)
+        for row in reader:
+            source = row["source"]
+            quantity = row["quantity"]
+            x = row["r_over_R_or_radius_m"]
+            value = float(row["value"])
+            if source == "ccblade-bem":
+                if quantity == "cp_rotor":
+                    scalars["cp"] = value
+                elif quantity == "ct_rotor":
+                    scalars["ct"] = value
+                elif quantity in bem:
+                    if quantity == "alpha_deg":
+                        bem["rr"].append(float(x))
+                    bem[quantity].append(value)
+                continue
+            series = digitized.setdefault((source, quantity), [[], []])
+            series[0].append(float(x))
+            series[1].append(value)
+    arrays = {key: np.asarray(values, dtype=float) for key, values in bem.items()}
+    return arrays, scalars, digitized
+
+
+def reference_series(digitized, chord_table) -> list[dict]:
     """The four digitized references as coefficient series.
 
-    Each entry is a dict with ``key``, ``label``, ``color``, ``ls``, ``marker``
-    and the ``rr_cn``/``cn`` and ``rr_ct``/``ct`` arrays (the normal and
-    tangential digitizations live on different span grids).
+    ``digitized`` is the ``(source, quantity) -> (xs, values)`` mapping read
+    from the reference snapshot.  Each entry is a dict with ``key``,
+    ``label``, ``color``, ``ls``, ``marker`` and the ``rr_cn``/``cn`` and
+    ``rr_ct``/``ct`` arrays (the normal and tangential digitizations live on
+    different span grids).
     """
     out = []
-
-    def add(key, rr_cn, force_cn, rr_ct, force_ct, rescale, ct_torque):
+    for key, (q_n, q_t, rescale, ct_torque, x_is_radius) in \
+            REFERENCE_CONFIG.items():
+        rr_cn, force_cn = digitized[(key, q_n)]
+        rr_ct, force_ct = digitized[(key, q_t)]
+        rr_cn = np.asarray(rr_cn, dtype=float)
+        rr_ct = np.asarray(rr_ct, dtype=float)
+        if x_is_radius:
+            rr_cn = rr_cn / ROTOR_RADIUS
+            rr_ct = rr_ct / ROTOR_RADIUS
         label, color, ls, marker = REF_STYLES[key]
         out.append({
             "key": key,
@@ -447,36 +645,12 @@ def reference_series(chord_table) -> list[dict]:
             "color": color,
             "ls": ls,
             "marker": marker,
-            "rr_cn": np.asarray(rr_cn, dtype=float),
-            "cn": reference_coefficients(
-                rr_cn, force_cn, rescale, chord_table),
-            "rr_ct": np.asarray(rr_ct, dtype=float),
+            "rr_cn": rr_cn,
+            "cn": reference_coefficients(rr_cn, force_cn, rescale, chord_table),
+            "rr_ct": rr_ct,
             "ct": reference_coefficients(
                 rr_ct, force_ct, rescale, chord_table, torque=ct_torque),
         })
-
-    # de Oliveira reports a tangential force per unit span (kN/m): ct_torque
-    # is False.  Yi reports a torque per unit length Q (kN.m/m): divide by r.
-    add(
-        "deoliv_cfl2",
-        np.asarray(DEOLIV_CN_CFL2_R_M) / ROTOR_RADIUS, DEOLIV_CN_CFL2,
-        np.asarray(DEOLIV_CT_CFL2_R_M) / ROTOR_RADIUS, DEOLIV_CT_CFL2,
-        REF_RESCALE_DEOLIV, False,
-    )
-    add(
-        "deoliv_fast",
-        np.asarray(DEOLIV_CN_FAST_R_M) / ROTOR_RADIUS, DEOLIV_CN_FAST,
-        np.asarray(DEOLIV_CT_FAST_R_M) / ROTOR_RADIUS, DEOLIV_CT_FAST,
-        REF_RESCALE_DEOLIV, False,
-    )
-    add(
-        "yi_present", YI_FN_PRESENT_RR, YI_FN_PRESENT,
-        YI_Q_PRESENT_RR, YI_Q_PRESENT, REF_RESCALE_YI, True,
-    )
-    add(
-        "yi_bemt", YI_FN_BEMT_RR, YI_FN_BEMT,
-        YI_Q_BEMT_RR, YI_Q_BEMT, REF_RESCALE_YI, True,
-    )
     return out
 
 
@@ -993,8 +1167,7 @@ def make_figure(profiles, refs, out_png: Path) -> None:
     )
 
     fig.subplots_adjust(left=0.070, right=0.925, top=0.885, bottom=0.100)
-    out_png.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_png, dpi=150)
+    _save_figure(fig, out_png)
     plt.close(fig)
 
 
@@ -1066,9 +1239,87 @@ def make_reference_figure(profiles, refs, out_png: Path) -> None:
     )
     fig.subplots_adjust(left=0.060, right=0.985, top=0.775, bottom=0.115,
                         wspace=0.18)
-    out_png.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_png, dpi=150)
+    _save_figure(fig, out_png)
     plt.close(fig)
+
+
+def _save_figure(fig, out) -> None:
+    """Save ``fig`` to a ``Path`` or a writable binary file-like object."""
+    parent = getattr(out, "parent", None)
+    if parent is not None:
+        parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=150)
+
+
+def _load_bem_globals(path: Path):
+    """Load the reference snapshot and rebind the module ``BEM_*`` arrays.
+
+    The figure helpers read the module-level ``BEM_*`` names; rebinding them
+    here keeps a single runtime reference source (the committed CSV) without
+    threading the arrays through every call.  Returns the digitized mapping.
+    """
+    global BEM_RR, BEM_ALPHA_DEG, BEM_CN, BEM_CT, BEM_A, BEM_CP, BEM_CT_ROTOR
+    bem, scalars, digitized = load_references_csv(path)
+    BEM_RR = bem["rr"]
+    BEM_ALPHA_DEG = bem["alpha_deg"]
+    BEM_CN = bem["cn"]
+    BEM_CT = bem["ct"]
+    BEM_A = bem["a"]
+    BEM_CP = scalars["cp"]
+    BEM_CT_ROTOR = scalars["ct"]
+    return digitized
+
+
+def load_profile_from_csv(label: str, csv_path: Path) -> dict:
+    """Load one model's spanwise rows from ``spanwise-profiles.csv``."""
+    key = CSV_MODEL_KEYS[label]
+    rr, alpha, cn, ct = [], [], [], []
+    window = (0.0, 0.0, 1.0)
+    module = {"tsr": 0.0, "cp": 0.0, "ct": 0.0}
+    with csv_path.open(encoding="utf-8", newline="") as stream:
+        for row in csv.DictReader(stream):
+            if row.get("model") != key:
+                continue
+            rr.append(float(row["r_over_R"]))
+            alpha.append(float(row["alpha_deg"]))
+            cn.append(float(row["c_ref_n"]))
+            ct.append(float(row["c_ref_t"]))
+            t_start = float(row["window_start_s"])
+            t_end = float(row["window_end_s"])
+            revs = float(row["revs"])
+            window = (t_start, t_end, (t_end - t_start) / revs)
+            module = {
+                "tsr": float(row["tsr"]),
+                "cp": float(row["cp_module"]),
+                "ct": float(row["ct_module"]),
+            }
+    if not rr:
+        raise FileNotFoundError(f"{csv_path}: no rows for model {key!r}")
+    rr = np.array(rr)
+    alpha = np.array(alpha)
+    cn = np.array(cn)
+    ct = np.array(ct)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = np.where(cn != 0.0, ct / cn, np.nan)
+    return {
+        "label": label,
+        "run_dir": csv_path,
+        "element_dir": csv_path,
+        "turbine_csv": csv_path,
+        "header": ["model", "r_over_R", "alpha_deg", "c_ref_n", "c_ref_t"],
+        "mode": "csv",
+        "n_files": len(rr),
+        "n_used": len(rr),
+        "missing": [],
+        "rr": rr,
+        "alpha": alpha,
+        "cn": cn,
+        "ct": ct,
+        "ratio": ratio,
+        "window": window,
+        "revs_to_end": window[1] / window[2],
+        "module": module,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1076,36 +1327,59 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--revs", type=float, default=DEFAULT_REVS)
     parser.add_argument("--rpm", type=float, default=RPM_RATED)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument("--references-out", type=Path, default=REFERENCES_OUT)
+    parser.add_argument(
+        "--from-csv", action="store_true",
+        help="read the models from the committed profiles CSV instead of "
+             "the run directories",
+    )
+    parser.add_argument("--profiles-csv", type=Path, default=PROFILES_CSV)
+    parser.add_argument("--references-csv", type=Path, default=REFERENCES_CSV)
+    parser.add_argument(
+        "--write-references", action="store_true",
+        help="rewrite the reference snapshot from the module arrays and exit",
+    )
     args = parser.parse_args(argv)
+
+    if args.write_references:
+        rows = write_references_csv(args.references_csv)
+        print(f"wrote {args.references_csv} ({rows} data rows)")
+        return 0
+
+    digitized = _load_bem_globals(args.references_csv)
 
     profiles = []
     for label, run_dir, _, _ in MODELS:
         try:
-            profiles.append(load_profile(label, run_dir, args.revs, args.rpm))
+            if args.from_csv:
+                profiles.append(load_profile_from_csv(label, args.profiles_csv))
+            else:
+                profiles.append(load_profile(label, run_dir, args.revs, args.rpm))
         except FileNotFoundError as error:
             print(f"warning: {label}: {error}")
 
     if not profiles:
-        print("error: none of the three runs provided data", flush=True)
+        print("error: no model provided data", flush=True)
         return 1
 
     print_model_report(profiles)
     print_station_table(profiles)
     print_offsets(profiles)
-    print_digitized_tables()
+    if not args.from_csv:
+        print_digitized_tables()
 
     chord_table = load_chord_table(BLADE_CSV)
     if chord_table[0].size:
-        refs = reference_series(chord_table)
+        refs = reference_series(digitized, chord_table)
     else:
         print(f"warning: {BLADE_CSV}: no chord table; references skipped")
         refs = []
 
     make_figure(profiles, refs, args.out)
     print(f"\nwrote {args.out.resolve()} ({args.out.stat().st_size} bytes)")
-    make_reference_figure(profiles, refs, REFERENCES_OUT)
-    print(f"wrote {REFERENCES_OUT.resolve()} "
-          f"({REFERENCES_OUT.stat().st_size} bytes)")
+    make_reference_figure(profiles, refs, args.references_out)
+    print(f"wrote {args.references_out.resolve()} "
+          f"({args.references_out.stat().st_size} bytes)")
     return 0
 
 
