@@ -395,20 +395,26 @@ Verified with a loaded OpenFOAM v2506 environment on the rendered coarse case:
 over chord strips, so the local cells must resolve the chord.
 `system/snappyHexMeshDict` is castellated-only (`snap false`, `addLayers false`,
 no `refinementSurfaces` — the STL is the actuator force surface, not a body) and
-refines three regions on the background mesh:
+refines three regions on the background mesh. They are **nested**: every region
+encloses the next finer one by `ASM_REFINEMENT_MARGIN = 1.2`, so the
+3 -> 2 -> 1 -> 0 transition is not a cliff. The blade tip sits exactly at `R`,
+so a disk radius of `R` put the level-3/level-0 jump on the tip vortex — the
+structure the comparison measures:
 
-- `rotorDisk` — a `searchableCylinder` of radius `R` spanning ±6 m
-  (`ASM_DISK_HALF_THICKNESS`) about the rotor plane, at the disk level. Level 3
-  takes the 7.5 m background fine cell to ~0.94 m, ~6 cells across the 5.77 m
-  max chord.
+- `rotorDisk` — a `searchableCylinder` of radius `1.2R = 144.81 m` spanning
+  `±1.2 x ASM_DISK_HALF_THICKNESS = ±7.2 m` about the rotor plane, at the disk
+  level. Level 3 takes the 7.5 m background fine cell to ~0.94 m, ~6 cells
+  across the 5.77 m max chord.
 - `towerWake` — a `searchableBox` over the tower band (its height plus margin,
   ±`ASM_TOWER_LATERAL_FACTOR`× its max diameter laterally) from
   `ASM_TOWER_AXIAL_MARGIN` upstream of the tower to `ASM_WAKE_DOWNSTREAM_D` rotor
   diameters downstream.
-- `rotorWake` — a `searchableCylinder` of radius `R` from the rotor plane
+- `rotorWake` — a `searchableCylinder` of radius `1.2²R = 173.77 m` from
+  `1.2² x ASM_DISK_HALF_THICKNESS = 8.64 m` upstream of the rotor plane to
   `ASM_ROTOR_WAKE_DOWNSTREAM_D` rotor diameters downstream, so the rotor wake
   (which rises to z = +R, well above the tower band) is refined over the same
-  axial extent as the tower shadow.
+  axial extent as the tower shadow while enclosing the disk both radially and
+  axially.
 
 Both wake regions run one level below the disk (level 2, ~1.9 m at the default
 3) so the wake and the tower shadow are comparable. Downstream is

@@ -897,8 +897,12 @@ class TestCaseSkeleton:
         # Downstream of the rotor disk nothing above the tower band (z ~ +4.4 m)
         # was refined, so the rotor wake -- which reaches z = +R -- ran at the
         # background cell size. The rotorWake cylinder covers it one level below
-        # the disk, along DOWNSTREAM = -rotor_axis (never a hardcoded +1).
+        # the disk, along DOWNSTREAM = -rotor_axis (never a hardcoded +1), and it
+        # nests one ASM_REFINEMENT_MARGIN step beyond the disk both radially and
+        # axially, so the level-2/level-3 jump is not a cliff on the tip vortex.
         origin = generate_case.turbine_origin()
+        margin = generate_case.ASM_REFINEMENT_MARGIN
+        disk_half = generate_case.ASM_DISK_HALF_THICKNESS * margin
         for flow_axis, downstream in (("y", (0.0, 1.0, 0.0)), ("x", (1.0, 0.0, 0.0))):
             case_dir = tmp_path / flow_axis
             assert (
@@ -921,13 +925,40 @@ class TestCaseSkeleton:
                     encoding="utf-8"
                 )
             )
+            axis = generate_case.rotor_axis(flow_axis)
+            disk = parsed["geometry"]["rotorDisk"]
+            assert disk["type"] == "searchableCylinder"
+            # The disk carries the margin factor radially AND axially.
+            assert float(disk["radius"]) == pytest.approx(
+                generate_case.ROTOR_RADIUS * margin, abs=1e-4
+            )
+            disk_up = [origin[i] + disk_half * axis[i] for i in range(3)]
+            disk_down = [origin[i] - disk_half * axis[i] for i in range(3)]
+            disk_faces = (
+                [float(v) for v in disk["point1"]],
+                [float(v) for v in disk["point2"]],
+            )
+            assert any(face == pytest.approx(disk_up, abs=1e-6) for face in disk_faces)
+            assert any(
+                face == pytest.approx(disk_down, abs=1e-6) for face in disk_faces
+            )
+            disk_half_length = 0.5 * math.dist(disk_faces[0], disk_faces[1])
+            assert disk_half_length == pytest.approx(
+                generate_case.ASM_DISK_HALF_THICKNESS * margin, abs=1e-6
+            )
+
             wake = parsed["geometry"]["rotorWake"]
             assert wake["type"] == "searchableCylinder"
             assert float(wake["radius"]) == pytest.approx(
-                generate_case.ROTOR_RADIUS, abs=1e-4
+                generate_case.ROTOR_RADIUS * margin**2, abs=1e-4
             )
+            wake_up = [
+                origin[i]
+                + generate_case.ASM_DISK_HALF_THICKNESS * margin**2 * axis[i]
+                for i in range(3)
+            ]
             assert [float(v) for v in wake["point1"]] == pytest.approx(
-                [float(v) for v in origin], abs=1e-9
+                wake_up, abs=1e-6
             )
             expected = [
                 origin[i]
@@ -939,10 +970,20 @@ class TestCaseSkeleton:
             assert [float(v) for v in wake["point2"]] == pytest.approx(
                 expected, abs=1e-6
             )
+            # The coarser wake strictly encloses the finer disk: radially, and
+            # axially with its upstream face upstream of the disk's (the rotor
+            # axis points upwind) and its downstream end well past the disk's.
+            assert float(wake["radius"]) > float(disk["radius"])
+            wake_point2 = [float(v) for v in wake["point2"]]
+            assert sum((wake_up[i] - disk_up[i]) * axis[i] for i in range(3)) > 0.0
+            assert (
+                sum((wake_point2[i] - disk_down[i]) * (-axis[i]) for i in range(3))
+                > 0.0
+            )
             # The downstream point moves with the fluid: +y for the default y
             # axis, +x for the OpenFAST x axis (the sign cannot silently flip).
             streamwise = 1 if flow_axis == "y" else 0
-            assert float(wake["point2"][streamwise]) > 0.0
+            assert wake_point2[streamwise] > 0.0
             regions = parsed["castellatedMeshControls"]["refinementRegions"]
             assert int(regions["rotorWake"]["levels"][0][1]) == 2
             # The wake adds no refinement surface either (see the disk test).

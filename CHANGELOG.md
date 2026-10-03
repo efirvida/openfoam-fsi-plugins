@@ -119,6 +119,35 @@ the tests assert both so the sign cannot silently flip. The ALM / ASM / ASM-mesh
 comparison trio now shares this mesh via a versioned
 `scripts/slurm/asmcmp.slurm` in which only `TURBINE_MODEL` varies.
 
+#### 6. Widen the castellated rotor disk and nest the wake one margin beyond it
+
+**Files:**
+- `turbinesFoam/validation/iea15mw/tools/generate_case.py`
+- `turbinesFoam/validation/iea15mw/case/system/snappyHexMeshDict`
+- `turbinesFoam/validation/iea15mw/README.md`
+- `turbinesFoam/tests/test_iea15mw_case.py`
+
+**Problem:** the maintainer's mesh review found the castellated rotor disk too
+tight on the blade. The IEA 15-240-RWT tip sits at exactly `R = 120.675 m` (the
+projected radius of the 4 deg-preconed 120.97 m blade) and the refinement
+cylinder radius was exactly `R`, so the level-3/level-0 cliff fell on the tip
+vortex -- the very structure the ALM/ASM/ASM-mesh comparison measures. The axial
+half-thickness (6 m) was only a 2 m standoff from the ~4 m prebend1x tip
+excursion, and the level-2 `rotorWake` neither exceeded the disk radially nor
+started upstream of it, so the 3 -> 2 transition was a cliff too.
+
+**Fix:** add `ASM_REFINEMENT_MARGIN = 1.2` and require every castellated region
+to enclose the next finer one by that factor. `rotorDisk` is now `1.2R =
+144.81 m` radially and `±1.2 x ASM_DISK_HALF_THICKNESS = ±7.2 m` axially about
+the rotor plane; `rotorWake` (unchanged level, disk - 1) is one margin step
+further -- `1.2**2 R = 173.77 m` radially, from `1.2**2 x
+ASM_DISK_HALF_THICKNESS = 8.64 m` upstream of the rotor plane to
+`ASM_ROTOR_WAKE_DOWNSTREAM_D` diameters downstream -- so it exceeds the disk
+both radially and axially. The tower band is unchanged. The snappy tests assert
+the nested geometry for both `--flow-axis y` and `x` and that
+`refinementSurfaces` stays empty; the committed case was regenerated so
+`--check` passes.
+
 ## [Unreleased] — 2026-04-02
 
 ### New Features

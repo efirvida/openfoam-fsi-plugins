@@ -245,6 +245,14 @@ DEFAULT_N_CHORDWISE = 5
 #: the default level 3 takes the background fine cell (ROTOR_DIAMETER/32 = 7.5 m)
 #: to ~0.94 m, i.e. ~6 cells across the 5.77 m max chord.
 ASM_DISK_HALF_THICKNESS = 6.0
+#: Every castellated region must enclose the next finer one by this factor, so
+#: the level jump is not a cliff. The blade tip sits exactly at ``ROTOR_RADIUS``
+#: (120.675 m) where the tip vortex forms, so a disk radius of exactly R put the
+#: level-3/level-0 jump on the measured structure. The margin is applied to both
+#: the radial and the axial extent: ``rotorDisk`` is 1.2*R x 1.2*6.0 m, and the
+#: coarser ``rotorWake`` is one margin step further (1.2**2*R, 1.2**2*6.0 m
+#: upstream) so the wake cylinder exceeds the disk both radially and axially.
+ASM_REFINEMENT_MARGIN = 1.2
 DEFAULT_SNAPPY_LEVEL = 3
 
 #: Tower + tower-shadow refinement. The rotor-disk cylinder alone left the
@@ -1136,12 +1144,23 @@ def render_snappy_dict(
     is ``ROTOR_DIAMETER/32`` (7.5 m); a level-3 castellated cylinder brings the
     rotor disk to ~0.94 m.
 
-    Two regions resolve what the blades see beyond the disk. ``towerWake``
-    covers the tower and its shadow -- the band the blades cross at the bottom
-    of the rotation. ``rotorWake`` extends the disk cylinder
-    ``ASM_ROTOR_WAKE_DOWNSTREAM_D`` diameters downstream so the rotor wake,
-    which rises to z = +R well above the tower band, is not left at the
-    background cell size. Both run one level below the disk.
+    The castellated regions are **nested**: every region encloses the next finer
+    one by ``ASM_REFINEMENT_MARGIN``, so the 3 -> 2 -> 1 -> 0 transition is a
+    graded step rather than a cliff. The blade tip sits exactly at
+    ``ROTOR_RADIUS`` where the tip vortex forms, so a disk radius equal to R
+    would put the level-3/level-0 jump on the very structure the comparison
+    measures. ``rotorDisk`` is therefore ``1.2*R`` radially and
+    ``1.2*ASM_DISK_HALF_THICKNESS`` (7.2 m) axially about the rotor plane; the
+    un-margined 6 m half-thickness was only a 2 m standoff from the ~4 m
+    prebend1x tip excursion. The coarser ``rotorWake`` extends that one more
+    margin step: ``1.2**2*R`` radially, and from
+    ``1.2**2*ASM_DISK_HALF_THICKNESS`` (8.64 m) upstream of the rotor plane to
+    ``ASM_ROTOR_WAKE_DOWNSTREAM_D`` diameters downstream, so it exceeds the disk
+    both radially and axially.
+
+    ``towerWake`` covers the tower and its shadow -- the band the blades cross
+    at the bottom of the rotation. It and ``rotorWake`` run one level below the
+    disk.
 
     There is deliberately **no** ``refinementSurface``: the STL is the actuator
     force surface (``surfaceGeometry``), not a body. Adding it here would make
@@ -1153,11 +1172,15 @@ def render_snappy_dict(
         raise ValueError("snappy level must be non-negative")
     axis = rotor_axis(flow_axis)
     origin = turbine_origin()
-    point1 = tuple(origin[i] - ASM_DISK_HALF_THICKNESS * axis[i] for i in range(3))
-    point2 = tuple(origin[i] + ASM_DISK_HALF_THICKNESS * axis[i] for i in range(3))
-    # The rotor axis helper points UPWIND (opposite the inflow), so the wake
-    # extends DOWNSTREAM = -rotor_axis (a real sign, not a symmetric span).
-    wake_point1 = origin
+    disk_half = ASM_DISK_HALF_THICKNESS * ASM_REFINEMENT_MARGIN
+    point1 = tuple(origin[i] - disk_half * axis[i] for i in range(3))
+    point2 = tuple(origin[i] + disk_half * axis[i] for i in range(3))
+    # The rotor axis helper points UPWIND (opposite the inflow), while the wake
+    # extends DOWNSTREAM = -rotor_axis (a real sign, not a symmetric span). Its
+    # upstream face sits one margin step beyond the disk's own upstream face, so
+    # the coarser region encloses the finer one axially as well as radially.
+    wake_half = ASM_DISK_HALF_THICKNESS * ASM_REFINEMENT_MARGIN**2
+    wake_point1 = tuple(origin[i] + wake_half * axis[i] for i in range(3))
     wake_point2 = tuple(
         origin[i] - ASM_ROTOR_WAKE_DOWNSTREAM_D * ROTOR_DIAMETER * axis[i]
         for i in range(3)
@@ -1204,7 +1227,7 @@ geometry
         type searchableCylinder;
         point1 {foam_vector(point1)};
         point2 {foam_vector(point2)};
-        radius {ROTOR_RADIUS:.8g};
+        radius {ROTOR_RADIUS * ASM_REFINEMENT_MARGIN:.8g};
     }}
 
     rotorWake
@@ -1212,7 +1235,7 @@ geometry
         type searchableCylinder;
         point1 {foam_vector(wake_point1)};
         point2 {foam_vector(wake_point2)};
-        radius {ROTOR_RADIUS:.8g};
+        radius {ROTOR_RADIUS * ASM_REFINEMENT_MARGIN**2:.8g};
     }}
 
     towerWake
