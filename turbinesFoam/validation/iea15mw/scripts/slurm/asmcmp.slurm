@@ -18,8 +18,14 @@
 #
 # The comparison conditions below are overridable defaults; 56 cores, no
 # --nodes and no --mem.
+# The castellated mesh is built by a SERIAL snappyHexMesh before decomposePar,
+# so the batch step needs far more than the 8 GB/CPU partition default on the
+# node it lands on: job 11606555 (asm) was OOM-killed mid-refinement at that
+# default while its siblings survived. 16 GB/CPU gives the step ~110 GB per
+# node, which is what the ~7 M-cell castellation actually needs.
 #SBATCH -p sequana_cpu
 #SBATCH --ntasks=56
+#SBATCH --mem-per-cpu=16G
 #SBATCH -J iea15mw-asmcmp
 #SBATCH --time=96:00:00
 #SBATCH --no-requeue
