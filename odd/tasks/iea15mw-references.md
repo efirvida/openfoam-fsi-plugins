@@ -151,3 +151,47 @@ cierre de C_T): la fuerza física por unidad de longitud es **`f_ref × ρ`**.
    (`11606597/8/9`): sus cp conservan la inflación del `liftReCorrExp`. La
    comparación **entre** ellos sigue siendo válida porque comparten el sesgo.
 4. Los valores digitizados de las figuras son **±10 %** por construcción.
+
+## 6. Potencia y torque medidos
+
+Medias de la última revolución completa de cada corrida en vuelo, calculadas
+desde el `cp` que reporta el módulo (`postProcessing/turbines/0/turbine.csv`).
+El torque no es una columna del CSV: se obtiene con
+`T = cp · ½ρAV³ / Ω`, con `A = πR²`, `R = 120.675 m`, `ρ = 1.225`,
+`V = 10.659 m/s`, `Ω = 0.78719 rad/s`
+(`P_disponible = ½ρAV³ = 33.93 MW`).
+
+| corrida | model | última rev completa | C_P medio | torque medido | estado |
+| --- | --- | --- | --- | --- | --- |
+| `iea15mw-asmcmp-alm` | ALM | 19-20 | **0.6927** | **29.86 MN·m** | 20 rev, completo |
+| `iea15mw-asmcmp-asm` | ASM | 19-20 | **0.6266** | **27.01 MN·m** | 20 rev, completo |
+| `iea15mw-asmcmp-asm-mesh` | ASM + malla | 12-13 | **1.0678** | **46.03 MN·m** | parcial/transitorio (corrida viva) |
+
+El ALM y el ASM están terminados (20 rev) y sus medias no cambian. El
+ASM-mesh **sigue corriendo**, así que su "última revolución completa" y su
+media avanzan entre mediciones (con la corrida a ~13 rev dio 1.0678 /
+46.03 MN·m; una medición previa a ~11.5 rev dio 1.0686 / 46.07 MN·m).
+
+Referencias del §1 para comparar (mismo punto): WISDEM C_P 0.4618 /
+19.91 MN·m, OpenFAST BEM 0.4820 / 19.51 MN·m, CCBlade propio 0.4910 /
+21.2 MN·m, Miroux ALM 0.527 (sin torque publicado), OLAF 0.5312 / 22.26 MN·m.
+
+**Advertencia honesta:** las tres corridas en vuelo usaron los polares
+**ANTES** de la corrección `liftReCorrExp 0` del commit `a368b9e`, así que
+sus niveles absolutos de C_P y torque arrastran esa inflación: el ALM y el ASM
+quedan ~20-50 % por encima de la banda de referencias y el ASM-mesh casi al
+doble, además de seguir en transitorio. Esos números **no** se citan como
+valor absoluto. La comparación **entre** las tres corridas sí es válida porque
+comparten ese mismo sesgo: el orden ALM > ASM se mantiene, y el ASM-mesh se
+descarta por transitorio.
+
+Figuras: `analysis/power-torque-vs-rev.png` (trazas crudas + media por
+revolución, con las cinco referencias etiquetadas) y
+`analysis/power-torque-last-revs.png` (zoom a las últimas 5 revoluciones de
+cada corrida). Se regeneran con:
+
+```sh
+PY=/scratch/leahk/eduardo.donestevez/venv/bin/python
+$PY turbinesFoam/validation/iea15mw/scripts/plot_power_torque.py
+$PY turbinesFoam/validation/iea15mw/scripts/tower_azimuthal_signature.py
+```
