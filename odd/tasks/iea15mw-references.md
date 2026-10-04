@@ -186,12 +186,35 @@ comparten ese mismo sesgo: el orden ALM > ASM se mantiene, y el ASM-mesh se
 descarta por transitorio.
 
 Figuras: `analysis/power-torque-vs-rev.png` (trazas crudas + media por
-revolución, con las cinco referencias etiquetadas) y
+revolución, con las cinco referencias etiquetadas),
 `analysis/power-torque-last-revs.png` (zoom a las últimas 5 revoluciones de
-cada corrida). Se regeneran con:
+cada corrida) y `analysis/torque-ripple.png` (ripple: crudo a 3 rev, plegado
+módulo 120° a 5 rev y las tres palas del ALM). Se regeneran con:
 
 ```sh
 PY=/scratch/leahk/eduardo.donestevez/venv/bin/python
 $PY turbinesFoam/validation/iea15mw/scripts/plot_power_torque.py
 $PY turbinesFoam/validation/iea15mw/scripts/tower_azimuthal_signature.py
+$PY turbinesFoam/validation/iea15mw/scripts/torque_ripple.py
 ```
+
+### Ripple de torque medido
+
+Medido con `scripts/torque_ripple.py` (solo lee `runs/`; el torque se calcula
+con la fórmula de arriba, que da `cp × 43,108` y no 43,112: esa diferencia
+del 0,009 % no cambia ninguna cifra significativa). En las
+últimas 3 revoluciones completas el torque crudo del ALM tiene un
+pico-a-pico de **1,021 MN·m (3,42 % de su media)** y el del ASM **0,609 MN·m
+(2,26 %)**; el ASM-mesh, en transitorio, da 63,2 MN·m, que **no** es ripple
+físico. Al plegar el torque módulo 120° (componente 3/rev de paso de pala,
+últimas 5 revoluciones, bins de 1°) el pico-a-pico es **0,727 MN·m (2,43 %)**
+para el ALM y **0,497 MN·m (1,84 %)** para el ASM; la amplitud de la armónica
+3/rev es 0,290 MN·m (0,97 %) y 0,208 MN·m (0,77 %) respectivamente. La
+componente 1/rev —la que delataría asimetría entre palas— queda en **0,072 %**
+(ALM) y **0,059 %** (ASM), por debajo del 1 %: no hay asimetría de palas
+apreciable a ese nivel. El `cp` pliega exactamente con la misma forma (los
+factores de escala cancelan), lo que confirma que la oscilación no es un
+escalón del post-proceso. En el ALM cada pala cae una vez por revolución
+(≈−3,5 % de su media) y los tres mínimos están a 120,0/119,6/120,4°. El
+ASM-mesh, en cambio, muestra una oscilación 1/rev enorme (de 13,8 a
+76,9 MN·m) que es artefacto de la corrida viva, no ripple de paso de pala.
