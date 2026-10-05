@@ -1396,3 +1396,230 @@ class TestVelocitySampling:
         # An explicit flag wins over the environment.
         assert generate_case.resolve_velocity_sample_radius(3.3) == pytest.approx(3.3)
         assert generate_case.resolve_n_velocity_samples(16) == 16
+
+
+SNAPPY_EXTENT_ENV_VARS = (
+    generate_case.SNAPPY_DISK_RADIUS_ENV,
+    generate_case.SNAPPY_DISK_HALF_THICKNESS_ENV,
+    generate_case.SNAPPY_WAKE_RADIUS_ENV,
+    generate_case.SNAPPY_WAKE_UPSTREAM_ENV,
+    generate_case.SNAPPY_WAKE_DOWNSTREAM_ENV,
+    generate_case.SNAPPY_TOWER_UPSTREAM_ENV,
+    generate_case.SNAPPY_TOWER_DOWNSTREAM_ENV,
+    generate_case.SNAPPY_TOWER_Z_MIN_ENV,
+    generate_case.SNAPPY_TOWER_Z_MAX_ENV,
+    generate_case.SNAPPY_TOWER_LATERAL_FACTOR_ENV,
+    generate_case.SNAPPY_WAKE_LEVEL_OFFSET_ENV,
+)
+
+
+#: Flag -> ``render_snappy_dict`` kwarg for each castellated knob.
+SNAPPY_FLAG_PARAMS = {
+    "--snappy-disk-radius": "disk_radius",
+    "--snappy-disk-half-thickness": "disk_half_thickness",
+    "--snappy-wake-radius": "wake_radius",
+    "--snappy-wake-upstream": "wake_upstream",
+    "--snappy-wake-downstream": "wake_downstream",
+    "--snappy-tower-upstream": "tower_upstream",
+    "--snappy-tower-downstream": "tower_downstream",
+    "--snappy-tower-z-min": "tower_z_min",
+    "--snappy-tower-z-max": "tower_z_max",
+    "--snappy-tower-lateral-factor": "tower_lateral_factor",
+    "--snappy-wake-level-offset": "wake_level_offset",
+}
+
+#: ``(flag, CLI text, lines added, lines removed)`` for every castellated
+#: extent and level. The added/removed lines are the exact symmetric difference
+#: of that flag's render against the default, so a flag that leaked into
+#: another zone would fail.
+SNAPPY_EXTENT_CASES = (
+    (
+        "--snappy-disk-radius",
+        "160",
+        ["        radius 160;"],
+        ["        radius 150;"],
+    ),
+    (
+        "--snappy-disk-half-thickness",
+        "12",
+        ["        point1 (0 12 0);", "        point2 (0 -12 0);"],
+        ["        point1 (0 10 0);", "        point2 (0 -10 0);"],
+    ),
+    (
+        "--snappy-wake-radius",
+        "180",
+        ["        radius 180;"],
+        ["        radius 170;"],
+    ),
+    (
+        "--snappy-wake-upstream",
+        "25",
+        ["        point1 (0 -25 0);"],
+        ["        point1 (0 -20 0);"],
+    ),
+    (
+        "--snappy-wake-downstream",
+        "480",
+        ["        point2 (0 480 0);"],
+        ["        point2 (0 470 0);"],
+    ),
+    (
+        "--snappy-tower-upstream",
+        "25",
+        ["        min (-20 -25 -170);"],
+        ["        min (-20 -20 -170);"],
+    ),
+    (
+        "--snappy-tower-downstream",
+        "480",
+        ["        max (20 480 10);"],
+        ["        max (20 470 10);"],
+    ),
+    (
+        "--snappy-tower-z-min",
+        "-180",
+        ["        min (-20 -20 -180);"],
+        ["        min (-20 -20 -170);"],
+    ),
+    (
+        "--snappy-tower-z-max",
+        "20",
+        ["        max (20 470 20);"],
+        ["        max (20 470 10);"],
+    ),
+    (
+        "--snappy-tower-lateral-factor",
+        "2.5",
+        ["        min (-25 -20 -170);", "        max (25 470 10);"],
+        ["        min (-20 -20 -170);", "        max (20 470 10);"],
+    ),
+    (
+        "--snappy-wake-level-offset",
+        "2",
+        ["            levels ((1e15 1));"],
+        ["            levels ((1e15 2));"],
+    ),
+)
+
+
+class TestSnappyExtents:
+    """Run-time overrides for every castellated zone extent and level.
+
+    The maintainer's hand-tuned absolute extents are the defaults; each one is
+    overridable with a flag, a documented temporary ``TURBINE_SNAPPY_*``
+    environment bridge, and precedence flag > environment > default. The
+    nesting invariant (the coarser wake must enclose the finer disk radially and
+    axially, and the tower box must stay a box) is validated before rendering.
+    """
+
+    def _clear_env(self, monkeypatch):
+        for name in SNAPPY_EXTENT_ENV_VARS:
+            monkeypatch.delenv(name, raising=False)
+
+    def test_default_render_is_byte_identical_to_the_committed_case(
+        self, monkeypatch
+    ):
+        self._clear_env(monkeypatch)
+        committed = (CASE_DIR / "system" / "snappyHexMeshDict").read_text(
+            encoding="utf-8"
+        )
+        assert generate_case.render_snappy_dict() == committed
+
+    @pytest.mark.parametrize("flag,value,added,removed", SNAPPY_EXTENT_CASES)
+    def test_each_flag_changes_only_its_own_rendered_value(
+        self, monkeypatch, flag, value, added, removed
+    ):
+        self._clear_env(monkeypatch)
+        param = SNAPPY_FLAG_PARAMS[flag]
+        number = int(value) if param == "wake_level_offset" else float(value)
+        default = generate_case.render_snappy_dict()
+        overridden = generate_case.render_snappy_dict(**{param: number})
+        changed = set(overridden.splitlines()) ^ set(default.splitlines())
+        assert changed == set(added) | set(removed)
+
+    def test_every_flag_reaches_the_renderer(self, tmp_path, monkeypatch):
+        self._clear_env(monkeypatch)
+        case_dir = tmp_path / "case"
+        args = ["--case-dir", str(case_dir)]
+        overrides = {}
+        for flag, value, _added, _removed in SNAPPY_EXTENT_CASES:
+            param = SNAPPY_FLAG_PARAMS[flag]
+            overrides[param] = (
+                int(value) if param == "wake_level_offset" else float(value)
+            )
+            args += [flag, value]
+        assert generate_case.main(args) == 0
+        text = (case_dir / "system" / "snappyHexMeshDict").read_text(encoding="utf-8")
+        assert text == generate_case.render_snappy_dict(**overrides)
+
+    def test_environment_bridge_reaches_the_render(self, tmp_path, monkeypatch):
+        self._clear_env(monkeypatch)
+        monkeypatch.setenv(generate_case.SNAPPY_WAKE_RADIUS_ENV, "200")
+        monkeypatch.setenv(generate_case.SNAPPY_TOWER_Z_MAX_ENV, "30")
+        case_dir = tmp_path / "case"
+        assert generate_case.main(["--case-dir", str(case_dir)]) == 0
+        parsed = _parse_foam(
+            (case_dir / "system" / "snappyHexMeshDict").read_text(encoding="utf-8")
+        )
+        assert float(parsed["geometry"]["rotorWake"]["radius"]) == pytest.approx(200.0)
+        assert float(parsed["geometry"]["towerWake"]["max"][2]) == pytest.approx(30.0)
+
+    def test_flag_beats_the_environment_bridge(self, tmp_path, monkeypatch):
+        self._clear_env(monkeypatch)
+        monkeypatch.setenv(generate_case.SNAPPY_WAKE_RADIUS_ENV, "200")
+        case_dir = tmp_path / "case"
+        assert (
+            generate_case.main(
+                ["--case-dir", str(case_dir), "--snappy-wake-radius", "180"]
+            )
+            == 0
+        )
+        parsed = _parse_foam(
+            (case_dir / "system" / "snappyHexMeshDict").read_text(encoding="utf-8")
+        )
+        assert float(parsed["geometry"]["rotorWake"]["radius"]) == pytest.approx(180.0)
+
+    def test_resolve_precedence(self, monkeypatch):
+        self._clear_env(monkeypatch)
+        assert generate_case.resolve_snappy_wake_radius() == pytest.approx(170.0)
+        assert generate_case.resolve_snappy_wake_radius(180.0) == pytest.approx(180.0)
+        monkeypatch.setenv(generate_case.SNAPPY_WAKE_RADIUS_ENV, "200")
+        assert generate_case.resolve_snappy_wake_radius() == pytest.approx(200.0)
+        # An explicit flag wins over the environment.
+        assert generate_case.resolve_snappy_wake_radius(180.0) == pytest.approx(180.0)
+
+    @pytest.mark.parametrize(
+        "overrides,offending",
+        [
+            ({"wake_radius": 140.0}, "snappy wake radius 140"),
+            ({"disk_half_thickness": 25.0}, "snappy wake upstream 20"),
+            ({"tower_downstream": 15.0}, "snappy tower downstream 15"),
+            ({"tower_z_min": 20.0}, "snappy tower z max 10"),
+            ({"disk_radius": 0.0}, "snappy disk radius 0 must be positive"),
+            ({"wake_level_offset": -1}, "snappy wake level offset -1"),
+        ],
+    )
+    def test_nesting_validation_rejects_inconsistent_geometry(
+        self, overrides, offending
+    ):
+        with pytest.raises(ValueError) as error:
+            generate_case.render_snappy_dict(**overrides)
+        assert offending in str(error.value)
+
+    def test_invalid_combination_fails_generation_with_a_named_message(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        self._clear_env(monkeypatch)
+        case_dir = tmp_path / "case"
+        assert (
+            generate_case.main(
+                [
+                    "--case-dir",
+                    str(case_dir),
+                    "--snappy-wake-radius",
+                    "140",
+                ]
+            )
+            == 2
+        )
+        assert "snappy wake radius 140" in capsys.readouterr().err

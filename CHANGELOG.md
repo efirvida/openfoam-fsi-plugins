@@ -273,6 +273,39 @@ regenerated (his numbers, normalised whitespace) so `--check` passes again, and
 the stray whitespace-only line in `fvOptions` is dropped. A new snappy mesh
 must be rebuilt for the next runs, since the extents changed.
 
+#### 11. Make every castellated zone extent and level overridable at run time
+
+**Files:**
+- `turbinesFoam/validation/iea15mw/tools/generate_case.py`
+- `turbinesFoam/tests/test_iea15mw_case.py`
+
+**Problem:** entry 10 folded the maintainer's hand-tuned castellated extents
+into `render_snappy_dict()` as named absolute constants, but they were still
+module constants: trying a larger wake radius or a taller tower box meant
+editing the generator. The runner (`scripts/run_iea15mw_case.sh`) cannot be
+edited while live jobs execute it, so a non-default geometry has to be reachable
+without a runner change.
+
+**Fix:** every castellated extent and the level offset are now
+`render_snappy_dict()` parameters resolved with the same pattern as
+`meshFactor`: a new flag, a documented temporary `TURBINE_SNAPPY_*` environment
+bridge, and precedence flag > environment > default. The maintainer's tuned
+values stay the defaults (disk radius `150`, disk half-thickness `10`, wake
+radius `170` spanning `20 -> 470` m, tower box `[-20, 470]` streamwise and
+`[-170, 10]` vertically, lateral factor `2.0`, wakes one level below the disk),
+so the committed case is unchanged and `--check` still passes. New flags:
+`--snappy-disk-radius`, `--snappy-disk-half-thickness`, `--snappy-wake-radius`,
+`--snappy-wake-upstream`, `--snappy-wake-downstream`,
+`--snappy-tower-upstream`, `--snappy-tower-downstream`, `--snappy-tower-z-min`,
+`--snappy-tower-z-max`, `--snappy-tower-lateral-factor` and
+`--snappy-wake-level-offset` (the tower shares the wakes' offset).
+`validate_snappy_geometry()` refuses a geometry that breaks the nesting
+invariant -- wake radius <= disk radius, wake upstream/downstream <= disk
+half-thickness, tower downstream <= upstream, tower z max <= z min, a
+non-positive extent or a negative level offset -- naming the offending values,
+so the default combination passes and a bad override is rejected instead of
+rendered.
+
 ## [Unreleased] — 2026-04-02
 
 ### New Features

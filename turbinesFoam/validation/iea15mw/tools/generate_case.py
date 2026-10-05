@@ -41,6 +41,12 @@ Usage:
                      [--mesh coarse] [--n-elements 147] [--cone-angle 4]
                      [--mesh-factor F] [--end-revs 3]
                      [--velocity-sample-radius R] [--n-velocity-samples N]
+                     [--snappy-disk-radius R] [--snappy-disk-half-thickness T]
+                     [--snappy-wake-radius R] [--snappy-wake-upstream U]
+                     [--snappy-wake-downstream D] [--snappy-tower-upstream U]
+                     [--snappy-tower-downstream D] [--snappy-tower-z-min Z]
+                     [--snappy-tower-z-max Z] [--snappy-tower-lateral-factor F]
+                     [--snappy-wake-level-offset N]
                      [--start-from startTime|latestTime]
                      [--flow-axis x|y] [--case-dir DIR] [--check]
 
@@ -68,7 +74,6 @@ import math
 import os
 import sys
 from pathlib import Path
-from typing import Any
 
 TOOLS_DIR = Path(__file__).resolve().parent
 PACKAGE = TOOLS_DIR.parent
@@ -178,7 +183,7 @@ def domain_spec(
     """Bundle the parametric domain/mesh definition (D units, and top in m)."""
     if mesh not in MESH_D_OVER:
         raise KeyError(f"unsupported mesh {mesh!r}; choose from {MESH_CHOICES}")
-    if not (0.0 < upstream and 0.0 < lateral and downstream > upstream):
+    if not (upstream > 0.0 and lateral > 0.0 and downstream > upstream):
         raise ValueError("domain extents must satisfy downstream > upstream > 0")
     return {
         "mesh": mesh,
@@ -337,7 +342,26 @@ SNAPPY_TOWER_Z_MAX = 10.0
 #: Tower-shadow box lateral half-width = factor x max tower diameter.
 ASM_TOWER_LATERAL_FACTOR = 2.0
 #: The wake and tower regions run one castellation level below the disk.
+#: Overridable with ``--snappy-wake-level-offset``; the tower shares this offset
+#: (the renderer has no separate tower level).
 ASM_WAKE_LEVEL_OFFSET = 1
+#: Temporary environment bridges for the castellated extents and level offset
+#: (see ``MESH_FACTOR_ENV``). The runner
+#: (``scripts/run_iea15mw_case.sh``) must not be edited while live jobs execute
+#: it, so a non-default value is injected through the environment and reaches
+#: the generator subprocess (sbatch inherits the submitting environment). Each
+#: ``resolve_snappy_*`` helper reads its bridge only when the flag is absent.
+SNAPPY_DISK_RADIUS_ENV = "TURBINE_SNAPPY_DISK_RADIUS"
+SNAPPY_DISK_HALF_THICKNESS_ENV = "TURBINE_SNAPPY_DISK_HALF_THICKNESS"
+SNAPPY_WAKE_RADIUS_ENV = "TURBINE_SNAPPY_WAKE_RADIUS"
+SNAPPY_WAKE_UPSTREAM_ENV = "TURBINE_SNAPPY_WAKE_UPSTREAM"
+SNAPPY_WAKE_DOWNSTREAM_ENV = "TURBINE_SNAPPY_WAKE_DOWNSTREAM"
+SNAPPY_TOWER_UPSTREAM_ENV = "TURBINE_SNAPPY_TOWER_UPSTREAM"
+SNAPPY_TOWER_DOWNSTREAM_ENV = "TURBINE_SNAPPY_TOWER_DOWNSTREAM"
+SNAPPY_TOWER_Z_MIN_ENV = "TURBINE_SNAPPY_TOWER_Z_MIN"
+SNAPPY_TOWER_Z_MAX_ENV = "TURBINE_SNAPPY_TOWER_Z_MAX"
+SNAPPY_TOWER_LATERAL_FACTOR_ENV = "TURBINE_SNAPPY_TOWER_LATERAL_FACTOR"
+SNAPPY_WAKE_LEVEL_OFFSET_ENV = "TURBINE_SNAPPY_WAKE_LEVEL_OFFSET"
 #: Default orientation. ``y`` = the Aeroelast/FSI frame the IEA 15 MW case exists
 #: for (fluid +Y, rotor axis about Y, blade axis +Z); ``x`` = OpenFAST.
 DEFAULT_FLOW_AXIS = "y"
@@ -1223,9 +1247,86 @@ def _polars_include_dir(case_dir: Path) -> str:
     return Path(os.path.relpath(POLARS_DIR, Path(case_dir) / "system")).as_posix()
 
 
+def validate_snappy_geometry(
+    disk_radius: float,
+    disk_half_thickness: float,
+    wake_radius: float,
+    wake_upstream: float,
+    wake_downstream: float,
+    tower_upstream: float,
+    tower_downstream: float,
+    tower_z_min: float,
+    tower_z_max: float,
+    tower_lateral_factor: float,
+    wake_level_offset: int,
+) -> None:
+    """Reject a castellated geometry that breaks the nesting invariant.
+
+    The coarser ``rotorWake`` must enclose the finer ``rotorDisk`` both radially
+    and axially; the tower box must stay a box; every extent must be positive
+    and the level offset non-negative. The message names each offending value.
+    """
+    problems: list[str] = []
+    if float(wake_radius) <= float(disk_radius):
+        problems.append(
+            f"snappy wake radius {float(wake_radius):g} must exceed the disk "
+            f"radius {float(disk_radius):g}"
+        )
+    if float(wake_upstream) <= float(disk_half_thickness):
+        problems.append(
+            f"snappy wake upstream {float(wake_upstream):g} must exceed the "
+            f"disk half-thickness {float(disk_half_thickness):g}"
+        )
+    if float(wake_downstream) <= float(disk_half_thickness):
+        problems.append(
+            f"snappy wake downstream {float(wake_downstream):g} must exceed "
+            f"the disk half-thickness {float(disk_half_thickness):g}"
+        )
+    if float(tower_downstream) <= float(tower_upstream):
+        problems.append(
+            f"snappy tower downstream {float(tower_downstream):g} must exceed "
+            f"the tower upstream {float(tower_upstream):g}"
+        )
+    if float(tower_z_max) <= float(tower_z_min):
+        problems.append(
+            f"snappy tower z max {float(tower_z_max):g} must exceed the tower "
+            f"z min {float(tower_z_min):g}"
+        )
+    for name, value in (
+        ("disk radius", disk_radius),
+        ("disk half-thickness", disk_half_thickness),
+        ("wake radius", wake_radius),
+        ("wake upstream", wake_upstream),
+        ("wake downstream", wake_downstream),
+        ("tower upstream", tower_upstream),
+        ("tower downstream", tower_downstream),
+        ("tower lateral factor", tower_lateral_factor),
+    ):
+        if float(value) <= 0.0:
+            problems.append(f"snappy {name} {float(value):g} must be positive")
+    if int(wake_level_offset) < 0:
+        problems.append(
+            f"snappy wake level offset {int(wake_level_offset)} must be "
+            "non-negative"
+        )
+    if problems:
+        raise ValueError("; ".join(problems))
+
+
 def render_snappy_dict(
     flow_axis: str = DEFAULT_FLOW_AXIS,
     level: int = DEFAULT_SNAPPY_LEVEL,
+    disk_radius: float = SNAPPY_DISK_RADIUS,
+    disk_half_thickness: float = SNAPPY_DISK_HALF_THICKNESS,
+    wake_radius: float = SNAPPY_WAKE_RADIUS,
+    wake_upstream: float = SNAPPY_WAKE_UPSTREAM,
+    wake_downstream: float = SNAPPY_WAKE_DOWNSTREAM,
+    tower_upstream: float = SNAPPY_TOWER_UPSTREAM,
+    tower_downstream: float = SNAPPY_TOWER_DOWNSTREAM,
+    tower_z_min: float = SNAPPY_TOWER_Z_MIN,
+    tower_z_max: float = SNAPPY_TOWER_Z_MAX,
+    tower_lateral_factor: float = ASM_TOWER_LATERAL_FACTOR,
+    wake_level_offset: int = ASM_WAKE_LEVEL_OFFSET,
 ) -> str:
     """Castellated-only snappyHexMeshDict refining the rotor disk for the ASM.
 
@@ -1240,10 +1341,12 @@ def render_snappy_dict(
     20 m upwind of the rotor plane exceeds the disk's ``SNAPPY_DISK_HALF_THICKNESS``
     10 m, and its ``SNAPPY_WAKE_DOWNSTREAM`` end is far past the disk), so the
     3 -> 2 -> 1 -> 0 transition is a graded step rather than a cliff. The
-    extents are the maintainer's hand-tuned absolute values, sized so the ~19 m
-    flow-direction blade-tip deflection expected in the coming FSI work stays
-    inside a refined zone. The levels are unchanged, so only the zone extents
-    differ from the earlier margin-derived geometry.
+    The defaults are the maintainer's hand-tuned extents; the wake extents are
+    sized so a blade tip deflecting roughly 19 m in the flow direction stays
+    inside a refined zone for the coming FSI work. Every extent and the level
+    offset are overridable at run time (see ``resolve_snappy_*``); the rendered
+    levels are unchanged, so only the zone extents differ from the earlier
+    margin-derived geometry.
 
     ``towerWake`` covers the tower and its shadow -- the band the blades cross
     at the bottom of the rotation. It and ``rotorWake`` run one level below the
@@ -1257,6 +1360,19 @@ def render_snappy_dict(
     """
     if int(level) < 0:
         raise ValueError("snappy level must be non-negative")
+    validate_snappy_geometry(
+        disk_radius,
+        disk_half_thickness,
+        wake_radius,
+        wake_upstream,
+        wake_downstream,
+        tower_upstream,
+        tower_downstream,
+        tower_z_min,
+        tower_z_max,
+        tower_lateral_factor,
+        wake_level_offset,
+    )
     origin = turbine_origin()
     # ``downstream`` is the fluid direction (the inflow), so the wake and tower
     # extents are absolute distances from the rotor plane along the flow.
@@ -1271,12 +1387,12 @@ def render_snappy_dict(
         )
 
     # rotorDisk: a symmetric absolute half-thickness about the rotor plane.
-    point1 = streamwise(SNAPPY_DISK_HALF_THICKNESS)
-    point2 = streamwise(-SNAPPY_DISK_HALF_THICKNESS)
+    point1 = streamwise(disk_half_thickness)
+    point2 = streamwise(-disk_half_thickness)
     # rotorWake: absolute upstream/downstream faces, so the coarser cylinder
     # nests the disk axially as well as radially (see the module constants).
-    wake_point1 = streamwise(-SNAPPY_WAKE_UPSTREAM)
-    wake_point2 = streamwise(SNAPPY_WAKE_DOWNSTREAM)
+    wake_point1 = streamwise(-wake_upstream)
+    wake_point2 = streamwise(wake_downstream)
     inside = origin
 
     # Tower + tower shadow. The streamwise faces are absolute distances from the
@@ -1287,16 +1403,16 @@ def render_snappy_dict(
     # z = vertical), map it to physical coordinates and normalise, so both flow
     # axes render the same absolute extents.
     tower = blade_geometry.read_tower_table()
-    lateral = ASM_TOWER_LATERAL_FACTOR * max(station["diameter"] for station in tower)
-    role_min = (-SNAPPY_TOWER_UPSTREAM, -lateral, SNAPPY_TOWER_Z_MIN)
-    role_max = (SNAPPY_TOWER_DOWNSTREAM, lateral, SNAPPY_TOWER_Z_MAX)
+    lateral = tower_lateral_factor * max(station["diameter"] for station in tower)
+    role_min = (-tower_upstream, -lateral, tower_z_min)
+    role_max = (tower_downstream, lateral, tower_z_max)
     corners = [
         _role_to_physical(flow_axis, *role_min),
         _role_to_physical(flow_axis, *role_max),
     ]
     box_min = [min(corner[i] for corner in corners) for i in range(3)]
     box_max = [max(corner[i] for corner in corners) for i in range(3)]
-    wake_level = max(0, int(level) - ASM_WAKE_LEVEL_OFFSET)
+    wake_level = max(0, int(level) - int(wake_level_offset))
     return foam_header("snappyHexMeshDict") + f"""castellatedMesh true;
 snap false;
 addLayers false;
@@ -1308,7 +1424,7 @@ geometry
         type searchableCylinder;
         point1 {foam_vector(point1)};
         point2 {foam_vector(point2)};
-        radius {SNAPPY_DISK_RADIUS:.8g};
+        radius {float(disk_radius):.8g};
     }}
 
     rotorWake
@@ -1316,7 +1432,7 @@ geometry
         type searchableCylinder;
         point1 {foam_vector(wake_point1)};
         point2 {foam_vector(wake_point2)};
-        radius {SNAPPY_WAKE_RADIUS:.8g};
+        radius {float(wake_radius):.8g};
     }}
 
     towerWake
@@ -1443,6 +1559,17 @@ def outputs(
     mesh_factor: float = DEFAULT_MESH_FACTOR,
     velocity_sample_radius: float = DEFAULT_VELOCITY_SAMPLE_RADIUS,
     n_velocity_samples: int = DEFAULT_N_VELOCITY_SAMPLES,
+    snappy_disk_radius: float = SNAPPY_DISK_RADIUS,
+    snappy_disk_half_thickness: float = SNAPPY_DISK_HALF_THICKNESS,
+    snappy_wake_radius: float = SNAPPY_WAKE_RADIUS,
+    snappy_wake_upstream: float = SNAPPY_WAKE_UPSTREAM,
+    snappy_wake_downstream: float = SNAPPY_WAKE_DOWNSTREAM,
+    snappy_tower_upstream: float = SNAPPY_TOWER_UPSTREAM,
+    snappy_tower_downstream: float = SNAPPY_TOWER_DOWNSTREAM,
+    snappy_tower_z_min: float = SNAPPY_TOWER_Z_MIN,
+    snappy_tower_z_max: float = SNAPPY_TOWER_Z_MAX,
+    snappy_tower_lateral_factor: float = ASM_TOWER_LATERAL_FACTOR,
+    snappy_wake_level_offset: int = ASM_WAKE_LEVEL_OFFSET,
 ) -> dict[Path, str]:
     domain = _as_domain(domain)
     case_dir = Path(case_dir)
@@ -1497,7 +1624,21 @@ def outputs(
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
         ),
-        system / "snappyHexMeshDict": render_snappy_dict(flow_axis, snappy_level),
+        system / "snappyHexMeshDict": render_snappy_dict(
+            flow_axis,
+            snappy_level,
+            disk_radius=snappy_disk_radius,
+            disk_half_thickness=snappy_disk_half_thickness,
+            wake_radius=snappy_wake_radius,
+            wake_upstream=snappy_wake_upstream,
+            wake_downstream=snappy_wake_downstream,
+            tower_upstream=snappy_tower_upstream,
+            tower_downstream=snappy_tower_downstream,
+            tower_z_min=snappy_tower_z_min,
+            tower_z_max=snappy_tower_z_max,
+            tower_lateral_factor=snappy_tower_lateral_factor,
+            wake_level_offset=snappy_wake_level_offset,
+        ),
         constant / "transportProperties": render_transport_properties(),
         constant / "turbulenceProperties": render_turbulence_properties(),
     }
@@ -1579,6 +1720,95 @@ def resolve_n_velocity_samples(cli_value: int | None = None) -> int:
     if env_value is not None and env_value.strip():
         return int(env_value)
     return DEFAULT_N_VELOCITY_SAMPLES
+
+
+def _resolve_snappy_float(cli_value, env_name: str, default: float) -> float:
+    """Flag > environment bridge > default for one castellated extent."""
+    if cli_value is not None:
+        return float(cli_value)
+    env_value = os.environ.get(env_name)
+    if env_value is not None and env_value.strip():
+        return float(env_value)
+    return float(default)
+
+
+def _resolve_snappy_int(cli_value, env_name: str, default: int) -> int:
+    """Flag > environment bridge > default for the castellated level offset."""
+    if cli_value is not None:
+        return int(cli_value)
+    env_value = os.environ.get(env_name)
+    if env_value is not None and env_value.strip():
+        return int(env_value)
+    return int(default)
+
+
+def resolve_snappy_disk_radius(cli_value: float | None = None) -> float:
+    """Resolve the rotor-disk radius [m] (``--snappy-disk-radius``)."""
+    return _resolve_snappy_float(cli_value, SNAPPY_DISK_RADIUS_ENV, SNAPPY_DISK_RADIUS)
+
+
+def resolve_snappy_disk_half_thickness(cli_value: float | None = None) -> float:
+    """Resolve the rotor-disk axial half-thickness [m]."""
+    return _resolve_snappy_float(
+        cli_value, SNAPPY_DISK_HALF_THICKNESS_ENV, SNAPPY_DISK_HALF_THICKNESS
+    )
+
+
+def resolve_snappy_wake_radius(cli_value: float | None = None) -> float:
+    """Resolve the rotor-wake radius [m] (``--snappy-wake-radius``)."""
+    return _resolve_snappy_float(cli_value, SNAPPY_WAKE_RADIUS_ENV, SNAPPY_WAKE_RADIUS)
+
+
+def resolve_snappy_wake_upstream(cli_value: float | None = None) -> float:
+    """Resolve the rotor-wake upwind face [m] (``--snappy-wake-upstream``)."""
+    return _resolve_snappy_float(
+        cli_value, SNAPPY_WAKE_UPSTREAM_ENV, SNAPPY_WAKE_UPSTREAM
+    )
+
+
+def resolve_snappy_wake_downstream(cli_value: float | None = None) -> float:
+    """Resolve the rotor-wake downwind end [m] (``--snappy-wake-downstream``)."""
+    return _resolve_snappy_float(
+        cli_value, SNAPPY_WAKE_DOWNSTREAM_ENV, SNAPPY_WAKE_DOWNSTREAM
+    )
+
+
+def resolve_snappy_tower_upstream(cli_value: float | None = None) -> float:
+    """Resolve the tower-shadow box upwind face [m]."""
+    return _resolve_snappy_float(
+        cli_value, SNAPPY_TOWER_UPSTREAM_ENV, SNAPPY_TOWER_UPSTREAM
+    )
+
+
+def resolve_snappy_tower_downstream(cli_value: float | None = None) -> float:
+    """Resolve the tower-shadow box downwind end [m]."""
+    return _resolve_snappy_float(
+        cli_value, SNAPPY_TOWER_DOWNSTREAM_ENV, SNAPPY_TOWER_DOWNSTREAM
+    )
+
+
+def resolve_snappy_tower_z_min(cli_value: float | None = None) -> float:
+    """Resolve the tower-shadow box lower vertical face [m]."""
+    return _resolve_snappy_float(cli_value, SNAPPY_TOWER_Z_MIN_ENV, SNAPPY_TOWER_Z_MIN)
+
+
+def resolve_snappy_tower_z_max(cli_value: float | None = None) -> float:
+    """Resolve the tower-shadow box upper vertical face [m]."""
+    return _resolve_snappy_float(cli_value, SNAPPY_TOWER_Z_MAX_ENV, SNAPPY_TOWER_Z_MAX)
+
+
+def resolve_snappy_tower_lateral_factor(cli_value: float | None = None) -> float:
+    """Resolve the tower-shadow box lateral half-width factor."""
+    return _resolve_snappy_float(
+        cli_value, SNAPPY_TOWER_LATERAL_FACTOR_ENV, ASM_TOWER_LATERAL_FACTOR
+    )
+
+
+def resolve_snappy_wake_level_offset(cli_value: int | None = None) -> int:
+    """Resolve the wakes' castellation-level offset below the disk."""
+    return _resolve_snappy_int(
+        cli_value, SNAPPY_WAKE_LEVEL_OFFSET_ENV, ASM_WAKE_LEVEL_OFFSET
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1693,6 +1923,125 @@ def main(argv: list[str] | None = None) -> int:
         help="snappyHexMesh castellated level over the rotor disk (asm-mesh)",
     )
     parser.add_argument(
+        "--snappy-disk-radius",
+        type=float,
+        default=None,
+        help=(
+            "rotor-disk castellated cylinder radius [m] (effective default "
+            f"{SNAPPY_DISK_RADIUS:g}); explicit flag beats "
+            f"{SNAPPY_DISK_RADIUS_ENV}, which beats {SNAPPY_DISK_RADIUS:g}"
+        ),
+    )
+    parser.add_argument(
+        "--snappy-disk-half-thickness",
+        type=float,
+        default=None,
+        help=(
+            "rotor-disk axial half-thickness [m] (effective default "
+            f"{SNAPPY_DISK_HALF_THICKNESS:g}); explicit flag beats "
+            f"{SNAPPY_DISK_HALF_THICKNESS_ENV}, which beats "
+            f"{SNAPPY_DISK_HALF_THICKNESS:g}"
+        ),
+    )
+    parser.add_argument(
+        "--snappy-wake-radius",
+        type=float,
+        default=None,
+        help=(
+            "rotor-wake castellated cylinder radius [m], must enclose the "
+            f"disk (effective default {SNAPPY_WAKE_RADIUS:g}); explicit flag "
+            f"beats {SNAPPY_WAKE_RADIUS_ENV}, which beats "
+            f"{SNAPPY_WAKE_RADIUS:g}"
+        ),
+    )
+    parser.add_argument(
+        "--snappy-wake-upstream",
+        type=float,
+        default=None,
+        help=(
+            "rotor-wake upwind face [m from the rotor plane], must exceed "
+            f"the disk half-thickness (effective default "
+            f"{SNAPPY_WAKE_UPSTREAM:g}); explicit flag beats "
+            f"{SNAPPY_WAKE_UPSTREAM_ENV}, which beats "
+            f"{SNAPPY_WAKE_UPSTREAM:g}"
+        ),
+    )
+    parser.add_argument(
+        "--snappy-wake-downstream",
+        type=float,
+        default=None,
+        help=(
+            "rotor-wake downwind end [m from the rotor plane] (effective "
+            f"default {SNAPPY_WAKE_DOWNSTREAM:g}); explicit flag beats "
+            f"{SNAPPY_WAKE_DOWNSTREAM_ENV}, which beats "
+            f"{SNAPPY_WAKE_DOWNSTREAM:g}"
+        ),
+    )
+    parser.add_argument(
+        "--snappy-tower-upstream",
+        type=float,
+        default=None,
+        help=(
+            "tower-shadow box upwind face [m from the rotor plane] "
+            f"(effective default {SNAPPY_TOWER_UPSTREAM:g}); explicit flag "
+            f"beats {SNAPPY_TOWER_UPSTREAM_ENV}, which beats "
+            f"{SNAPPY_TOWER_UPSTREAM:g}"
+        ),
+    )
+    parser.add_argument(
+        "--snappy-tower-downstream",
+        type=float,
+        default=None,
+        help=(
+            "tower-shadow box downwind end [m from the rotor plane] "
+            f"(effective default {SNAPPY_TOWER_DOWNSTREAM:g}); explicit flag "
+            f"beats {SNAPPY_TOWER_DOWNSTREAM_ENV}, which beats "
+            f"{SNAPPY_TOWER_DOWNSTREAM:g}"
+        ),
+    )
+    parser.add_argument(
+        "--snappy-tower-z-min",
+        type=float,
+        default=None,
+        help=(
+            "tower-shadow box lower vertical face [m] (effective default "
+            f"{SNAPPY_TOWER_Z_MIN:g}); explicit flag beats "
+            f"{SNAPPY_TOWER_Z_MIN_ENV}, which beats {SNAPPY_TOWER_Z_MIN:g}"
+        ),
+    )
+    parser.add_argument(
+        "--snappy-tower-z-max",
+        type=float,
+        default=None,
+        help=(
+            "tower-shadow box upper vertical face [m] (effective default "
+            f"{SNAPPY_TOWER_Z_MAX:g}); explicit flag beats "
+            f"{SNAPPY_TOWER_Z_MAX_ENV}, which beats {SNAPPY_TOWER_Z_MAX:g}"
+        ),
+    )
+    parser.add_argument(
+        "--snappy-tower-lateral-factor",
+        type=float,
+        default=None,
+        help=(
+            "tower-shadow box lateral half-width / max tower diameter "
+            f"(effective default {ASM_TOWER_LATERAL_FACTOR:g}); explicit "
+            f"flag beats {SNAPPY_TOWER_LATERAL_FACTOR_ENV}, which beats "
+            f"{ASM_TOWER_LATERAL_FACTOR:g}"
+        ),
+    )
+    parser.add_argument(
+        "--snappy-wake-level-offset",
+        type=int,
+        default=None,
+        help=(
+            "castellation levels the wakes run below the disk (effective "
+            f"default {ASM_WAKE_LEVEL_OFFSET}); the tower shares this offset; "
+            f"explicit flag beats {SNAPPY_WAKE_LEVEL_OFFSET_ENV}, which beats "
+            f"{ASM_WAKE_LEVEL_OFFSET}"
+        ),
+    )
+    parser.add_argument(
         "--mesh-factor",
         type=float,
         default=None,
@@ -1741,6 +2090,39 @@ def main(argv: list[str] | None = None) -> int:
             args.velocity_sample_radius
         )
         n_velocity_samples = resolve_n_velocity_samples(args.n_velocity_samples)
+        snappy_geometry = {
+            "snappy_disk_radius": resolve_snappy_disk_radius(
+                args.snappy_disk_radius
+            ),
+            "snappy_disk_half_thickness": resolve_snappy_disk_half_thickness(
+                args.snappy_disk_half_thickness
+            ),
+            "snappy_wake_radius": resolve_snappy_wake_radius(args.snappy_wake_radius),
+            "snappy_wake_upstream": resolve_snappy_wake_upstream(
+                args.snappy_wake_upstream
+            ),
+            "snappy_wake_downstream": resolve_snappy_wake_downstream(
+                args.snappy_wake_downstream
+            ),
+            "snappy_tower_upstream": resolve_snappy_tower_upstream(
+                args.snappy_tower_upstream
+            ),
+            "snappy_tower_downstream": resolve_snappy_tower_downstream(
+                args.snappy_tower_downstream
+            ),
+            "snappy_tower_z_min": resolve_snappy_tower_z_min(
+                args.snappy_tower_z_min
+            ),
+            "snappy_tower_z_max": resolve_snappy_tower_z_max(
+                args.snappy_tower_z_max
+            ),
+            "snappy_tower_lateral_factor": resolve_snappy_tower_lateral_factor(
+                args.snappy_tower_lateral_factor
+            ),
+            "snappy_wake_level_offset": resolve_snappy_wake_level_offset(
+                args.snappy_wake_level_offset
+            ),
+        }
         domain = domain_spec(
             args.mesh,
             args.domain_upstream,
@@ -1773,6 +2155,7 @@ def main(argv: list[str] | None = None) -> int:
             mesh_factor,
             velocity_sample_radius,
             n_velocity_samples,
+            **snappy_geometry,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)
