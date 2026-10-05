@@ -1207,3 +1207,132 @@ class TestMeshFactor:
         assert generate_case.resolve_mesh_factor() == pytest.approx(0.25)
         # An explicit flag wins over the environment.
         assert generate_case.resolve_mesh_factor(0.5) == pytest.approx(0.5)
+
+
+class TestVelocitySampling:
+    """The ALM inflow-sampling knob (``velocitySampleRadius``/``nVelocitySamples``).
+
+    ``axialFlowTurbineALSource`` already reads both keys and forwards them to
+    every blade, but the committed case rendered neither, so every run to date
+    used the point-sampling branch (``radius <= 0``). The radius is in units of
+    the projection epsilon; Zormpa et al. 2024 (Wind Energy) require the sample
+    outside the force Gaussian (``rs/rg = 1.1`` with ``rg = 3*epsilon``), i.e.
+    ``rs = 3.3*epsilon``. Each key is rendered only when it differs from its
+    default, so the committed default render stays byte-identical.
+    """
+
+    def _clear_env(self, monkeypatch):
+        monkeypatch.delenv(generate_case.VELOCITY_SAMPLE_RADIUS_ENV, raising=False)
+        monkeypatch.delenv(generate_case.N_VELOCITY_SAMPLES_ENV, raising=False)
+
+    def test_default_constant_and_committed_case_unchanged(self, monkeypatch):
+        self._clear_env(monkeypatch)
+        assert generate_case.DEFAULT_VELOCITY_SAMPLE_RADIUS == pytest.approx(0.0)
+        assert generate_case.DEFAULT_N_VELOCITY_SAMPLES == 20
+        assert generate_case.VELOCITY_SAMPLE_RADIUS_ENV == "TURBINE_VELOCITY_SAMPLE_RADIUS"
+        assert generate_case.N_VELOCITY_SAMPLES_ENV == "TURBINE_N_VELOCITY_SAMPLES"
+        assert generate_case.resolve_velocity_sample_radius() == pytest.approx(0.0)
+        assert generate_case.resolve_n_velocity_samples() == 20
+        # Default = point sampling: neither key is rendered, so the committed
+        # case is unchanged (the C++ default branch).
+        default = generate_case.render_fv_options()
+        assert "velocitySampleRadius" not in default
+        assert "nVelocitySamples" not in default
+        committed = (CASE_DIR / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "velocitySampleRadius" not in committed
+        assert "nVelocitySamples" not in committed
+
+    def test_each_flag_changes_only_its_own_rendered_value(self, monkeypatch):
+        self._clear_env(monkeypatch)
+        default = generate_case.render_fv_options()
+
+        def added(text):
+            return [line for line in text.splitlines() if line not in default.splitlines()]
+
+        radius = generate_case.render_fv_options(velocity_sample_radius=3.3)
+        assert added(radius) == ["        velocitySampleRadius 3.3;"]
+        samples = generate_case.render_fv_options(n_velocity_samples=16)
+        assert added(samples) == ["        nVelocitySamples 16;"]
+        both = generate_case.render_fv_options(
+            velocity_sample_radius=3.3, n_velocity_samples=16
+        )
+        assert added(both) == [
+            "        velocitySampleRadius 3.3;",
+            "        nVelocitySamples 16;",
+        ]
+
+    def test_cli_flags_render_both_keys_and_reach_every_twin(
+        self, tmp_path, monkeypatch
+    ):
+        self._clear_env(monkeypatch)
+        case_dir = tmp_path / "case"
+        assert (
+            generate_case.main(
+                [
+                    "--case-dir",
+                    str(case_dir),
+                    "--velocity-sample-radius",
+                    "3.3",
+                    "--n-velocity-samples",
+                    "16",
+                ]
+            )
+            == 0
+        )
+        for name in (
+            "fvOptions",
+            "fvOptions.ALM",
+            "fvOptions.ASM",
+            "fvOptions.ASM-MESH",
+        ):
+            text = (case_dir / "system" / name).read_text(encoding="utf-8")
+            assert "velocitySampleRadius 3.3;" in text, name
+            assert "nVelocitySamples 16;" in text, name
+
+    def test_env_bridge_changes_the_default_render(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(generate_case.VELOCITY_SAMPLE_RADIUS_ENV, "3.3")
+        monkeypatch.setenv(generate_case.N_VELOCITY_SAMPLES_ENV, "16")
+        case_dir = tmp_path / "case"
+        assert generate_case.main(["--case-dir", str(case_dir)]) == 0
+        text = (case_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "velocitySampleRadius 3.3;" in text
+        assert "nVelocitySamples 16;" in text
+
+    def test_cli_flag_beats_the_env_bridge(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(generate_case.VELOCITY_SAMPLE_RADIUS_ENV, "0.5")
+        monkeypatch.setenv(generate_case.N_VELOCITY_SAMPLES_ENV, "4")
+        case_dir = tmp_path / "case"
+        assert (
+            generate_case.main(
+                [
+                    "--case-dir",
+                    str(case_dir),
+                    "--velocity-sample-radius",
+                    "3.3",
+                    "--n-velocity-samples",
+                    "16",
+                ]
+            )
+            == 0
+        )
+        text = (case_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "velocitySampleRadius 3.3;" in text
+        assert "nVelocitySamples 16;" in text
+        assert "velocitySampleRadius 0.5;" not in text
+        assert "nVelocitySamples 4;" not in text
+
+    def test_resolve_precedence(self, monkeypatch):
+        self._clear_env(monkeypatch)
+        assert generate_case.resolve_velocity_sample_radius() == pytest.approx(
+            generate_case.DEFAULT_VELOCITY_SAMPLE_RADIUS
+        )
+        assert generate_case.resolve_n_velocity_samples() == 20
+        assert generate_case.resolve_velocity_sample_radius(3.3) == pytest.approx(3.3)
+        assert generate_case.resolve_n_velocity_samples(16) == 16
+        monkeypatch.setenv(generate_case.VELOCITY_SAMPLE_RADIUS_ENV, "2.2")
+        monkeypatch.setenv(generate_case.N_VELOCITY_SAMPLES_ENV, "8")
+        assert generate_case.resolve_velocity_sample_radius() == pytest.approx(2.2)
+        assert generate_case.resolve_n_velocity_samples() == 8
+        # An explicit flag wins over the environment.
+        assert generate_case.resolve_velocity_sample_radius(3.3) == pytest.approx(3.3)
+        assert generate_case.resolve_n_velocity_samples(16) == 16

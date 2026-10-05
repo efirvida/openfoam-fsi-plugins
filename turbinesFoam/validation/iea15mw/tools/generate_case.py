@@ -40,6 +40,7 @@ Usage:
     generate_case.py [--speed 10.659] [--rpm 7.518] [--pitch 0]
                      [--mesh coarse] [--n-elements 147] [--cone-angle 4]
                      [--mesh-factor F] [--end-revs 3]
+                     [--velocity-sample-radius R] [--n-velocity-samples N]
                      [--start-from startTime|latestTime]
                      [--flow-axis x|y] [--case-dir DIR] [--check]
 
@@ -47,6 +48,16 @@ Force-kernel width: the rendered ``GaussianCoeffs/meshFactor`` (default 1.0)
 scales the ALM/ASM projection epsilon. Published guidance is
 ``epsilon_opt = 0.25*c``; ``meshFactor 1`` gives 1.89 m inside the disk against
 1.05 m at mid-span, and too wide a kernel weakens the near-wake induction.
+
+Inflow sampling: ``axialFlowTurbineALSource`` already reads
+``velocitySampleRadius`` (in units of the projection epsilon) and
+``nVelocitySamples`` from its coeffs and forwards them to every blade, but the
+committed case rendered neither, so every run to date used the point-sampling
+branch. The keys are rendered only when they differ from their defaults, so the
+default render stays byte-identical. Zormpa et al. 2024 (Wind Energy) ask for
+the sample outside the force Gaussian (``rs/rg = 1.1`` with
+``rg = 3*epsilon``, i.e. ``rs = 3.3*epsilon``) -- the value this knob exists to
+test.
 """
 
 from __future__ import annotations
@@ -108,6 +119,24 @@ DEFAULT_MESH_FACTOR = 1.0
 #: ``TURBINE_*`` -> flag loop (the ``for pair in "TURBINE_UPSTREAM:--domain-
 #: upstream" ...`` block) as ``"TURBINE_MESH_FACTOR:--mesh-factor"``.
 MESH_FACTOR_ENV = "TURBINE_MESH_FACTOR"
+
+# --- Inflow sampling (ALM velocity sample ring) ------------------------------
+#: ``velocitySampleRadius`` in the turbine coeffs, in units of the ALM/ASM
+#: projection epsilon (``actuatorLineElement.C:722`` scales the ring radius by
+#: ``calcProjectionEpsilon()``). 0 -- the committed default -- takes the
+#: point-sampling branch (``:703``), so the default render is byte-identical.
+#: Zormpa et al. 2024 (Wind Energy) require the sample outside the force
+#: Gaussian: ``rs/rg = 1.1`` with ``rg = 3*epsilon``, i.e. ``rs = 3.3*epsilon``.
+#: ``axialFlowTurbineALSource.C:358`` injects the value into every blade.
+DEFAULT_VELOCITY_SAMPLE_RADIUS = 0.0
+#: Environment bridge (see ``MESH_FACTOR_ENV``): the runner cannot be edited
+#: while live jobs execute it, so a non-default radius reaches the generator
+#: subprocess through the inherited environment.
+VELOCITY_SAMPLE_RADIUS_ENV = "TURBINE_VELOCITY_SAMPLE_RADIUS"
+#: ``nVelocitySamples``: points averaged around the sample ring when the radius
+#: is above 0. 20 is the source default (``axialFlowTurbineALSource.C:363``).
+DEFAULT_N_VELOCITY_SAMPLES = 20
+N_VELOCITY_SAMPLES_ENV = "TURBINE_N_VELOCITY_SAMPLES"
 
 # --- Domain and mesh (ground-anchored, parametric) ---------------------------
 #: Horizontal mesh resolutions: cells across the rotor diameter.
@@ -202,13 +231,13 @@ def lateral_breaks(domain: dict[str, float | str]) -> list[float]:
 
 def flow_cells(domain: dict[str, float | str]) -> list[int]:
     refinement = MESH_D_OVER[str(domain["mesh"])] / MESH_D_OVER["coarse"]
-    base = [ROTOR_DIAMETER * v for v in BASE_FLOW_BREAKS]
+    base = tuple(ROTOR_DIAMETER * v for v in BASE_FLOW_BREAKS)
     return _scale_cells(BASE_FLOW_CELLS, base, flow_breaks(domain), refinement)
 
 
 def lateral_cells(domain: dict[str, float | str]) -> list[int]:
     refinement = MESH_D_OVER[str(domain["mesh"])] / MESH_D_OVER["coarse"]
-    base = [ROTOR_DIAMETER * v for v in BASE_LAT_BREAKS]
+    base = tuple(ROTOR_DIAMETER * v for v in BASE_LAT_BREAKS)
     return _scale_cells(BASE_LAT_CELLS, base, lateral_breaks(domain), refinement)
 
 
@@ -315,7 +344,7 @@ def inflow_direction(flow_axis: str = DEFAULT_FLOW_AXIS) -> tuple[float, float, 
 def rotor_axis(flow_axis: str = DEFAULT_FLOW_AXIS) -> tuple[float, float, float]:
     """Rotor axis (upwind, opposite the inflow)."""
     direction = inflow_direction(flow_axis)
-    return tuple(-value for value in direction)
+    return (-direction[0], -direction[1], -direction[2])
 
 
 def _role_to_physical(
@@ -435,14 +464,14 @@ def cell_count(domain: object = None) -> int:
     """Total hexahedral cell count of the domain/mesh."""
     domain = _as_domain(domain)
     total = sum(flow_cells(domain)) * sum(lateral_cells(domain))
-    _, z_cells, _ = vertical_mesh(domain["top"], str(domain["mesh"]))
+    _, z_cells, _ = vertical_mesh(float(domain["top"]), str(domain["mesh"]))
     return total * sum(z_cells)
 
 
 def hub_cell_size(domain: object = None) -> float:
     """Finest hub-adjacent vertical cell [m]; the time-step constraint length."""
     domain = _as_domain(domain)
-    breaks, z_cells, z_grading = vertical_mesh(domain["top"], str(domain["mesh"]))
+    breaks, z_cells, z_grading = vertical_mesh(float(domain["top"]), str(domain["mesh"]))
     hub_adjacent = []
     for index, cells in enumerate(z_cells):
         sizes = _cell_sizes(
@@ -595,7 +624,7 @@ def render_block_mesh(
     hub-anchored: z = 0 at the rotor, the floor at -``HUB_HEIGHT``.
     """
     domain = _as_domain(domain)
-    z_breaks, z_cells, z_grading = vertical_mesh(domain["top"], str(domain["mesh"]))
+    z_breaks, z_cells, z_grading = vertical_mesh(float(domain["top"]), str(domain["mesh"]))
     breaks = {"x": flow_breaks(domain), "y": lateral_breaks(domain), "z": z_breaks}
     cells = {"x": flow_cells(domain), "y": lateral_cells(domain), "z": z_cells}
     grading = {
@@ -968,6 +997,26 @@ boundaryField
 """
 
 
+def _sampling_keys(
+    velocity_sample_radius: float,
+    n_velocity_samples: int,
+) -> str:
+    """Render the ALM velocity-sampling keys, omitting any at its default.
+
+    Emitting nothing at the defaults keeps the committed case byte-identical
+    (both keys absent = the C++ point-sampling branch); each key appears only
+    when its own value is overridden, so neither is silently pinned.
+    """
+    lines = []
+    if float(velocity_sample_radius) != DEFAULT_VELOCITY_SAMPLE_RADIUS:
+        lines.append(
+            f"        velocitySampleRadius {float(velocity_sample_radius):g};"
+        )
+    if int(n_velocity_samples) != DEFAULT_N_VELOCITY_SAMPLES:
+        lines.append(f"        nVelocitySamples {int(n_velocity_samples)};")
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
 def render_fv_options(
     speed: float = RATED_SPEED,
     rpm: float = RATED_RPM,
@@ -983,6 +1032,8 @@ def render_fv_options(
     n_chordwise: int | None = None,
     surface_geometry: str = "",
     mesh_factor: float = DEFAULT_MESH_FACTOR,
+    velocity_sample_radius: float = DEFAULT_VELOCITY_SAMPLE_RADIUS,
+    n_velocity_samples: int = DEFAULT_N_VELOCITY_SAMPLES,
 ) -> str:
     """The neutral-baseline ``axialFlowTurbineALSource``.
 
@@ -998,6 +1049,7 @@ def render_fv_options(
     # rotationDirection = -1 flips the turbinesFoam (ccw) convention to cw, the
     # CCBlade/Aeroelast default.
     rotation_dir = -1.0 if rotation == "cw" else 1.0
+    sampling_keys = _sampling_keys(velocity_sample_radius, n_velocity_samples)
     surface_keys = ""
     if element_type == ASM_ELEMENT:
         strips = DEFAULT_N_CHORDWISE if n_chordwise is None else int(n_chordwise)
@@ -1084,7 +1136,7 @@ def render_fv_options(
         rotationDirection {rotation_dir:.8g};
         azimuthalOffset 0;
         coneAngle {float(cone_angle):.8g};
-
+{sampling_keys}
         dynamicStall
         {{
             active off;
@@ -1387,6 +1439,8 @@ def outputs(
     snappy_level: int = DEFAULT_SNAPPY_LEVEL,
     snappy: str | None = None,
     mesh_factor: float = DEFAULT_MESH_FACTOR,
+    velocity_sample_radius: float = DEFAULT_VELOCITY_SAMPLE_RADIUS,
+    n_velocity_samples: int = DEFAULT_N_VELOCITY_SAMPLES,
 ) -> dict[Path, str]:
     domain = _as_domain(domain)
     case_dir = Path(case_dir)
@@ -1413,17 +1467,23 @@ def outputs(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
             flow_axis, tower, hub, rotation, ALM_ELEMENT,
             mesh_factor=mesh_factor,
+            velocity_sample_radius=velocity_sample_radius,
+            n_velocity_samples=n_velocity_samples,
         ),
         system / "fvOptions.ASM": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
             flow_axis, tower, hub, rotation, ASM_ELEMENT, n_chordwise,
             mesh_factor=mesh_factor,
+            velocity_sample_radius=velocity_sample_radius,
+            n_velocity_samples=n_velocity_samples,
         ),
         system / "fvOptions.ASM-MESH": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
             flow_axis, tower, hub, rotation, ASM_ELEMENT, n_chordwise,
             SURFACE_GEOMETRY,
             mesh_factor=mesh_factor,
+            velocity_sample_radius=velocity_sample_radius,
+            n_velocity_samples=n_velocity_samples,
         ),
         system / "fvOptions": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
@@ -1432,6 +1492,8 @@ def outputs(
             n_chordwise,
             SURFACE_GEOMETRY if model == "asm-mesh" else "",
             mesh_factor=mesh_factor,
+            velocity_sample_radius=velocity_sample_radius,
+            n_velocity_samples=n_velocity_samples,
         ),
         system / "snappyHexMeshDict": render_snappy_dict(flow_axis, snappy_level),
         constant / "transportProperties": render_transport_properties(),
@@ -1485,6 +1547,36 @@ def resolve_mesh_factor(cli_value: float | None = None) -> float:
     if env_value is not None and env_value.strip():
         return float(env_value)
     return DEFAULT_MESH_FACTOR
+
+
+def resolve_velocity_sample_radius(cli_value: float | None = None) -> float:
+    """Resolve the rendered ``velocitySampleRadius``.
+
+    Precedence: an explicit ``--velocity-sample-radius`` wins, else the
+    ``TURBINE_VELOCITY_SAMPLE_RADIUS`` environment bridge, else
+    ``DEFAULT_VELOCITY_SAMPLE_RADIUS`` (0.0 = point sampling).
+    """
+    if cli_value is not None:
+        return float(cli_value)
+    env_value = os.environ.get(VELOCITY_SAMPLE_RADIUS_ENV)
+    if env_value is not None and env_value.strip():
+        return float(env_value)
+    return DEFAULT_VELOCITY_SAMPLE_RADIUS
+
+
+def resolve_n_velocity_samples(cli_value: int | None = None) -> int:
+    """Resolve the rendered ``nVelocitySamples``.
+
+    Precedence: an explicit ``--n-velocity-samples`` wins, else the
+    ``TURBINE_N_VELOCITY_SAMPLES`` environment bridge, else
+    ``DEFAULT_N_VELOCITY_SAMPLES`` (20, the source default).
+    """
+    if cli_value is not None:
+        return int(cli_value)
+    env_value = os.environ.get(N_VELOCITY_SAMPLES_ENV)
+    if env_value is not None and env_value.strip():
+        return int(env_value)
+    return DEFAULT_N_VELOCITY_SAMPLES
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1609,6 +1701,30 @@ def main(argv: list[str] | None = None) -> int:
             f"{MESH_FACTOR_ENV}, which beats {DEFAULT_MESH_FACTOR:g}"
         ),
     )
+    parser.add_argument(
+        "--velocity-sample-radius",
+        type=float,
+        default=None,
+        help=(
+            "ALM velocity-sample ring radius in units of the projection "
+            "epsilon (effective default "
+            f"{DEFAULT_VELOCITY_SAMPLE_RADIUS:g} = point sampling); the "
+            "published robust-inflow optimum is 3.3 (rs/rg = 1.1 with "
+            "rg = 3*epsilon). Explicit flag beats "
+            f"{VELOCITY_SAMPLE_RADIUS_ENV}, which beats "
+            f"{DEFAULT_VELOCITY_SAMPLE_RADIUS:g}"
+        ),
+    )
+    parser.add_argument(
+        "--n-velocity-samples",
+        type=int,
+        default=None,
+        help=(
+            "points averaged around the ALM sample ring when the radius is "
+            f"positive (effective default {DEFAULT_N_VELOCITY_SAMPLES}); "
+            f"explicit flag beats {N_VELOCITY_SAMPLES_ENV}"
+        ),
+    )
     parser.add_argument("--case-dir", type=Path, default=DEFAULT_CASE_DIR)
     parser.add_argument(
         "--check",
@@ -1619,6 +1735,10 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         mesh_factor = resolve_mesh_factor(args.mesh_factor)
+        velocity_sample_radius = resolve_velocity_sample_radius(
+            args.velocity_sample_radius
+        )
+        n_velocity_samples = resolve_n_velocity_samples(args.n_velocity_samples)
         domain = domain_spec(
             args.mesh,
             args.domain_upstream,
@@ -1649,6 +1769,8 @@ def main(argv: list[str] | None = None) -> int:
             args.snappy_level,
             args.snappy,
             mesh_factor,
+            velocity_sample_radius,
+            n_velocity_samples,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)

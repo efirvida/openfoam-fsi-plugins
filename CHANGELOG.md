@@ -206,6 +206,35 @@ covers the running jobs until the campaign frees the runner to forward it with
 the existing `TURBINE_*` -> flag loop. Precedence is explicit flag, else
 environment, else 1.0.
 
+#### 9. Render the selectable ALM velocity-sampling keys (ring average)
+
+**Files:**
+- `turbinesFoam/validation/iea15mw/tools/generate_case.py`
+- `turbinesFoam/tests/test_iea15mw_case.py`
+
+**Problem:** the last live anomaly of the IEA 15 MW campaign is the local angle
+of attack: the ALM runs +0.81 deg above CCBlade (span mean over r/R 0.3-0.9 at
+20 converged revolutions) while the ASM on the same mesh runs +0.23 deg.
+Zormpa et al. 2024 (Wind Energy) attribute exactly this to sampling the
+velocity *inside* the deposited force Gaussian. `actuatorLineElement` already
+implements the fix -- a `velocitySampleRadius` (in units of the projection
+epsilon) and `nVelocitySamples` ring average, with `radius <= 0` selecting
+point sampling -- and `axialFlowTurbineALSource` already injects both keys into
+every blade sub-dict. The committed case rendered neither, so every run to date
+silently used the point-sampling branch and the knob could not be tested.
+
+**Fix:** render `velocitySampleRadius` and `nVelocitySamples` in the
+`axialFlowTurbineALSourceCoeffs` block, next to `tipSpeedRatio` and
+`freeStreamVelocity`. Each key appears only when it differs from its default
+(0.0 and 20, matching the source's `lookupOrDefault`), so the committed default
+render is byte-identical and `--check` still passes. `--velocity-sample-radius`
+and `--n-velocity-samples` set the values, with the documented temporary
+`TURBINE_VELOCITY_SAMPLE_RADIUS` / `TURBINE_N_VELOCITY_SAMPLES` environment
+bridge covering the live jobs until the runner can forward them (precedence:
+flag > environment > default). The radius is in units of epsilon, so the
+published robust-inflow optimum `rs = 3.3*epsilon` (`rs/rg = 1.1` with
+`rg = 3*epsilon`) is the value to run next.
+
 ## [Unreleased] — 2026-04-02
 
 ### New Features
