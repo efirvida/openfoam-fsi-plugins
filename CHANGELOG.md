@@ -235,6 +235,44 @@ flag > environment > default). The radius is in units of epsilon, so the
 published robust-inflow optimum `rs = 3.3*epsilon` (`rs/rg = 1.1` with
 `rg = 3*epsilon`) is the value to run next.
 
+#### 10. Fold the maintainer's hand-tuned castellated extents into the generator
+
+**Files:**
+- `turbinesFoam/validation/iea15mw/tools/generate_case.py`
+- `turbinesFoam/validation/iea15mw/case/system/snappyHexMeshDict`
+- `turbinesFoam/validation/iea15mw/case/system/fvOptions`
+- `turbinesFoam/tests/test_iea15mw_case.py`
+
+**Problem:** the castellated `snappyHexMeshDict` geometry was derived from a
+single `ASM_REFINEMENT_MARGIN`: the disk radius, the disk half-thickness, the
+wake radius and the wake upstream face were all multiples of `ROTOR_RADIUS` or
+`ASM_DISK_HALF_THICKNESS`. The maintainer hand-tuned the mesh to wider, rounded
+absolute extents -- disk radius `150 m` and half-thickness `10 m`, wake radius
+`170 m` spanning `20 m` upwind to `470 m` downwind of the rotor plane, and a
+tower-shadow box anchored to the rotor plane over `[-20, 470]` streamwise and
+`[-170, 10]` vertically -- but the margin scheme cannot reproduce those numbers
+(two different multiples, and a tower box tied to the rotor plane rather than
+the tower centre), so the committed case could not be regenerated and `--check`
+failed. His rationale is decisive for the coming FSI work: the ~19 m
+flow-direction blade-tip deflection would have exited the old refinement (disk
+half-thickness `7.2 m`, wake upstream `8.64 m`), so the deflected tip must stay
+inside a refined zone.
+
+**Fix:** replace the margin-derived geometry in `render_snappy_dict()` with
+named absolute constants (`SNAPPY_DISK_RADIUS`, `SNAPPY_DISK_HALF_THICKNESS`,
+`SNAPPY_WAKE_RADIUS`, `SNAPPY_WAKE_UPSTREAM`, `SNAPPY_WAKE_DOWNSTREAM` and the
+`SNAPPY_TOWER_*` faces), delete the now-unused `ASM_REFINEMENT_MARGIN`,
+`ASM_DISK_HALF_THICKNESS` and tower margin constants, and set `locationInMesh`
+at `turbine_origin()`. Every other rendered line is byte-identical. The
+castellated levels stay 3/2/2, so the cell size in each zone is unchanged and
+the previous runs remain physically comparable in resolution terms even though
+the zone extents grew. The nesting invariant is kept and asserted (wake radius
+`170 > 150`; wake upstream `20 > 10` disk axial half; wake downstream
+`470 > 10`), and a new test pins the absolute extents. The committed case is
+regenerated (his numbers, normalised whitespace) so `--check` passes again, and
+the stray whitespace-only line in `fvOptions` is dropped. A new snappy mesh
+must be rebuilt for the next runs, since the extents changed.
+
 ## [Unreleased] — 2026-04-02
 
 ### New Features

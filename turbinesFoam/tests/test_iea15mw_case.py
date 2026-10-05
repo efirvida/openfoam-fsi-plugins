@@ -911,16 +911,14 @@ class TestCaseSkeleton:
         assert "levels ((1e15 2))" in text
 
     def test_snappy_refines_the_rotor_wake_downstream(self, tmp_path):
-        # Downstream of the rotor disk nothing above the tower band (z ~ +4.4 m)
-        # was refined, so the rotor wake -- which reaches z = +R -- ran at the
-        # background cell size. The rotorWake cylinder covers it one level below
-        # the disk, along DOWNSTREAM = -rotor_axis (never a hardcoded +1), and it
-        # nests one ASM_REFINEMENT_MARGIN step beyond the disk both radially and
-        # axially, so the level-2/level-3 jump is not a cliff on the tip vortex.
+        # Downstream of the rotor disk nothing above the tower band was refined,
+        # so the rotor wake -- which reaches z = +R -- ran at the background cell
+        # size. The rotorWake cylinder covers it one level below the disk, along
+        # DOWNSTREAM = inflow_direction (never a hardcoded +1), and it nests the
+        # disk both radially and axially, so the level-2/level-3 jump is not a
+        # cliff on the tip vortex.
         origin = generate_case.turbine_origin()
-        margin = generate_case.ASM_REFINEMENT_MARGIN
-        disk_half = generate_case.ASM_DISK_HALF_THICKNESS * margin
-        for flow_axis, downstream in (("y", (0.0, 1.0, 0.0)), ("x", (1.0, 0.0, 0.0))):
+        for flow_axis in ("y", "x"):
             case_dir = tmp_path / flow_axis
             assert (
                 generate_case.main(
@@ -942,15 +940,23 @@ class TestCaseSkeleton:
                     encoding="utf-8"
                 )
             )
-            axis = generate_case.rotor_axis(flow_axis)
+            downstream = generate_case.inflow_direction(flow_axis)
+
             disk = parsed["geometry"]["rotorDisk"]
             assert disk["type"] == "searchableCylinder"
-            # The disk carries the margin factor radially AND axially.
             assert float(disk["radius"]) == pytest.approx(
-                generate_case.ROTOR_RADIUS * margin, abs=1e-4
+                generate_case.SNAPPY_DISK_RADIUS, abs=1e-6
             )
-            disk_up = [origin[i] + disk_half * axis[i] for i in range(3)]
-            disk_down = [origin[i] - disk_half * axis[i] for i in range(3)]
+            disk_up = [
+                origin[i]
+                - generate_case.SNAPPY_DISK_HALF_THICKNESS * downstream[i]
+                for i in range(3)
+            ]
+            disk_down = [
+                origin[i]
+                + generate_case.SNAPPY_DISK_HALF_THICKNESS * downstream[i]
+                for i in range(3)
+            ]
             disk_faces = (
                 [float(v) for v in disk["point1"]],
                 [float(v) for v in disk["point2"]],
@@ -959,52 +965,106 @@ class TestCaseSkeleton:
             assert any(
                 face == pytest.approx(disk_down, abs=1e-6) for face in disk_faces
             )
-            disk_half_length = 0.5 * math.dist(disk_faces[0], disk_faces[1])
-            assert disk_half_length == pytest.approx(
-                generate_case.ASM_DISK_HALF_THICKNESS * margin, abs=1e-6
+            assert 0.5 * math.dist(disk_faces[0], disk_faces[1]) == pytest.approx(
+                generate_case.SNAPPY_DISK_HALF_THICKNESS, abs=1e-6
             )
 
             wake = parsed["geometry"]["rotorWake"]
             assert wake["type"] == "searchableCylinder"
             assert float(wake["radius"]) == pytest.approx(
-                generate_case.ROTOR_RADIUS * margin**2, abs=1e-4
+                generate_case.SNAPPY_WAKE_RADIUS, abs=1e-6
             )
             wake_up = [
                 origin[i]
-                + generate_case.ASM_DISK_HALF_THICKNESS * margin**2 * axis[i]
+                - generate_case.SNAPPY_WAKE_UPSTREAM * downstream[i]
+                for i in range(3)
+            ]
+            wake_down = [
+                origin[i]
+                + generate_case.SNAPPY_WAKE_DOWNSTREAM * downstream[i]
                 for i in range(3)
             ]
             assert [float(v) for v in wake["point1"]] == pytest.approx(
                 wake_up, abs=1e-6
             )
-            expected = [
-                origin[i]
-                + generate_case.ASM_ROTOR_WAKE_DOWNSTREAM_D
-                * generate_case.ROTOR_DIAMETER
-                * downstream[i]
-                for i in range(3)
-            ]
             assert [float(v) for v in wake["point2"]] == pytest.approx(
-                expected, abs=1e-6
+                wake_down, abs=1e-6
             )
-            # The coarser wake strictly encloses the finer disk: radially, and
-            # axially with its upstream face upstream of the disk's (the rotor
-            # axis points upwind) and its downstream end well past the disk's.
+
+            # The nesting invariant: the coarser wake strictly encloses the finer
+            # disk radially (wake radius > disk radius) and axially, with its
+            # upstream face upwind of the disk's and its downstream end past it.
             assert float(wake["radius"]) > float(disk["radius"])
-            wake_point2 = [float(v) for v in wake["point2"]]
-            assert sum((wake_up[i] - disk_up[i]) * axis[i] for i in range(3)) > 0.0
-            assert (
-                sum((wake_point2[i] - disk_down[i]) * (-axis[i]) for i in range(3))
-                > 0.0
+            assert generate_case.SNAPPY_WAKE_UPSTREAM > (
+                generate_case.SNAPPY_DISK_HALF_THICKNESS
             )
+            assert generate_case.SNAPPY_WAKE_DOWNSTREAM > (
+                generate_case.SNAPPY_DISK_HALF_THICKNESS
+            )
+            assert sum(
+                (wake_up[i] - disk_up[i]) * downstream[i] for i in range(3)
+            ) < 0.0
+            assert sum(
+                (wake_down[i] - disk_down[i]) * downstream[i] for i in range(3)
+            ) > 0.0
             # The downstream point moves with the fluid: +y for the default y
             # axis, +x for the OpenFAST x axis (the sign cannot silently flip).
             streamwise = 1 if flow_axis == "y" else 0
-            assert wake_point2[streamwise] > 0.0
+            assert wake_down[streamwise] > 0.0
             regions = parsed["castellatedMeshControls"]["refinementRegions"]
-            assert int(regions["rotorWake"]["levels"][0][1]) == 2
+            assert int(regions["rotorDisk"]["levels"][0][1]) == (
+                generate_case.DEFAULT_SNAPPY_LEVEL
+            )
+            assert int(regions["rotorWake"]["levels"][0][1]) == (
+                generate_case.DEFAULT_SNAPPY_LEVEL - 1
+            )
             # The wake adds no refinement surface either (see the disk test).
             assert parsed["castellatedMeshControls"]["refinementSurfaces"] == {}
+
+    def test_snappy_absolute_extents_are_pinned(self):
+        # The maintainer's hand-tuned absolute extents. The wake is sized so the
+        # ~19 m flow-direction blade-tip deflection expected in the coming FSI
+        # work stays inside a refined zone; shrinking any of these would let the
+        # deflected tip cross into the coarse background, so pin the absolute
+        # numbers here rather than only asserting the nesting ratios.
+        assert generate_case.SNAPPY_DISK_RADIUS == pytest.approx(150.0)
+        assert generate_case.SNAPPY_DISK_HALF_THICKNESS == pytest.approx(10.0)
+        assert generate_case.SNAPPY_WAKE_RADIUS == pytest.approx(170.0)
+        assert generate_case.SNAPPY_WAKE_UPSTREAM == pytest.approx(20.0)
+        assert generate_case.SNAPPY_WAKE_DOWNSTREAM == pytest.approx(470.0)
+        assert generate_case.SNAPPY_TOWER_UPSTREAM == pytest.approx(20.0)
+        assert generate_case.SNAPPY_TOWER_DOWNSTREAM == pytest.approx(470.0)
+        assert generate_case.SNAPPY_TOWER_Z_MIN == pytest.approx(-170.0)
+        assert generate_case.SNAPPY_TOWER_Z_MAX == pytest.approx(10.0)
+        # ... and the committed default case renders exactly them (default
+        # flow axis y).
+        parsed = _parse_foam(
+            (CASE_DIR / "system" / "snappyHexMeshDict").read_text(encoding="utf-8")
+        )
+        geometry = parsed["geometry"]
+        assert float(geometry["rotorDisk"]["radius"]) == pytest.approx(150.0)
+        assert [float(v) for v in geometry["rotorDisk"]["point1"]] == pytest.approx(
+            [0.0, 10.0, 0.0]
+        )
+        assert [float(v) for v in geometry["rotorDisk"]["point2"]] == pytest.approx(
+            [0.0, -10.0, 0.0]
+        )
+        assert float(geometry["rotorWake"]["radius"]) == pytest.approx(170.0)
+        assert [float(v) for v in geometry["rotorWake"]["point1"]] == pytest.approx(
+            [0.0, -20.0, 0.0]
+        )
+        assert [float(v) for v in geometry["rotorWake"]["point2"]] == pytest.approx(
+            [0.0, 470.0, 0.0]
+        )
+        assert [float(v) for v in geometry["towerWake"]["min"]] == pytest.approx(
+            [-20.0, -20.0, -170.0]
+        )
+        assert [float(v) for v in geometry["towerWake"]["max"]] == pytest.approx(
+            [20.0, 470.0, 10.0]
+        )
+        assert [
+            float(v) for v in parsed["castellatedMeshControls"]["locationInMesh"]
+        ] == pytest.approx([0.0, 0.0, 0.0])
 
     def test_snappy_rotor_wake_level_follows_the_disk(self):
         # The wake is one castellation level coarser than the rotor disk

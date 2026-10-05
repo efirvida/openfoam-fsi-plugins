@@ -294,38 +294,49 @@ SURFACE_GEOMETRY = "constant/triSurface/iea15mw_blade.stl"
 #: Chordwise strips for the actuator surface (Phase VI used 5).
 DEFAULT_N_CHORDWISE = 5
 
-#: Rotor-disk refinement cylinder for the actuator-surface meshes: the castellated
-#: snappyHexMesh refines it so the local cell resolves the blade chord. The disk
-#: half-thickness [m] covers the blade's axial extent (max chord + prebend), and
-#: the default level 3 takes the background fine cell (ROTOR_DIAMETER/32 = 7.5 m)
-#: to ~0.94 m, i.e. ~6 cells across the 5.77 m max chord.
-ASM_DISK_HALF_THICKNESS = 6.0
-#: Every castellated region must enclose the next finer one by this factor, so
-#: the level jump is not a cliff. The blade tip sits exactly at ``ROTOR_RADIUS``
-#: (120.675 m) where the tip vortex forms, so a disk radius of exactly R put the
-#: level-3/level-0 jump on the measured structure. The margin is applied to both
-#: the radial and the axial extent: ``rotorDisk`` is 1.2*R x 1.2*6.0 m, and the
-#: coarser ``rotorWake`` is one margin step further (1.2**2*R, 1.2**2*6.0 m
-#: upstream) so the wake cylinder exceeds the disk both radially and axially.
-ASM_REFINEMENT_MARGIN = 1.2
-DEFAULT_SNAPPY_LEVEL = 3
+#: Chordwise strips for the actuator surface (Phase VI used 5).
+DEFAULT_N_CHORDWISE = 5
 
-#: Tower + tower-shadow refinement. The rotor-disk cylinder alone left the
-#: tower unrefined and, worse, its wake -- the shadow the blades fly through at
-#: the bottom of the rotation -- at the background cell size, so the tower
-#: shadow could not be measured. The tower region is a box spanning the tower's
-#: height plus a margin and, axially, from upstream of the tower to
-#: ``ASM_WAKE_DOWNSTREAM_D`` rotor diameters downstream of it.
-ASM_TOWER_LATERAL_FACTOR = 2.0   # tower-box half-width = factor x max diameter
-ASM_TOWER_AXIAL_MARGIN = 20.0    # tower-box upstream extent [m]
-ASM_TOWER_Z_MARGIN = 10.0        # tower-box vertical margin [m]
-ASM_WAKE_DOWNSTREAM_D = 2.0      # tower-shadow extent downstream [rotor D]
-#: Rotor-wake refinement cylinder. The tower-shadow box already reaches ~2D
-#: downstream of the rotor plane, so the rotor wake is refined over the same
-#: axial extent; the cylinder runs from the rotor plane to
-#: ``ASM_ROTOR_WAKE_DOWNSTREAM_D`` rotor diameters downstream of it.
-ASM_ROTOR_WAKE_DOWNSTREAM_D = 2.0
-#: The wake region is one castellation level coarser than the rotor disk.
+# --- Castellated snappyHexMesh refinement -------------------------------------
+# The maintainer hand-tuned the castellated geometry to wider, rounded absolute
+# extents and authorised folding it in directly. Absolute values (not a repeated
+# multiple of ROTOR_RADIUS): the tuned disk/wake radii 150/170 are not a single
+# repeated factor of R, the wake upstream face (20 m) is not a multiple of the
+# disk half-thickness (10 m), and the tower box is anchored to the rotor plane
+# rather than to the tower centre. The previous single-margin scheme could not
+# reproduce these values.
+#: Castellated level over the rotor disk; the wakes run one level below it.
+DEFAULT_SNAPPY_LEVEL = 3
+#: Rotor-disk refinement-cylinder radius [m]: covers the rotor plus the blade-tip
+#: vortex (the tip sits at R = 120.675 m).
+SNAPPY_DISK_RADIUS = 150.0
+#: Rotor-disk axial half-thickness [m] about the rotor plane: covers the blade's
+#: axial excursion (max chord + prebend). Level 3 takes the 7.5 m background fine
+#: cell to ~0.94 m, ~6 cells across the 5.77 m max chord.
+SNAPPY_DISK_HALF_THICKNESS = 10.0
+#: Rotor-wake refinement-cylinder radius [m]: the coarser region enclosing the
+#: disk.
+SNAPPY_WAKE_RADIUS = 170.0
+#: Rotor-wake upstream face [m from the rotor plane; negative is upwind]: nests
+#: the disk axially (20 > the disk half-thickness 10).
+SNAPPY_WAKE_UPSTREAM = 20.0
+#: Rotor-wake downstream end [m from the rotor plane; positive is downwind]. The
+#: radius, upstream face and this downstream end are sized so a blade tip
+#: deflected ~19 m in the flow direction during the coming FSI work stays inside
+#: a refined zone instead of crossing into the coarse background.
+SNAPPY_WAKE_DOWNSTREAM = 470.0
+#: Tower-shadow box upstream face [m from the rotor plane; negative is upwind].
+SNAPPY_TOWER_UPSTREAM = 20.0
+#: Tower-shadow box downstream end [m from the rotor plane; positive is downwind].
+SNAPPY_TOWER_DOWNSTREAM = 470.0
+#: Tower-shadow box lower vertical face [m] in the ground-anchored frame (rotor
+#: at z = 0, floor at -HUB_HEIGHT).
+SNAPPY_TOWER_Z_MIN = -170.0
+#: Tower-shadow box upper vertical face [m] in the ground-anchored frame.
+SNAPPY_TOWER_Z_MAX = 10.0
+#: Tower-shadow box lateral half-width = factor x max tower diameter.
+ASM_TOWER_LATERAL_FACTOR = 2.0
+#: The wake and tower regions run one castellation level below the disk.
 ASM_WAKE_LEVEL_OFFSET = 1
 #: Default orientation. ``y`` = the Aeroelast/FSI frame the IEA 15 MW case exists
 #: for (fluid +Y, rotor axis about Y, blade axis +Z); ``x`` = OpenFAST.
@@ -1223,19 +1234,16 @@ def render_snappy_dict(
     is ``ROTOR_DIAMETER/32`` (7.5 m); a level-3 castellated cylinder brings the
     rotor disk to ~0.94 m.
 
-    The castellated regions are **nested**: every region encloses the next finer
-    one by ``ASM_REFINEMENT_MARGIN``, so the 3 -> 2 -> 1 -> 0 transition is a
-    graded step rather than a cliff. The blade tip sits exactly at
-    ``ROTOR_RADIUS`` where the tip vortex forms, so a disk radius equal to R
-    would put the level-3/level-0 jump on the very structure the comparison
-    measures. ``rotorDisk`` is therefore ``1.2*R`` radially and
-    ``1.2*ASM_DISK_HALF_THICKNESS`` (7.2 m) axially about the rotor plane; the
-    un-margined 6 m half-thickness was only a 2 m standoff from the ~4 m
-    prebend1x tip excursion. The coarser ``rotorWake`` extends that one more
-    margin step: ``1.2**2*R`` radially, and from
-    ``1.2**2*ASM_DISK_HALF_THICKNESS`` (8.64 m) upstream of the rotor plane to
-    ``ASM_ROTOR_WAKE_DOWNSTREAM_D`` diameters downstream, so it exceeds the disk
-    both radially and axially.
+    The castellated regions are **nested**: the coarser ``rotorWake`` encloses
+    the finer ``rotorDisk`` both radially (``SNAPPY_WAKE_RADIUS`` 170 m >
+    ``SNAPPY_DISK_RADIUS`` 150 m) and axially (its ``SNAPPY_WAKE_UPSTREAM`` face
+    20 m upwind of the rotor plane exceeds the disk's ``SNAPPY_DISK_HALF_THICKNESS``
+    10 m, and its ``SNAPPY_WAKE_DOWNSTREAM`` end is far past the disk), so the
+    3 -> 2 -> 1 -> 0 transition is a graded step rather than a cliff. The
+    extents are the maintainer's hand-tuned absolute values, sized so the ~19 m
+    flow-direction blade-tip deflection expected in the coming FSI work stays
+    inside a refined zone. The levels are unchanged, so only the zone extents
+    differ from the earlier margin-derived geometry.
 
     ``towerWake`` covers the tower and its shadow -- the band the blades cross
     at the bottom of the rotation. It and ``rotorWake`` run one level below the
@@ -1249,51 +1257,45 @@ def render_snappy_dict(
     """
     if int(level) < 0:
         raise ValueError("snappy level must be non-negative")
-    axis = rotor_axis(flow_axis)
     origin = turbine_origin()
-    disk_half = ASM_DISK_HALF_THICKNESS * ASM_REFINEMENT_MARGIN
-    point1 = tuple(origin[i] - disk_half * axis[i] for i in range(3))
-    point2 = tuple(origin[i] + disk_half * axis[i] for i in range(3))
-    # The rotor axis helper points UPWIND (opposite the inflow), while the wake
-    # extends DOWNSTREAM = -rotor_axis (a real sign, not a symmetric span). Its
-    # upstream face sits one margin step beyond the disk's own upstream face, so
-    # the coarser region encloses the finer one axially as well as radially.
-    wake_half = ASM_DISK_HALF_THICKNESS * ASM_REFINEMENT_MARGIN**2
-    wake_point1 = tuple(origin[i] + wake_half * axis[i] for i in range(3))
-    wake_point2 = tuple(
-        origin[i] - ASM_ROTOR_WAKE_DOWNSTREAM_D * ROTOR_DIAMETER * axis[i]
-        for i in range(3)
-    )
-    inside = tuple(origin[i] - 2.0 * ROTOR_DIAMETER * axis[i] for i in range(3))
+    # ``downstream`` is the fluid direction (the inflow), so the wake and tower
+    # extents are absolute distances from the rotor plane along the flow.
+    downstream = inflow_direction(flow_axis)
 
-    # Tower + tower shadow. The tower sits `overhang` upstream of the rotor
-    # plane (WindIO drivetrain.overhang) and spans the ground up to just below
-    # the hub; its wake is the shadow the blades cross at the bottom of the
-    # rotation. Both used to fall outside the rotor-disk cylinder and therefore
-    # ran at the background cell size, so the tower shadow was not resolved.
-    overhang = blade_geometry.read_tower_overhang()
+    def streamwise(offset: float) -> tuple[float, float, float]:
+        """Physical point ``offset`` metres downstream of the rotor plane."""
+        return (
+            origin[0] + offset * downstream[0],
+            origin[1] + offset * downstream[1],
+            origin[2] + offset * downstream[2],
+        )
+
+    # rotorDisk: a symmetric absolute half-thickness about the rotor plane.
+    point1 = streamwise(SNAPPY_DISK_HALF_THICKNESS)
+    point2 = streamwise(-SNAPPY_DISK_HALF_THICKNESS)
+    # rotorWake: absolute upstream/downstream faces, so the coarser cylinder
+    # nests the disk axially as well as radially (see the module constants).
+    wake_point1 = streamwise(-SNAPPY_WAKE_UPSTREAM)
+    wake_point2 = streamwise(SNAPPY_WAKE_DOWNSTREAM)
+    inside = origin
+
+    # Tower + tower shadow. The streamwise faces are absolute distances from the
+    # rotor plane (SNAPPY_TOWER_UPSTREAM/DOWNSTREAM, not the tower centre) and
+    # the vertical span is absolute in the ground-anchored frame
+    # (SNAPPY_TOWER_Z_MIN/MAX); only the lateral half-width stays tied to the
+    # tower's own diameter. Build the box in mesh roles (x = flow, y = lateral,
+    # z = vertical), map it to physical coordinates and normalise, so both flow
+    # axes render the same absolute extents.
     tower = blade_geometry.read_tower_table()
-    tower_z = [station["z"] - HUB_HEIGHT for station in tower]
     lateral = ASM_TOWER_LATERAL_FACTOR * max(station["diameter"] for station in tower)
-    # The rotor axis helper points UPWIND (opposite the inflow), and the IEA
-    # tower stands upwind of the rotor plane, so the tower centre is
-    # `origin + overhang * rotor_axis` -- i.e. at -overhang along the flow, the
-    # same sign as the ALM tower rows' axialDistance.
-    tower_centre = tuple(origin[i] + overhang * axis[i] for i in range(3))
-    box_min: list[float] = []
-    box_max: list[float] = []
-    for i in range(3):
-        if abs(axis[i]) > 0.5:
-            # Streamwise: from upstream of the tower to well past it downstream
-            box_min.append(tower_centre[i] - ASM_TOWER_AXIAL_MARGIN)
-            box_max.append(tower_centre[i] + ASM_WAKE_DOWNSTREAM_D * ROTOR_DIAMETER)
-        elif i == 2:
-            # Vertical is global Z (the ground-anchored domain's gravity axis)
-            box_min.append(min(tower_z) - ASM_TOWER_Z_MARGIN)
-            box_max.append(max(tower_z) + ASM_TOWER_Z_MARGIN)
-        else:
-            box_min.append(tower_centre[i] - lateral)
-            box_max.append(tower_centre[i] + lateral)
+    role_min = (-SNAPPY_TOWER_UPSTREAM, -lateral, SNAPPY_TOWER_Z_MIN)
+    role_max = (SNAPPY_TOWER_DOWNSTREAM, lateral, SNAPPY_TOWER_Z_MAX)
+    corners = [
+        _role_to_physical(flow_axis, *role_min),
+        _role_to_physical(flow_axis, *role_max),
+    ]
+    box_min = [min(corner[i] for corner in corners) for i in range(3)]
+    box_max = [max(corner[i] for corner in corners) for i in range(3)]
     wake_level = max(0, int(level) - ASM_WAKE_LEVEL_OFFSET)
     return foam_header("snappyHexMeshDict") + f"""castellatedMesh true;
 snap false;
@@ -1306,7 +1308,7 @@ geometry
         type searchableCylinder;
         point1 {foam_vector(point1)};
         point2 {foam_vector(point2)};
-        radius {ROTOR_RADIUS * ASM_REFINEMENT_MARGIN:.8g};
+        radius {SNAPPY_DISK_RADIUS:.8g};
     }}
 
     rotorWake
@@ -1314,7 +1316,7 @@ geometry
         type searchableCylinder;
         point1 {foam_vector(wake_point1)};
         point2 {foam_vector(wake_point2)};
-        radius {ROTOR_RADIUS * ASM_REFINEMENT_MARGIN**2:.8g};
+        radius {SNAPPY_WAKE_RADIUS:.8g};
     }}
 
     towerWake

@@ -23,7 +23,7 @@ geometry
     rotorDisk
     {
         type searchableCylinder;
-        point1 (0  10 0);
+        point1 (0 10 0);
         point2 (0 -10 0);
         radius 150;
     }
@@ -39,8 +39,8 @@ geometry
     towerWake
     {
         type searchableBox;
-        min (-20  -20 -170);
-        max ( 20  470   10);
+        min (-20 -20 -170);
+        max (20 470 10);
     }
 }
 
