@@ -13,11 +13,53 @@
 > history was stripped and upstream changes are not tracked automatically.
 > Licence: GPL-3.0 (see `LICENSE`).
 >
-> **Fork divergence:** this copy adds an optional **blade actuator surface
-> model (ASM)** element (see "Actuator surface model" below) and an
-> imported-surface **blade surface distributor** (see "Blade surface model"
-> below).  The actuator line model (ALM) is unchanged and remains the default;
-> both additions are opt-in extensions that do not exist upstream.
+> **Fork divergence:** this copy extends the upstream library in four areas,
+> and corrects one upstream claim that no longer holds. Every addition is
+> opt-in: a case that sets none of the new keys reproduces upstream behaviour,
+> and the packages under `validation/` document how each one was verified.
+>
+> 1. **Actuator-line load chain.** Two rotational-augmentation models for the
+>    3D stall delay, after Du–Selig and after Lindenburg, and an optional
+>    induced-velocity tip correction after Dağ & Sørensen, as an alternative to
+>    the original Glauert end effects. Both act on the polar lookup and are read
+>    from the element dictionary (`rotationalAugmentation { active on; … }`,
+>    `tipCorrection { active on; model DagSorensen; … }`); see "Rotational
+>    augmentation" below. The tip correction needs the bound circulation
+>    smoothed over the projection width, otherwise the near-field sum diverges.
+>    A third change concerns the polar tables themselves: `profileData` still
+>    applies the upstream Reynolds correction to the drag, but the lift half of
+>    that correction — which rescales `cl(α)` as `K·cl(α/K)`, displacing the
+>    zero-lift angle by `(K−1)|α₀|` — is switched off in the IEA 15 MW case, a
+>    zero-lift angle being a geometric and Reynolds-independent property. Set
+>    `liftReCorrExp` explicitly if you want the upstream behaviour.
+> 2. **Blade geometry.** The element definition accepts the AeroDyn blade shape
+>    in full: the out-of-plane prebend through `axialDistance`, the in-plane
+>    sweep through `azimuth`, and the curve (prebend-slope) angle through a
+>    fourth `elementData` column, which tilts the element frame about the span.
+>    Upstream reproduced radius, chord and twist only. The rotor can also be run
+>    in either orientation through the turbine frame, and the flow axis is a
+>    case parameter.
+> 3. **Rotation sense and rotor state.** `rotationDirection ±1` sets the sense
+>    explicitly rather than implicitly (default counter-clockwise looking along
+>    the rotor axis, the AeroDyn and CCBlade convention), and the rotor azimuth
+>    is derived from time and written as a restart checkpoint in **radians** at
+>    write times only. Upstream wrote a field-less `angleDeg` directory at every
+>    step, which both blocked `startFrom latestTime` and declared degrees in
+>    dimensionless units.
+> 4. **Numerical robustness.** Guards for a constant polar table
+>    (`profileData::interpolate`, previously a division by zero for a circular
+>    root section), for a singular Leishman–Beddoes `K1`/`K2` fit, and for
+>    rotational augmentation on a degenerate profile.
+>
+> **The actuator line model itself is therefore not unchanged**, although its
+> force chain, projection and chordwise treatment are: the differences above
+> are additive models, geometry capability and robustness, all inert unless
+> enabled. Separately, this fork adds the optional **blade actuator surface
+> model (ASM)**, the **blade surface distributor** that samples an imported
+> triangulated blade, the **nacelle surface model**, and a two-way **FSI
+> coupling** that deforms the surface and projects the aerodynamic force onto
+> the structural vertices. None of those four exist upstream; see their own
+> sections below and `validation/` for the evidence behind each.
 
 turbinesFoam is a library for simulating wind and marine hydrokinetic turbines
 in OpenFOAM using the actuator line method.
