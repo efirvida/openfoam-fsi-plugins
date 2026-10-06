@@ -1623,3 +1623,305 @@ class TestSnappyExtents:
             == 2
         )
         assert "snappy wake radius 140" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# Tip-loss ablation: the two alternative models the C++ already implements
+# ---------------------------------------------------------------------------
+#: Every temporary environment bridge for the two tip-loss models.
+TIP_LOSS_ENV_VARS = (
+    generate_case.END_EFFECTS_ENV,
+    generate_case.TIP_EFFECTS_ENV,
+    generate_case.ROOT_EFFECTS_ENV,
+    generate_case.TIP_CORRECTION_ENV,
+    generate_case.WAKE_TURNS_ENV,
+    generate_case.WAKE_AZIMUTHAL_STEP_ENV,
+    generate_case.TIP_CORRECTION_EPSILON_ENV,
+)
+
+
+def _clear_tip_loss_env(monkeypatch):
+    """Drop every tip-loss bridge so the test observes the built-in defaults."""
+    for name in TIP_LOSS_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
+def _rendered_coeffs(case_dir: Path) -> dict:
+    """Parse ``system/fvOptions`` of a freshly rendered case."""
+    text = (case_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+    return _coeffs(_parse_foam(text))
+
+
+class TestEndEffects:
+    """The Glauert rotor-level end effects (the first tip-loss alternative).
+
+    ``endEffects`` is always rendered; with ``active off`` (the default) the
+    coefficients are inert and the block keeps the committed
+    ``tipEffects off; rootEffects off;`` stub, so the default render is
+    byte-identical. ``--end-effects on`` renders the campaign's Glauert arm with
+    both coefficients on. ``tipCorrection`` is the other alternative and is not
+    written here.
+    """
+
+    def test_default_render_is_byte_identical_to_the_committed_case(
+        self, monkeypatch
+    ):
+        _clear_tip_loss_env(monkeypatch)
+        committed = (CASE_DIR / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert generate_case.render_fv_options() == committed
+        assert "tipCorrection" not in committed
+
+    def test_constants_and_resolved_defaults(self, monkeypatch):
+        _clear_tip_loss_env(monkeypatch)
+        assert generate_case.DEFAULT_END_EFFECTS_ACTIVE == "off"
+        assert generate_case.DEFAULT_TIP_EFFECTS == "on"
+        assert generate_case.DEFAULT_ROOT_EFFECTS == "on"
+        assert generate_case.resolve_end_effects_active() == "off"
+        assert generate_case.resolve_tip_effects() == "on"
+        assert generate_case.resolve_root_effects() == "on"
+
+    def test_glauert_arm_renders_both_coefficients(self, monkeypatch):
+        _clear_tip_loss_env(monkeypatch)
+        coeffs = _coeffs(
+            _parse_foam(generate_case.render_fv_options(end_effects_active="on"))
+        )
+        assert coeffs["endEffects"]["active"] == "on"
+        assert coeffs["endEffects"]["endEffectsModel"] == "Glauert"
+        assert coeffs["endEffects"]["GlauertCoeffs"]["tipEffects"] == "on"
+        assert coeffs["endEffects"]["GlauertCoeffs"]["rootEffects"] == "on"
+        # The Dag & Sorensen correction is the alternative, not an addition.
+        assert "tipCorrection" not in coeffs
+
+    @pytest.mark.parametrize(
+        "kwarg,key",
+        [("tip_effects", "tipEffects"), ("root_effects", "rootEffects")],
+    )
+    def test_each_glauert_coefficient_reaches_the_render(
+        self, monkeypatch, kwarg, key
+    ):
+        _clear_tip_loss_env(monkeypatch)
+        coeffs = _coeffs(
+            _parse_foam(
+                generate_case.render_fv_options(
+                    end_effects_active="on", **{kwarg: "off"}
+                )
+            )
+        )
+        assert coeffs["endEffects"]["GlauertCoeffs"][key] == "off"
+
+    def test_enabling_glauert_changes_only_the_end_effects_block(
+        self, monkeypatch
+    ):
+        _clear_tip_loss_env(monkeypatch)
+        default = _coeffs(_parse_foam(generate_case.render_fv_options()))
+        glauert = _coeffs(
+            _parse_foam(generate_case.render_fv_options(end_effects_active="on"))
+        )
+        assert default["endEffects"] != glauert["endEffects"]
+        assert "tipCorrection" not in default
+        assert "tipCorrection" not in glauert
+        for key in default:
+            if key != "endEffects":
+                assert default[key] == glauert[key], key
+
+    def test_flag_reaches_every_twin(self, tmp_path, monkeypatch):
+        _clear_tip_loss_env(monkeypatch)
+        case_dir = tmp_path / "case"
+        assert (
+            generate_case.main(
+                ["--case-dir", str(case_dir), "--end-effects", "on"]
+            )
+            == 0
+        )
+        for name in (
+            "fvOptions",
+            "fvOptions.ALM",
+            "fvOptions.ASM",
+            "fvOptions.ASM-MESH",
+        ):
+            text = (case_dir / "system" / name).read_text(encoding="utf-8")
+            assert _coeffs(_parse_foam(text))["endEffects"]["active"] == "on", name
+
+    def test_environment_bridge_reaches_the_render(self, tmp_path, monkeypatch):
+        _clear_tip_loss_env(monkeypatch)
+        monkeypatch.setenv(generate_case.END_EFFECTS_ENV, "on")
+        monkeypatch.setenv(generate_case.TIP_EFFECTS_ENV, "off")
+        monkeypatch.setenv(generate_case.ROOT_EFFECTS_ENV, "off")
+        case_dir = tmp_path / "case"
+        assert generate_case.main(["--case-dir", str(case_dir)]) == 0
+        end_effects = _rendered_coeffs(case_dir)["endEffects"]
+        assert end_effects["active"] == "on"
+        assert end_effects["GlauertCoeffs"]["tipEffects"] == "off"
+        assert end_effects["GlauertCoeffs"]["rootEffects"] == "off"
+
+    def test_flag_beats_the_environment_bridge(self, tmp_path, monkeypatch):
+        _clear_tip_loss_env(monkeypatch)
+        monkeypatch.setenv(generate_case.END_EFFECTS_ENV, "off")
+        monkeypatch.setenv(generate_case.TIP_EFFECTS_ENV, "off")
+        case_dir = tmp_path / "case"
+        assert (
+            generate_case.main(
+                [
+                    "--case-dir",
+                    str(case_dir),
+                    "--end-effects",
+                    "on",
+                    "--tip-effects",
+                    "on",
+                ]
+            )
+            == 0
+        )
+        end_effects = _rendered_coeffs(case_dir)["endEffects"]
+        assert end_effects["active"] == "on"
+        assert end_effects["GlauertCoeffs"]["tipEffects"] == "on"
+
+    def test_resolve_precedence(self, monkeypatch):
+        _clear_tip_loss_env(monkeypatch)
+        assert generate_case.resolve_end_effects_active() == "off"
+        assert generate_case.resolve_end_effects_active("on") == "on"
+        monkeypatch.setenv(generate_case.END_EFFECTS_ENV, "on")
+        assert generate_case.resolve_end_effects_active() == "on"
+        # An explicit flag wins over the environment.
+        assert generate_case.resolve_end_effects_active("off") == "off"
+
+    def test_invalid_environment_value_fails_loudly(self, monkeypatch):
+        _clear_tip_loss_env(monkeypatch)
+        monkeypatch.setenv(generate_case.END_EFFECTS_ENV, "maybe")
+        with pytest.raises(ValueError):
+            generate_case.resolve_end_effects_active()
+
+
+class TestTipCorrection:
+    """The Dag & Sorensen induced-velocity tip correction (the alternative).
+
+    It is inactive by default, so the block is omitted entirely and the
+    committed render stays byte-identical. ``--tip-correction on`` renders the
+    campaign's B2 block (``model DagSorensen``, ``wakeTurns 2``,
+    ``wakeAzimuthalStep 2``, ``epsilon 0`` = each element's projection epsilon)
+    and leaves the ``endEffects`` stub off.
+    """
+
+    def test_default_omits_the_block(self, monkeypatch):
+        _clear_tip_loss_env(monkeypatch)
+        assert "tipCorrection" not in generate_case.render_fv_options()
+        assert generate_case.DEFAULT_TIP_CORRECTION_ACTIVE == "off"
+        assert generate_case.resolve_tip_correction_active() == "off"
+
+    def test_block_renders_the_campaign_values(self, monkeypatch):
+        _clear_tip_loss_env(monkeypatch)
+        coeffs = _coeffs(
+            _parse_foam(generate_case.render_fv_options(tip_correction_active="on"))
+        )
+        block = coeffs["tipCorrection"]
+        assert block["active"] == "on"
+        assert block["model"] == "DagSorensen"
+        assert int(block["wakeTurns"]) == 2
+        assert float(block["wakeAzimuthalStep"]) == pytest.approx(2.0)
+        assert float(block["epsilon"]) == pytest.approx(0.0)
+        assert block["debug"] == "false"
+
+    @pytest.mark.parametrize(
+        "kwargs,key,expected",
+        [
+            ({"wake_turns": 4}, "wakeTurns", 4),
+            ({"wake_azimuthal_step": 5.0}, "wakeAzimuthalStep", 5.0),
+            ({"tip_correction_epsilon": 0.5}, "epsilon", 0.5),
+        ],
+    )
+    def test_each_knob_reaches_the_render(
+        self, monkeypatch, kwargs, key, expected
+    ):
+        _clear_tip_loss_env(monkeypatch)
+        coeffs = _coeffs(
+            _parse_foam(
+                generate_case.render_fv_options(
+                    tip_correction_active="on", **kwargs
+                )
+            )
+        )
+        assert float(coeffs["tipCorrection"][key]) == pytest.approx(expected)
+
+    def test_enabling_dagsorensen_changes_only_its_own_block(self, monkeypatch):
+        _clear_tip_loss_env(monkeypatch)
+        default = _coeffs(_parse_foam(generate_case.render_fv_options()))
+        correction = _coeffs(
+            _parse_foam(generate_case.render_fv_options(tip_correction_active="on"))
+        )
+        assert "tipCorrection" not in default
+        assert "tipCorrection" in correction
+        # The two models are alternatives: endEffects stays off.
+        assert correction["endEffects"] == default["endEffects"]
+        assert correction["endEffects"]["active"] == "off"
+        for key in default:
+            if key != "tipCorrection":
+                assert default[key] == correction[key], key
+
+    def test_flag_reaches_every_twin(self, tmp_path, monkeypatch):
+        _clear_tip_loss_env(monkeypatch)
+        case_dir = tmp_path / "case"
+        assert (
+            generate_case.main(
+                ["--case-dir", str(case_dir), "--tip-correction", "on"]
+            )
+            == 0
+        )
+        for name in (
+            "fvOptions",
+            "fvOptions.ALM",
+            "fvOptions.ASM",
+            "fvOptions.ASM-MESH",
+        ):
+            text = (case_dir / "system" / name).read_text(encoding="utf-8")
+            assert _coeffs(_parse_foam(text))["tipCorrection"]["active"] == "on", name
+
+    def test_environment_bridge_reaches_the_render(self, tmp_path, monkeypatch):
+        _clear_tip_loss_env(monkeypatch)
+        monkeypatch.setenv(generate_case.TIP_CORRECTION_ENV, "on")
+        monkeypatch.setenv(generate_case.WAKE_TURNS_ENV, "6")
+        monkeypatch.setenv(generate_case.WAKE_AZIMUTHAL_STEP_ENV, "3")
+        monkeypatch.setenv(generate_case.TIP_CORRECTION_EPSILON_ENV, "0.25")
+        case_dir = tmp_path / "case"
+        assert generate_case.main(["--case-dir", str(case_dir)]) == 0
+        block = _rendered_coeffs(case_dir)["tipCorrection"]
+        assert block["active"] == "on"
+        assert int(block["wakeTurns"]) == 6
+        assert float(block["wakeAzimuthalStep"]) == pytest.approx(3.0)
+        assert float(block["epsilon"]) == pytest.approx(0.25)
+
+    def test_flag_beats_the_environment_bridge(self, tmp_path, monkeypatch):
+        _clear_tip_loss_env(monkeypatch)
+        monkeypatch.setenv(generate_case.TIP_CORRECTION_ENV, "off")
+        monkeypatch.setenv(generate_case.WAKE_TURNS_ENV, "9")
+        case_dir = tmp_path / "case"
+        assert (
+            generate_case.main(
+                [
+                    "--case-dir",
+                    str(case_dir),
+                    "--tip-correction",
+                    "on",
+                    "--wake-turns",
+                    "4",
+                ]
+            )
+            == 0
+        )
+        block = _rendered_coeffs(case_dir)["tipCorrection"]
+        assert block["active"] == "on"
+        assert int(block["wakeTurns"]) == 4
+
+    def test_resolve_precedence(self, monkeypatch):
+        _clear_tip_loss_env(monkeypatch)
+        assert generate_case.resolve_tip_correction_active() == "off"
+        assert generate_case.resolve_wake_turns() == 2
+        assert generate_case.resolve_wake_azimuthal_step() == pytest.approx(2.0)
+        assert generate_case.resolve_tip_correction_epsilon() == pytest.approx(0.0)
+        assert generate_case.resolve_wake_turns(4) == 4
+        monkeypatch.setenv(generate_case.TIP_CORRECTION_ENV, "on")
+        monkeypatch.setenv(generate_case.WAKE_TURNS_ENV, "6")
+        assert generate_case.resolve_tip_correction_active() == "on"
+        assert generate_case.resolve_wake_turns() == 6
+        # An explicit flag wins over the environment.
+        assert generate_case.resolve_tip_correction_active("off") == "off"
+        assert generate_case.resolve_wake_turns(4) == 4

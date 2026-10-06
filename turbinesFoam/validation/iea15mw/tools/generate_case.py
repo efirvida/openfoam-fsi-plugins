@@ -64,6 +64,10 @@ default render stays byte-identical. Zormpa et al. 2024 (Wind Energy) ask for
 the sample outside the force Gaussian (``rs/rg = 1.1`` with
 ``rg = 3*epsilon``, i.e. ``rs = 3.3*epsilon``) -- the value this knob exists to
 test.
+
+Tip-loss models: ``endEffects`` (Glauert) and ``tipCorrection`` (Dag &
+Sorensen) are ALTERNATIVES modelling the same physics, run separately by the
+campaign. Both default to off, so no existing case changes.
 """
 
 from __future__ import annotations
@@ -142,6 +146,41 @@ VELOCITY_SAMPLE_RADIUS_ENV = "TURBINE_VELOCITY_SAMPLE_RADIUS"
 #: is above 0. 20 is the source default (``axialFlowTurbineALSource.C:363``).
 DEFAULT_N_VELOCITY_SAMPLES = 20
 N_VELOCITY_SAMPLES_ENV = "TURBINE_N_VELOCITY_SAMPLES"
+
+# --- Tip-loss models (Glauert end effects vs Dag & Sorensen) ------------------
+#: The two models are ALTERNATIVES modelling the same physical tip loss; the
+#: campaign runs them separately, never summed (the C++ does not validate their
+#: sum). Both default to off, so no existing case changes: the committed render
+#: keeps ``endEffects { active off; ... }`` and omits ``tipCorrection``.
+DEFAULT_END_EFFECTS_ACTIVE = "off"
+#: Glauert ``tipEffects``/``rootEffects`` when the model is active. The
+#: campaign's Glauert arm (Fase B1 of
+#: ``odd/tasks/iea15mw-validation-campaign.md``) turns both on; with ``active
+#: off`` the coefficients are inert and the block keeps the committed ``off``
+#: stub, so the default render is byte-identical.
+DEFAULT_TIP_EFFECTS = "on"
+DEFAULT_ROOT_EFFECTS = "on"
+END_EFFECTS_ENV = "TURBINE_END_EFFECTS"
+TIP_EFFECTS_ENV = "TURBINE_TIP_EFFECTS"
+ROOT_EFFECTS_ENV = "TURBINE_ROOT_EFFECTS"
+
+#: Dag & Sorensen induced-velocity correction. ``active off`` (the default)
+#: omits the whole block, so the committed default render is byte-identical.
+DEFAULT_TIP_CORRECTION_ACTIVE = "off"
+#: Only registered correction model (``axialFlowTurbineALSource.C`` read()).
+TIP_CORRECTION_MODEL = "DagSorensen"
+#: Wake length in revolutions and azimuthal spacing [deg] (the paper's values).
+DEFAULT_WAKE_TURNS = 2
+DEFAULT_WAKE_AZIMUTHAL_STEP = 2.0
+#: 0 selects each element's own projection epsilon
+#: (``axialFlowTurbineALSource.C``: ``tipCorrectionEpsilon_ > 0.0 ?
+#: tipCorrectionEpsilon_ : e.projectionEpsilon()``), so 0 is the "auto" value,
+#: not a zero width. The campaign's B2 block leaves it at 0.
+DEFAULT_TIP_CORRECTION_EPSILON = 0.0
+TIP_CORRECTION_ENV = "TURBINE_TIP_CORRECTION"
+WAKE_TURNS_ENV = "TURBINE_WAKE_TURNS"
+WAKE_AZIMUTHAL_STEP_ENV = "TURBINE_WAKE_AZIMUTHAL_STEP"
+TIP_CORRECTION_EPSILON_ENV = "TURBINE_TIP_CORRECTION_EPSILON"
 
 # --- Domain and mesh (ground-anchored, parametric) ---------------------------
 #: Horizontal mesh resolutions: cells across the rotor diameter.
@@ -1052,6 +1091,63 @@ def _sampling_keys(
     return "\n".join(lines) + ("\n" if lines else "")
 
 
+def _end_effects_block(
+    active: str,
+    tip_effects: str,
+    root_effects: str,
+) -> str:
+    """Render the rotor-level ``endEffects`` block.
+
+    The two tip-loss models (Glauert end effects here, Dag & Sorensen in
+    ``tipCorrection``) are alternatives; the campaign runs them separately.
+    With ``active off`` -- the default -- the coefficients are inert, so the
+    block keeps the committed ``tipEffects off; rootEffects off;`` stub and the
+    default render stays byte-identical. With ``active on`` it renders the
+    resolved coefficients, both defaulting to ``on`` (the campaign's Glauert
+    arm: ``odd/tasks/iea15mw-validation-campaign.md`` Fase B1).
+    """
+    if active == "off":
+        tip_effects = "off"
+        root_effects = "off"
+    return (
+        "        endEffects\n"
+        "        {\n"
+        f"            active {active};\n"
+        "            endEffectsModel Glauert;\n"
+        "            GlauertCoeffs\n"
+        "            {\n"
+        f"                tipEffects {tip_effects};\n"
+        f"                rootEffects {root_effects};\n"
+        "            }\n"
+        "        }\n"
+    )
+
+
+def _tip_correction_block(
+    active: str,
+    wake_turns: int,
+    wake_azimuthal_step: float,
+    epsilon: float,
+) -> str:
+    """Render the Dag & Sorensen ``tipCorrection`` block.
+
+    Called only when the model is on; the campaign's B2 arm is exactly
+    ``active on`` with ``wakeTurns 2``, ``wakeAzimuthalStep 2`` and
+    ``epsilon 0`` (0 = each element's own projection epsilon).
+    """
+    return (
+        "        tipCorrection\n"
+        "        {\n"
+        f"            active {active};\n"
+        f"            model {TIP_CORRECTION_MODEL};\n"
+        f"            wakeTurns {int(wake_turns)};\n"
+        f"            wakeAzimuthalStep {float(wake_azimuthal_step):g};\n"
+        f"            epsilon {float(epsilon):g};\n"
+        "            debug false;\n"
+        "        }\n"
+    )
+
+
 def render_fv_options(
     speed: float = RATED_SPEED,
     rpm: float = RATED_RPM,
@@ -1069,13 +1165,23 @@ def render_fv_options(
     mesh_factor: float = DEFAULT_MESH_FACTOR,
     velocity_sample_radius: float = DEFAULT_VELOCITY_SAMPLE_RADIUS,
     n_velocity_samples: int = DEFAULT_N_VELOCITY_SAMPLES,
+    end_effects_active: str = DEFAULT_END_EFFECTS_ACTIVE,
+    tip_effects: str = DEFAULT_TIP_EFFECTS,
+    root_effects: str = DEFAULT_ROOT_EFFECTS,
+    tip_correction_active: str = DEFAULT_TIP_CORRECTION_ACTIVE,
+    wake_turns: int = DEFAULT_WAKE_TURNS,
+    wake_azimuthal_step: float = DEFAULT_WAKE_AZIMUTHAL_STEP,
+    tip_correction_epsilon: float = DEFAULT_TIP_CORRECTION_EPSILON,
 ) -> str:
     """The neutral-baseline ``axialFlowTurbineALSource``.
 
     Three blades 120 deg apart, 147 ALM elements over 49 geometry segments,
     the 50 per-station P1 polars, end effects off and no ``tipCorrection``
-    block. No rotational augmentation and no dynamic stall. ``flow_axis``
-    selects the rotor-axis/inflow orientation (x = OpenFAST, y = Aeroelast).
+    block. The two tip-loss models (``endEffects`` Glauert and
+    ``tipCorrection`` Dag & Sorensen) are alternatives and both default to
+    off, so the committed render is unchanged. No rotational augmentation and
+    no dynamic stall. ``flow_axis`` selects the rotor-axis/inflow orientation
+    (x = OpenFAST, y = Aeroelast).
     """
     tsr = tip_speed_ratio(speed, rpm)
     origin = turbine_origin()
@@ -1085,6 +1191,15 @@ def render_fv_options(
     # CCBlade/Aeroelast default.
     rotation_dir = -1.0 if rotation == "cw" else 1.0
     sampling_keys = _sampling_keys(velocity_sample_radius, n_velocity_samples)
+    end_effects = _end_effects_block(end_effects_active, tip_effects, root_effects)
+    tip_correction = ""
+    if tip_correction_active == "on":
+        tip_correction = "\n" + _tip_correction_block(
+            tip_correction_active,
+            wake_turns,
+            wake_azimuthal_step,
+            tip_correction_epsilon,
+        )
     surface_keys = ""
     if element_type == ASM_ELEMENT:
         strips = DEFAULT_N_CHORDWISE if n_chordwise is None else int(n_chordwise)
@@ -1187,17 +1302,7 @@ def render_fv_options(
             d 1;
         }}
 
-        endEffects
-        {{
-            active off;
-            endEffectsModel Glauert;
-            GlauertCoeffs
-            {{
-                tipEffects off;
-                rootEffects off;
-            }}
-        }}
-
+{end_effects}{tip_correction}
         blades
         {{
             blade1
@@ -1570,6 +1675,13 @@ def outputs(
     snappy_tower_z_max: float = SNAPPY_TOWER_Z_MAX,
     snappy_tower_lateral_factor: float = ASM_TOWER_LATERAL_FACTOR,
     snappy_wake_level_offset: int = ASM_WAKE_LEVEL_OFFSET,
+    end_effects_active: str = DEFAULT_END_EFFECTS_ACTIVE,
+    tip_effects: str = DEFAULT_TIP_EFFECTS,
+    root_effects: str = DEFAULT_ROOT_EFFECTS,
+    tip_correction_active: str = DEFAULT_TIP_CORRECTION_ACTIVE,
+    wake_turns: int = DEFAULT_WAKE_TURNS,
+    wake_azimuthal_step: float = DEFAULT_WAKE_AZIMUTHAL_STEP,
+    tip_correction_epsilon: float = DEFAULT_TIP_CORRECTION_EPSILON,
 ) -> dict[Path, str]:
     domain = _as_domain(domain)
     case_dir = Path(case_dir)
@@ -1598,6 +1710,13 @@ def outputs(
             mesh_factor=mesh_factor,
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
+            end_effects_active=end_effects_active,
+            tip_effects=tip_effects,
+            root_effects=root_effects,
+            tip_correction_active=tip_correction_active,
+            wake_turns=wake_turns,
+            wake_azimuthal_step=wake_azimuthal_step,
+            tip_correction_epsilon=tip_correction_epsilon,
         ),
         system / "fvOptions.ASM": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
@@ -1605,6 +1724,13 @@ def outputs(
             mesh_factor=mesh_factor,
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
+            end_effects_active=end_effects_active,
+            tip_effects=tip_effects,
+            root_effects=root_effects,
+            tip_correction_active=tip_correction_active,
+            wake_turns=wake_turns,
+            wake_azimuthal_step=wake_azimuthal_step,
+            tip_correction_epsilon=tip_correction_epsilon,
         ),
         system / "fvOptions.ASM-MESH": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
@@ -1613,6 +1739,13 @@ def outputs(
             mesh_factor=mesh_factor,
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
+            end_effects_active=end_effects_active,
+            tip_effects=tip_effects,
+            root_effects=root_effects,
+            tip_correction_active=tip_correction_active,
+            wake_turns=wake_turns,
+            wake_azimuthal_step=wake_azimuthal_step,
+            tip_correction_epsilon=tip_correction_epsilon,
         ),
         system / "fvOptions": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
@@ -1623,6 +1756,13 @@ def outputs(
             mesh_factor=mesh_factor,
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
+            end_effects_active=end_effects_active,
+            tip_effects=tip_effects,
+            root_effects=root_effects,
+            tip_correction_active=tip_correction_active,
+            wake_turns=wake_turns,
+            wake_azimuthal_step=wake_azimuthal_step,
+            tip_correction_epsilon=tip_correction_epsilon,
         ),
         system / "snappyHexMeshDict": render_snappy_dict(
             flow_axis,
@@ -1808,6 +1948,62 @@ def resolve_snappy_wake_level_offset(cli_value: int | None = None) -> int:
     """Resolve the wakes' castellation-level offset below the disk."""
     return _resolve_snappy_int(
         cli_value, SNAPPY_WAKE_LEVEL_OFFSET_ENV, ASM_WAKE_LEVEL_OFFSET
+    )
+
+
+def _resolve_on_off(cli_value: str | None, env_name: str, default: str) -> str:
+    """Flag > environment bridge > default for an ``on``/``off`` knob."""
+    value = cli_value
+    if value is None:
+        env_value = os.environ.get(env_name)
+        if env_value is not None and env_value.strip():
+            value = env_value.strip()
+    if value is None:
+        return default
+    value = value.strip().lower()
+    if value not in ("on", "off"):
+        raise ValueError(f"{env_name}={value!r} must be 'on' or 'off'")
+    return value
+
+
+def resolve_end_effects_active(cli_value: str | None = None) -> str:
+    """Resolve ``endEffects.active`` (off = the committed neutral baseline)."""
+    return _resolve_on_off(cli_value, END_EFFECTS_ENV, DEFAULT_END_EFFECTS_ACTIVE)
+
+
+def resolve_tip_effects(cli_value: str | None = None) -> str:
+    """Resolve the Glauert ``tipEffects`` coefficient (on when active)."""
+    return _resolve_on_off(cli_value, TIP_EFFECTS_ENV, DEFAULT_TIP_EFFECTS)
+
+
+def resolve_root_effects(cli_value: str | None = None) -> str:
+    """Resolve the Glauert ``rootEffects`` coefficient (on when active)."""
+    return _resolve_on_off(cli_value, ROOT_EFFECTS_ENV, DEFAULT_ROOT_EFFECTS)
+
+
+def resolve_tip_correction_active(cli_value: str | None = None) -> str:
+    """Resolve ``tipCorrection.active`` (off omits the whole block)."""
+    return _resolve_on_off(
+        cli_value, TIP_CORRECTION_ENV, DEFAULT_TIP_CORRECTION_ACTIVE
+    )
+
+
+def resolve_wake_turns(cli_value: int | None = None) -> int:
+    """Resolve the Dag & Sorensen wake length in revolutions."""
+    return _resolve_snappy_int(cli_value, WAKE_TURNS_ENV, DEFAULT_WAKE_TURNS)
+
+
+def resolve_wake_azimuthal_step(cli_value: float | None = None) -> float:
+    """Resolve the Dag & Sorensen wake azimuthal spacing [deg]."""
+    return _resolve_snappy_float(
+        cli_value, WAKE_AZIMUTHAL_STEP_ENV, DEFAULT_WAKE_AZIMUTHAL_STEP
+    )
+
+
+def resolve_tip_correction_epsilon(cli_value: float | None = None) -> float:
+    """Resolve the Dag & Sorensen smoothing width (0 = element epsilon)."""
+    return _resolve_snappy_float(
+        cli_value, TIP_CORRECTION_EPSILON_ENV, DEFAULT_TIP_CORRECTION_EPSILON
     )
 
 
@@ -2076,6 +2272,77 @@ def main(argv: list[str] | None = None) -> int:
             f"explicit flag beats {N_VELOCITY_SAMPLES_ENV}"
         ),
     )
+    parser.add_argument(
+        "--end-effects",
+        choices=("on", "off"),
+        default=None,
+        help=(
+            "Glauert rotor-level end effects (effective default "
+            f"{DEFAULT_END_EFFECTS_ACTIVE}); one of the two ALTERNATIVE tip-loss "
+            f"models. Explicit flag beats {END_EFFECTS_ENV}, which beats "
+            f"{DEFAULT_END_EFFECTS_ACTIVE}"
+        ),
+    )
+    parser.add_argument(
+        "--tip-effects",
+        choices=("on", "off"),
+        default=None,
+        help=(
+            "Glauert tip effect, applied only when --end-effects on "
+            f"(effective default {DEFAULT_TIP_EFFECTS}); explicit flag beats "
+            f"{TIP_EFFECTS_ENV}, which beats {DEFAULT_TIP_EFFECTS}"
+        ),
+    )
+    parser.add_argument(
+        "--root-effects",
+        choices=("on", "off"),
+        default=None,
+        help=(
+            "Glauert root effect, applied only when --end-effects on "
+            f"(effective default {DEFAULT_ROOT_EFFECTS}); explicit flag beats "
+            f"{ROOT_EFFECTS_ENV}, which beats {DEFAULT_ROOT_EFFECTS}"
+        ),
+    )
+    parser.add_argument(
+        "--tip-correction",
+        choices=("on", "off"),
+        default=None,
+        help=(
+            "Dag & Sorensen induced-velocity tip correction (effective default "
+            f"{DEFAULT_TIP_CORRECTION_ACTIVE}); the second ALTERNATIVE tip-loss "
+            f"model, run instead of --end-effects. Explicit flag beats "
+            f"{TIP_CORRECTION_ENV}, which beats {DEFAULT_TIP_CORRECTION_ACTIVE}"
+        ),
+    )
+    parser.add_argument(
+        "--wake-turns",
+        type=int,
+        default=None,
+        help=(
+            "Dag & Sorensen wake length in revolutions (effective default "
+            f"{DEFAULT_WAKE_TURNS}); explicit flag beats {WAKE_TURNS_ENV}"
+        ),
+    )
+    parser.add_argument(
+        "--wake-azimuthal-step",
+        type=float,
+        default=None,
+        help=(
+            "Dag & Sorensen wake azimuthal spacing [deg] (effective default "
+            f"{DEFAULT_WAKE_AZIMUTHAL_STEP:g}); explicit flag beats "
+            f"{WAKE_AZIMUTHAL_STEP_ENV}"
+        ),
+    )
+    parser.add_argument(
+        "--tip-correction-epsilon",
+        type=float,
+        default=None,
+        help=(
+            "Dag & Sorensen circulation-smoothing width (effective default "
+            f"{DEFAULT_TIP_CORRECTION_EPSILON:g} = each element's projection "
+            f"epsilon); explicit flag beats {TIP_CORRECTION_EPSILON_ENV}"
+        ),
+    )
     parser.add_argument("--case-dir", type=Path, default=DEFAULT_CASE_DIR)
     parser.add_argument(
         "--check",
@@ -2090,6 +2357,15 @@ def main(argv: list[str] | None = None) -> int:
             args.velocity_sample_radius
         )
         n_velocity_samples = resolve_n_velocity_samples(args.n_velocity_samples)
+        end_effects_active = resolve_end_effects_active(args.end_effects)
+        tip_effects = resolve_tip_effects(args.tip_effects)
+        root_effects = resolve_root_effects(args.root_effects)
+        tip_correction_active = resolve_tip_correction_active(args.tip_correction)
+        wake_turns = resolve_wake_turns(args.wake_turns)
+        wake_azimuthal_step = resolve_wake_azimuthal_step(args.wake_azimuthal_step)
+        tip_correction_epsilon = resolve_tip_correction_epsilon(
+            args.tip_correction_epsilon
+        )
         snappy_geometry = {
             "snappy_disk_radius": resolve_snappy_disk_radius(
                 args.snappy_disk_radius
@@ -2156,6 +2432,13 @@ def main(argv: list[str] | None = None) -> int:
             velocity_sample_radius,
             n_velocity_samples,
             **snappy_geometry,
+            end_effects_active=end_effects_active,
+            tip_effects=tip_effects,
+            root_effects=root_effects,
+            tip_correction_active=tip_correction_active,
+            wake_turns=wake_turns,
+            wake_azimuthal_step=wake_azimuthal_step,
+            tip_correction_epsilon=tip_correction_epsilon,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)

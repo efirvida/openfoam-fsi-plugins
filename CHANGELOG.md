@@ -306,6 +306,36 @@ non-positive extent or a negative level offset -- naming the offending values,
 so the default combination passes and a bad override is rejected instead of
 rendered.
 
+#### 12. Expose the two ALM tip-loss models for the campaign ablation
+
+**Files:**
+- `turbinesFoam/validation/iea15mw/tools/generate_case.py`
+- `turbinesFoam/tests/test_iea15mw_case.py`
+
+**Problem:** the IEA 15 MW diagnosis left a +16 % excess in the tangential
+coefficient after the inflow-sampling fix, and the remaining suspect is the tip
+loss. The C++ already implements two models -- the Glauert rotor-level
+`endEffects` and the Dag & Sorensen induced-velocity `tipCorrection` -- but the
+generator wrote `endEffects { active off; ... }` hardcoded and never wrote
+`tipCorrection`, so the ablation (Fase B of
+`odd/tasks/iea15mw-validation-campaign.md`) could not be run without editing the
+generator. The two models are alternatives for the same physics and the
+campaign runs them separately.
+
+**Fix:** both models are now parameters, in the
+`meshFactor`/velocity-sampling pattern (named defaults, `resolve_*` helper, CLI
+flag, documented temporary `TURBINE_*` bridge, precedence flag > environment >
+default). `endEffects` renders `active on|off` (default `off`) plus
+`tipEffects`/`rootEffects` (both default `on`, used when the model is on); the
+inactive block keeps the committed `off` stub so the default render stays
+byte-identical. `tipCorrection` renders `active on|off` (default `off`),
+`model DagSorensen`, `wakeTurns 2`, `wakeAzimuthalStep 2` and `epsilon 0`
+(0 = each element's projection epsilon), and the whole block is omitted when
+off so the default render is unchanged. New flags: `--end-effects`,
+`--tip-effects`, `--root-effects`, `--tip-correction`, `--wake-turns`,
+`--wake-azimuthal-step` and `--tip-correction-epsilon`. The committed case is
+not regenerated; `--check` still passes.
+
 ## [Unreleased] — 2026-04-02
 
 ### New Features
