@@ -1,8 +1,10 @@
 # Issue #5 — el `cp` imposible del ASM+mesh: diagnóstico cerrado
 
-- **Status:** cerrado en su pregunta central (¿diagnóstico o física?); deja un
-  follow-up abierto y acotado.
-- **Issue:** efirvida/openfoam-fsi-plugins#5
+- **Estado:** cerrado (2026-10-07) — la pregunta central se respondió con
+evidencia y la anomalía de cargas se encontró y se arregló (`5026c97`).
+- **Issue:** efirvida/openfoam-fsi-plugins#5 (cerrado). El residual de modelo va a
+  [#9](https://github.com/efirvida/openfoam-fsi-plugins/issues/9)
+  (`odd/issues/asm-mesh-residual-vs-alm.md`).
 - **Branch:** `fix/surface-node-dump-frame` (desde `feat/dagsorensen-tip-correction`)
 - **Creado:** 2026-10-07
 - **Relacionado:** `odd/tasks/iea15mw-asm-mesh-convergence.md` (Etapa 1),
