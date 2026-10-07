@@ -89,6 +89,20 @@ domain_squat_D:
 # Cells and grading are per resolution; the hub-adjacent cell is the finest
 # cell in z because the split sits at the hub.
 mesh:
+  # Castellated rotor-disk refinement: the IEA 15 MW pattern. `snappyHexMesh`
+  # refines a cylinder around the rotor and nothing else, so the base
+  # `blockMesh` is never rebuilt and meshing stays cheap. `snap` and `addLayers`
+  # are off because an actuator line has no surface to snap or grow layers on.
+  #
+  # The cylinder must enclose the actuator line's inflow sampling sphere at the
+  # tip, `velocitySampleRadius * 2 * cbrt(cellVolume) * meshFactor`
+  # = 3.3 * 0.629 = 2.08 m on the base mesh. `meshFactor` is scaled by
+  # `2**level` so that width stays fixed in metres instead of shrinking with the
+  # mesh, which would change the model rather than the discretisation.
+  refinement:
+    disk_radius_m: 7.106  # rotorRadius + 2.077 m sampling radius
+    disk_half_thickness_m: 2.5    # at least the sampling radius
+    max_level: 3
   breaks_D:
     x: [-5.0, -0.5, 8.0, 15.0]
     y: [-4.0, -1.5, 1.5, 4.0]

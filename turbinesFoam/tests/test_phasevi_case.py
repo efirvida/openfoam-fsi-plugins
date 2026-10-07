@@ -1069,6 +1069,98 @@ def test_rotor_orientation_chain_is_pinned(cfg):
     assert 40.0 < phis[0] < 80.0
 
 
+def test_rotor_refinement_dict_and_level_scaling(cfg):
+    """The castellated refinement is local, level-driven and always declared.
+
+    Level 0 renders the dictionary with `castellatedMesh false`, so a run
+    directory states its refinement level instead of leaving it implicit and the
+    committed case keeps the base `blockMesh` only.
+    """
+    base = generate_case.render_snappy_dict(cfg, 0)
+    assert "castellatedMesh false;" in base
+    assert "snap false;" in base
+    assert "addLayers false;" in base
+    assert "rotorDisk" in base
+    assert "levels ((1e15" not in base
+
+    refined = generate_case.render_snappy_dict(cfg, 2)
+    assert "castellatedMesh true;" in refined
+    assert "type searchableCylinder;" in refined
+    assert "levels ((1e15 2));" in refined
+    assert "mode inside;" in refined
+
+    # The cylinder spans the hub plus/minus the half thickness along the axis and
+    # its radius is set by the tip sampling sphere, not by the chord.
+    hub = generate_case.turbine_origin(cfg)
+    half = float(cfg["mesh"]["refinement"]["disk_half_thickness_m"])
+    radius = float(cfg["mesh"]["refinement"]["disk_radius_m"])
+    assert f"point1 ({hub[0] - half:.9g} {hub[1]:.9g} {hub[2]:.9g});" in refined
+    assert f"point2 ({hub[0] + half:.9g} {hub[1]:.9g} {hub[2]:.9g});" in refined
+    assert f"radius {radius:.9g};" in refined
+    assert radius > float(cfg["turbine"]["radius"]) + 2.0
+
+    # Out-of-range levels fail loudly instead of rendering something wrong.
+    highest = int(cfg["mesh"]["refinement"]["max_level"])
+    with pytest.raises(ValueError, match="exceeds the configured maximum"):
+        generate_case.render_snappy_dict(cfg, highest + 1)
+    with pytest.raises(ValueError, match="zero or positive"):
+        generate_case.render_snappy_dict(cfg, -1)
+
+    # The committed skeleton carries the level-0 dictionary.
+    committed = (PACKAGE / "case" / "system" / "snappyHexMeshDict").read_text(
+        encoding="utf-8"
+    )
+    assert committed == base
+
+
+def test_refine_level_and_delta_t_overrides(cfg, tmp_path):
+    """`--refine-level` holds epsilon fixed; `--delta-t` pins the step.
+
+    The ladder must move the mesh and nothing else, so the projection width stays
+    fixed in metres by scaling `gaussian_mesh_factor` by `2**level`, and the time
+    step is fixed at the finest level's requirement at every level.
+    """
+    def render(*flags):
+        return subprocess.run(
+            [
+                sys.executable,
+                str(PACKAGE / "tools" / "generate_case.py"),
+                "--case-dir", str(tmp_path),
+                *flags,
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+    assert render().returncode == 0
+    baseline_factor = float(cfg["turbine"]["gaussian_mesh_factor"])
+    baseline_mesh = (tmp_path / "system" / "fvOptions.ALM").read_text(encoding="utf-8")
+    baseline_control = (tmp_path / "system" / "controlDict").read_text(
+        encoding="utf-8"
+    )
+
+    assert render("--refine-level", "2").returncode == 0
+    refined = (tmp_path / "system" / "fvOptions.ALM").read_text(encoding="utf-8")
+    assert f"meshFactor {baseline_factor * 4.0:.8g};" in refined
+    assert "levels ((1e15 2));" in (tmp_path / "system" / "snappyHexMeshDict").read_text(
+        encoding="utf-8"
+    )
+
+    assert render("--delta-t", "0.001").returncode == 0
+    assert "deltaT 0.001;" in (tmp_path / "system" / "controlDict").read_text(
+        encoding="utf-8"
+    )
+
+    # Neither flag changes the default render.
+    assert render().returncode == 0
+    assert (tmp_path / "system" / "controlDict").read_text(encoding="utf-8") == baseline_control
+    assert (tmp_path / "system" / "fvOptions.ALM").read_text(encoding="utf-8") == baseline_mesh
+
+    # Non-physical inputs are rejected before any render (argparse exit 2).
+    assert render("--delta-t", "0").returncode == 2
+    assert render("--refine-level", "-1").returncode == 2
+
+
 def test_stage_matrix(cfg):
     stages = cfg["stages"]
     executing = [name for name, stage in stages.items() if stage.get("executes")]

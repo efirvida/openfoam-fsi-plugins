@@ -770,6 +770,133 @@ def render_fv_options(
 """
 
 
+def render_snappy_dict(cfg: dict[str, Any], level: int) -> str:
+    """Castellated rotor-disk refinement, local to the rotor.
+
+    `snappyHexMesh` refines one cylinder around the rotor and leaves the base
+    `blockMesh` alone, so meshing stays cheap and the far field is never
+    re-meshed. `snap` and `addLayers` are off: an actuator line has no surface to
+    snap to or to grow layers on.
+
+    The cylinder is sized by the actuator line's inflow sampling sphere at the
+    tip, not by the chord, and `meshFactor` is scaled by `2**level` by the caller
+    so that width stays fixed in metres.
+
+    Level 0 still renders the dictionary, with `castellatedMesh false`, so every
+    run directory states its refinement level instead of leaving it implicit.
+    """
+    refinement = cfg["mesh"]["refinement"]
+    if level < 0:
+        raise ValueError("refine level must be zero or positive")
+    if level > int(refinement["max_level"]):
+        raise ValueError(
+            f"refine level {level} exceeds the configured maximum "
+            f"{refinement['max_level']}"
+        )
+    hub = turbine_origin(cfg)
+    half = float(refinement["disk_half_thickness_m"])
+    regions = ""
+    if level > 0:
+        regions = (
+            "\n        rotorDisk\n"
+            "        {\n"
+            "            mode inside;\n"
+            f"            levels ((1e15 {level}));\n"
+            "        }\n"
+        )
+    return (
+        foam_header("snappyHexMeshDict")
+        + f"""castellatedMesh {'true' if level > 0 else 'false'};
+snap false;
+addLayers false;
+
+geometry
+{{
+    rotorDisk
+    {{
+        type searchableCylinder;
+        point1 ({hub[0] - half:.9g} {hub[1]:.9g} {hub[2]:.9g});
+        point2 ({hub[0] + half:.9g} {hub[1]:.9g} {hub[2]:.9g});
+        radius {float(refinement['disk_radius_m']):.9g};
+    }}
+}}
+
+castellatedMeshControls
+{{
+    maxLocalCells 40000000;
+    maxGlobalCells 60000000;
+    minRefinementCells 0;
+    nCellsBetweenLevels 2;
+
+    features ();
+
+    refinementSurfaces
+    {{
+    }}
+
+    resolveFeatureAngle 30;
+
+    refinementRegions
+    {{{regions}}}
+
+    locationInMesh (0 0 0);
+    allowFreeStandingZoneFaces true;
+}}
+
+snapControls
+{{
+    nSmoothPatch 3;
+    tolerance 2.0;
+    nSolveIter 30;
+    nRelaxIter 5;
+}}
+
+addLayersControls
+{{
+    relativeSizes true;
+    layers {{}}
+    expansionRatio 1.0;
+    finalLayerThickness 0.3;
+    minThickness 0.1;
+    nGrow 0;
+    featureAngle 60;
+    slipFeatureAngle 30;
+    nRelaxIter 5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals 3;
+    nSmoothThickness 10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedianAxisAngle 90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter 50;
+}}
+
+meshQualityControls
+{{
+    maxNonOrtho 65;
+    maxBoundarySkewness 20;
+    maxInternalSkewness 4;
+    maxConcave 80;
+    minVol 1e-13;
+    minTetQuality 1e-15;
+    minArea -1;
+    minTwist 0.02;
+    minDeterminant 0.001;
+    minFaceWeight 0.02;
+    minVolRatio 0.01;
+    minTriangleTwist -1;
+    nSmoothScale 4;
+    errorReduction 0.75;
+    relaxed {{}}
+}}
+
+debug 0;
+mergeTolerance 1e-6;
+"""
+    )
+
+
 def outputs(
     cfg: dict[str, Any],
     mesh: str,
@@ -794,6 +921,7 @@ def outputs(
     velocity_sample_radius: float | None = None,
     n_velocity_samples: int | None = None,
     lift_re_corr_exp: float | None = None,
+    refine_level: int = 0,
 ) -> dict[Path, str]:
     system = case_dir / "system"
     constant = case_dir / "constant"
@@ -850,6 +978,7 @@ def outputs(
             n_velocity_samples=n_velocity_samples,
             lift_re_corr_exp=lift_re_corr_exp,
         ),
+        system / "snappyHexMeshDict": render_snappy_dict(cfg, refine_level),
         constant / "transportProperties": render_transport_properties(cfg),
         constant / "turbulenceProperties": render_turbulence_properties(cfg, solver),
     }
@@ -897,6 +1026,20 @@ def _positive_int(value: str) -> int:
 def _non_negative_float(value: str) -> float:
     number = float(value)
     if number < 0.0:
+        raise argparse.ArgumentTypeError("must be zero or positive")
+    return number
+
+
+def _positive_float(value: str) -> float:
+    number = float(value)
+    if number <= 0.0:
+        raise argparse.ArgumentTypeError("must be positive")
+    return number
+
+
+def _non_negative_int(value: str) -> int:
+    number = int(value)
+    if number < 0:
         raise argparse.ArgumentTypeError("must be zero or positive")
     return number
 
@@ -1020,6 +1163,26 @@ def main(argv: list[str] | None = None) -> int:
              "applies unless overridden. The Phase VI validation uses 0 to "
              "disable the rescaling that the declared `Re 1e6` would apply",
     )
+    parser.add_argument(
+        "--refine-level",
+        type=_non_negative_int,
+        default=0,
+        metavar="N",
+        help="castellated snappyHexMesh refinement level of the rotor-disk "
+             "cylinder; 0 renders the dictionary with no refinement. Each level "
+             "halves the cell in the rotor region, and gaussian_mesh_factor is "
+             "scaled by 2**N so the actuator line's projection width stays fixed "
+             "in metres and the mesh is the only variable",
+    )
+    parser.add_argument(
+        "--delta-t",
+        type=_positive_float,
+        default=None,
+        metavar="T",
+        help="override the configured fixed time step. The mesh-convergence "
+             "ladder fixes it at the finest level's requirement so that the time "
+             "discretisation does not shrink with the mesh",
+    )
     parser.add_argument("--case-dir", type=Path, default=DEFAULT_CASE_DIR)
     parser.add_argument("--end-revs", type=float, default=None)
     parser.add_argument("--start-from", choices=START_FROM_CHOICES, default="startTime")
@@ -1033,6 +1196,15 @@ def main(argv: list[str] | None = None) -> int:
     try:
         cfg = load_config(args.config)
         case_dir = args.case_dir.resolve()
+        # Campaign overrides for the mesh-convergence ladder. Both leave the
+        # committed default render byte-identical: level 0 scales by 2**0 = 1, and
+        # an absent --delta-t changes nothing.
+        if args.refine_level:
+            cfg["turbine"]["gaussian_mesh_factor"] = float(
+                cfg["turbine"]["gaussian_mesh_factor"]
+            ) * 2.0 ** int(args.refine_level)
+        if args.delta_t is not None:
+            cfg["mesh"]["resolutions"][args.mesh]["delta_t"] = float(args.delta_t)
         augmentation = dict(cfg["actuator"]["rotational_augmentation"])
         if args.rotational_augmentation is not None:
             augmentation["active"] = args.rotational_augmentation == "on"
@@ -1069,6 +1241,7 @@ def main(argv: list[str] | None = None) -> int:
             velocity_sample_radius=args.velocity_sample_radius,
             n_velocity_samples=args.n_velocity_samples,
             lift_re_corr_exp=args.lift_re_corr_exp,
+            refine_level=args.refine_level,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)
