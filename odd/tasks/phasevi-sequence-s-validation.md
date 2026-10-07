@@ -189,23 +189,25 @@ que el costo explota sin concentrar la resolución donde importa.
 | --- | --- | --- |
 | Mecanismo | **snappyHexMesh castellado** (`castellatedMesh true; snap false;`) | el camino ya probado en el repo y un solo knob (`level`); en ALM no hay geometría que snappear |
 | Malla base | **la `coarse` actual, sin tocar** (D/32 = 0,3143 m, 6.674.304 celdas) | no hace falta base nueva: ya está graduada hacia afuera, así que el campo lejano es barato y la zona del rotor ya está a D/32 |
-| Región | cilindro de disco rotor, radio **1,5R = 7,54 m**, semiespesor **3,0 m** | el semiespesor lo fija el **radio de muestreo del ALM en el nivel 0 (2,07 m)**, no la cuerda |
+| Región | cilindro de disco rotor, radio **R + 2ε + 0,5 = 6,79 m (1,35R)**, semiespesor **2,5 m** | el radio sólo tiene que cubrir la pala más el **radio de muestreo del ALM (2,07 m en el nivel 0)**; las extensiones generosas se pagan 8× en el nivel más fino |
 | Estela | **sin refinamiento** | sólo se valida el performance del rotor |
-| Escalera | levels **{0, 1, 2}** → celda en el rotor 0,3143 / 0,1572 / 0,0786 m | 3 puntos, y el tope queda lejos de la malla ultra |
-| Δt | **fijo en el valor que exige el nivel 2** en las tres corridas (opción a) | lo único que cambia entre corridas es la malla |
+| Escalera | levels **{0, 1, 2, 3}** → celda en el rotor 0,3143 / 0,1572 / 0,0786 / 0,0393 m | **4 puntos** (decisión del usuario, 2026-10-07): con 3 no se ve si la curva empezó a converger; con 4 hay 3 diferencias de grilla y se puede verificar monotonía y orden observado |
+| Δt | **fijo en el valor que exige el nivel 3** en las cuatro corridas (opción a) | lo único que cambia entre corridas es la malla |
 
 **Costo real** (cilindro de radio 7,54 m y 6 m de espesor; las capas de transición
 de snappy agregan y se miden al implementar):
 
-| level | celda en el rotor | celdas / cuerda min (0,218 m) | celdas / cuerda max (0,744 m) | celdas en el cilindro | total aprox. |
+| level | celda en el rotor | celdas / cuerda min (0,218 m) | celdas / cuerda max (0,744 m) | total aprox. | vs `fine` D/48 |
 | --- | --- | --- | --- | --- | --- |
-| 0 | 0,3143 m | 0,7 | 2,4 | 28.789 | **6,67 M** (la base) |
-| 1 | 0,1572 m | 1,4 | 4,7 | 276.000 | **~6,9 M** |
-| 2 | 0,0786 m | 2,8 | 9,5 | 2.200.000 | **~8,7 M** |
+| 0 | 0,3143 m | 0,7 | 2,4 | **6.674.304** (la base `coarse`) | 30 % |
+| 1 | 0,1572 m | 1,4 | 4,7 | **~6,84 M** | 30 % |
+| 2 | 0,0786 m | 2,8 | 9,5 | **~8,14 M** | 36 % |
+| 3 | 0,0393 m | 5,5 | 18,9 | **~18,6 M** | 82 % |
 
-El tope de la escalera son **~8,7 M de celdas**: un 30 % más que la `coarse` actual
-y seis veces menos que la `ultra` de 53,4 M. La convergencia se busca por
-**concentración**, no por tamaño.
+El punto más caro de la escalera son **~18,6 M de celdas: menos que la `fine`
+D/48 (22,5 M) que el paquete ya tenía planificada correr**, y un tercio de la
+`ultra` de 53,4 M que queda descartada. La convergencia se busca por
+**concentración**, no por tamaño, y el cuarto punto entra en ese presupuesto.
 
 **Tercer acoplamiento — ε del ALM (decisión pendiente).** `ε = 2·cbrt(V_celda)·meshFactor`,
 entonces refinar achica ε y con él el radio de muestreo de la línea actuadora:
@@ -229,10 +231,18 @@ así mezcla dos cosas distintas.
 
 **Criterio de convergencia** (a fijar **antes** de correr):
 
+- las **tres diferencias de grilla** de `cp` (0→1, 1→2, 2→3) deben **decrecer de
+  forma monótona** — si no decrecen, la grilla no está en el rango asintótico y
+  ninguna extrapolación es defendible con o sin acuerdo entre los dos últimos;
+- con eso se estima el **orden observado** `p = log2(Δcp_12/Δcp_23)` y se reporta;
 - `cp` integrado estable dentro del **1 %** entre los dos niveles más finos;
 - `c_n` spanwise en las 5 estaciones dentro de la banda del paquete;
 - tabla por revolución con drift < 0,2 %/rev sostenido 5 rev;
 - conteo de celdas y costo por nivel reportados.
+
+Los 4 puntos son la decisión del usuario y el motivo es metodológico, no de costo:
+con 3 puntos no hay forma de distinguir "convergió" de "las dos últimas meshes
+casualmente coinciden".
 
 Tareas: decidir mecanismo y Δt → render del refinamiento + pipeline de malla →
 tests (celda resultante por nivel, unicidad del parámetro, bandas de `checkMesh`)
