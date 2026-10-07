@@ -144,6 +144,11 @@ AREA_RTOL = 1e-6
 ELEMENT_STATION = 0.5
 ELEMENT_ROOT_DIST = 0.5
 
+# Blade surface construction frame of tests/bladeSurface/system/fvOptions.surface
+# (`surfaceSpanDirection (0 0 1)`): the static node `station` label is the
+# projection of the GLOBAL node position on the construction span axis.
+ELEMENT_SPAN_AXIS = np.array([0.0, 0.0, 1.0])
+
 # Triangle centroids in the canonical generation frame (face order of the STL)
 NODE_STATION = {0: 0.5333333333333333, 1: 0.4666666666666667}
 NODE_CHORD_FRACTION = {0: 0.6666666666666666, 1: 0.3333333333333333}
@@ -267,29 +272,6 @@ def _read_turbine(case_dir):
     return pd.read_csv(os.path.join(case_dir, TURBINE_CSV))
 
 
-def _body_basis(span):
-    """Reproduce ``surfaceSamplerBase::createBodyFrame`` for a body axis.
-
-    The completion is the C++ one: e2 = e1 ^ z, falling back to e1 ^ y when
-    that is parallel, and e3 = e1 ^ e2. The columns are the body axes in the
-    global frame, so ``global = basis @ body`` (the fixtures' bodyOrigin equals
-    their surfaceOrigin, the origin).
-    """
-    e1 = np.asarray(span, dtype=float)
-    e1 = e1 / np.linalg.norm(e1)
-    e2 = np.cross(e1, [0.0, 0.0, 1.0])
-    if np.linalg.norm(e2) < 1e-12:
-        e2 = np.cross(e1, [0.0, 1.0, 0.0])
-    e2 = e2 / np.linalg.norm(e2)
-    e3 = np.cross(e1, e2)
-    return np.column_stack([e1, e2, e3])
-
-
-def _to_global(values, basis):
-    """Map body-frame rows to the global frame (fixture origin at (0 0 0))."""
-    return (basis @ np.asarray(values, dtype=float).T).T
-
-
 def _axis_rotation(radians):
     """Rotation matrix about the +x rotor axis (the ``rotateVector`` formula)."""
     c, s = np.cos(radians), np.sin(radians)
@@ -298,6 +280,13 @@ def _axis_rotation(radians):
 
 def _row_vector(row, columns):
     return row[columns].to_numpy(dtype=float)
+
+
+def _columns(frame, names):
+    """The named columns of ``frame`` as an (n, len(names)) float array."""
+    return np.column_stack(
+        [frame[name].to_numpy(dtype=float) for name in names]
+    )
 
 
 @pytest.fixture(scope="module")
@@ -474,9 +463,15 @@ def test_station_and_node_csv(surface_case):
         assert np.all(per_time.chord_fraction >= 0.0)
         assert np.all(per_time.chord_fraction <= 1.0)
 
-        # Body frame contract: the body x-axis is the construction span, so
-        # the node station equals its body x coordinate
-        assert_allclose(per_time.station, per_time.x, rtol=1e-12, atol=1e-12)
+        # Global frame contract: the node CSV carries the global (mesh) frame,
+        # so projecting the dumped position on the construction span axis
+        # recovers the azimuth-invariant station label
+        assert_allclose(
+            per_time.station,
+            _columns(per_time, ("x", "y", "z")) @ ELEMENT_SPAN_AXIS,
+            rtol=1e-12,
+            atol=1e-12,
+        )
 
         for _, row in per_time.iterrows():
             assert_allclose(
@@ -624,13 +619,12 @@ def test_rotation_lockstep(aftal_case):
     # The reported azimuth delta is the rotor advance over the step
     assert_allclose(delta, OMEGA * (t2 - t1), rtol=1e-4)
 
-    basis = _body_basis([0.0, 0.0, 1.0])
-    X1 = _to_global(
-        nodes[nodes.time == t1].sort_values("node")[["x", "y", "z"]], basis
-    )
-    X2 = _to_global(
-        nodes[nodes.time == t2].sort_values("node")[["x", "y", "z"]], basis
-    )
+    d1 = nodes[nodes.time == t1]
+    d2 = nodes[nodes.time == t2]
+    assert_array_equal(d1.node.to_numpy(), np.arange(AFTAL_N_NODES))
+    assert_array_equal(d2.node.to_numpy(), np.arange(AFTAL_N_NODES))
+    X1 = _columns(d1, ("x", "y", "z"))
+    X2 = _columns(d2, ("x", "y", "z"))
     assert not np.allclose(X1, X2)
 
     # Tolerance: turbine.csv writes the azimuth and the element CSV the
@@ -638,6 +632,14 @@ def test_rotation_lockstep(aftal_case):
     # the error (about 2e-7 m here), far below this bound
     rotation = _axis_rotation(delta)
     assert_allclose(X2, (rotation @ X1.T).T, rtol=0, atol=1e-5)
+
+    # The dumped normals are in the same GLOBAL frame as the positions, so a
+    # rigid rotor rotation rotates them without translating; the body-frame
+    # dump (normals left in the blade frame) cannot satisfy this
+    N1 = _columns(d1, ("nx", "ny", "nz"))
+    N2 = _columns(d2, ("nx", "ny", "nz"))
+    assert_allclose(np.linalg.norm(N1, axis=1), 1.0, rtol=1e-6, atol=1e-6)
+    assert_allclose(N2, (rotation @ N1.T).T, rtol=0, atol=1e-5)
 
     # The elements rotate by the same delta: the surface follows them exactly
     Xe1 = element[element.time == t1].iloc[0][["x", "y", "z"]].to_numpy(float)
@@ -652,23 +654,22 @@ def test_surface_moment_in_torque(aftal_case):
     """The reported torque is the surface node moment (D8), not the element one.
 
     ``turbine.csv`` writes ``ct``; the fixture torque is
-    ``ct*0.5*frontalArea*rotorRadius*|Vinf|^2``. The per-node CSV forces are
-    per unit density (rho 1.0), the same quantities ``moment()`` uses, so the
-    rotor-axis projection of ``sum X_i x F_i`` must reconstruct it at
-    ``rtol 1e-6``. The element-position moment (what the delivered ``moment()``
-    would report) is more than 20% away: the D8 replacement convention is
-    asserted, not merely that a moment exists.
+    ``ct*0.5*frontalArea*rotorRadius*|Vinf|^2``. The per-node CSV carries the
+    GLOBAL frame (positions, normals and forces, rho 1.0), the same quantities
+    ``moment()`` uses, so the rotor-axis projection of ``sum X_i x F_i`` must
+    reconstruct it at ``rtol 1e-6`` with no frame change. The element-position
+    moment (what the delivered ``moment()`` would report) is more than 20% away:
+    the D8 replacement convention is asserted, not merely that a moment exists.
     """
     nodes = _read_aftal_nodes(aftal_case)
     turbine = _read_turbine(aftal_case)
     element = _read_aftal_element(aftal_case)
 
-    basis = _body_basis([0.0, 0.0, 1.0])
-
     for time in turbine.time:
-        d = nodes[nodes.time == time].sort_values("node")
-        X = _to_global(d[["x", "y", "z"]], basis)
-        F = _to_global(d[["fx", "fy", "fz"]], basis)
+        d = nodes[nodes.time == time]
+        assert_array_equal(d.node.to_numpy(), np.arange(AFTAL_N_NODES))
+        X = _columns(d, ("x", "y", "z"))
+        F = _columns(d, ("fx", "fy", "fz"))
         moment = np.sum(np.cross(X, F), axis=0)
 
         torque = float(turbine[turbine.time == time].iloc[0].ct) * (
@@ -703,7 +704,9 @@ def test_parallel_total_preserved(surface_case, tmp_path):
     assert os.path.isdir(os.path.join(case_dir, "processor0"))
     assert os.path.isdir(os.path.join(case_dir, "processor1"))
 
-    decomp = open(os.path.join(case_dir, "system", "decomposeParDict")).read()
+    decomp_path = os.path.join(case_dir, "system", "decomposeParDict")
+    with open(decomp_path) as decomp_file:
+        decomp = decomp_file.read()
     assert "numberOfSubdomains 2" in decomp
     assert "n               (2 1 1)" in decomp
 
@@ -727,7 +730,7 @@ def test_parallel_total_preserved(surface_case, tmp_path):
     parallel_integral = _read_force_integral(case_dir)
     assert len(parallel_integral) == len(serial_integral)
     for (t_serial, v_serial), (t_parallel, v_parallel) in zip(
-        serial_integral, parallel_integral
+        serial_integral, parallel_integral, strict=True
     ):
         assert t_parallel == t_serial
         assert_allclose(v_parallel[0], v_serial[0], rtol=1e-6, atol=1e-12)
@@ -794,7 +797,8 @@ def _install_surface_variant(case_dir):
 def _run_with_surface_geometry(case_dir, geometry):
     """Point the surface at `geometry`, run the solver, return (code, log)."""
     fv_options = os.path.join(case_dir, "system", "fvOptions")
-    text = open(fv_options).read()
+    with open(fv_options) as fv_in:
+        text = fv_in.read()
     assert "geometry/plate.stl" in text
     with open(fv_options, "w") as fv:
         fv.write(text.replace("geometry/plate.stl", geometry))
@@ -811,7 +815,8 @@ def _run_with_surface_geometry(case_dir, geometry):
             stdout=log,
             stderr=subprocess.STDOUT,
         )
-    return proc.returncode, open(log_path).read()
+    with open(log_path) as log_file:
+        return proc.returncode, log_file.read()
 
 
 def test_missing_empty_corrupt_stl_aborts(tmp_path):
@@ -832,7 +837,7 @@ def test_missing_empty_corrupt_stl_aborts(tmp_path):
     code, log = _run_with_surface_geometry(case_dir, "geometry/empty.stl")
     assert code != 0
     assert "FOAM FATAL ERROR" in log
-    assert "contains no triangles" in log
+    assert "contains no faces" in log
 
     # Unparseable file
     case_dir = _copy_case(CASE_DIR, str(tmp_path / "corrupt"))

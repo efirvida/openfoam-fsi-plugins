@@ -66,8 +66,11 @@ Description
     \c time,station,root_dist,area,force_x,force_y,force_z,c_ref_n,c_ref_t,f_ref_n,f_ref_t
     and the per-node schema is
     \c time,node,x,y,z,nx,ny,nz,fx,fy,fz,area,station,chord_fraction
-    (design section 4.5); the per-node quantities are the body-frame SI
-    contract.
+    (design section 4.5). The per-node vector and point quantities are the
+    GLOBAL (mesh) frame, the same frame as the element and turbine CSVs, so the
+    node moment \c sum(X_i x F_i) can be reconstructed without a frame change;
+    \c station and \c chord_fraction are the azimuth-invariant labels of the
+    node (the canonical STL span coordinate and the LE-based chord fraction).
 
     Instrumentation (D6, spec "Bounded distribution and performance
     measurement"): each \c distribute() counts the surface nodes, the

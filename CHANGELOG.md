@@ -104,6 +104,36 @@ Expected effect: `cl` at the rated point drops ~12-14 %, and `c_n`, `c_t`,
 thrust and `cp` fall proportionally (the `c_t`/`ct` sensitivity is the steepest
 because `c_t` is a small difference).
 
+#### 14. Dump the blade-surface node normals in the mesh frame
+
+**Files:**
+- `turbinesFoam/src/fvOptions/bladeSurface/bladeSurfaceSource.C`
+- `turbinesFoam/src/fvOptions/bladeSurface/bladeSurfaceSource.H`
+- `turbinesFoam/tests/test_blade_surface.py`
+
+**Problem:** the opt-in per-node CSV was moved to the global mesh frame for the
+positions and the forces — the frame `moment()` uses and the frame of the
+element CSVs — but the normals stayed in the body frame, so one row carried two
+frames and the "body-frame SI contract" note in the header no longer described
+what was written. The three tests that pin the dump were left red by that change:
+they compared `station` with the dumped body `x`, and rotated the dumped node
+rows into the global frame before the moment check. On the IEA 15 MW asm-mesh
+this mixed frame is what produced the misleading "+73.3e6 (nodes) vs -13.9e6
+(elements)" reading behind issue #5: the first number is the body-frame `y`
+component and the second the rotor-axis projection of the *same* 76.8e6 N m
+moment vector, whose node and element reconstructions agree to 0.2 %.
+
+**Fix:** dump `positionsGlobal()`, `normalsGlobal()` and `nodeForces_`, one frame
+for the whole row, and state that frame in the class documentation. The moment
+oracle is now frame free — `sum X_i x F_i` over the node CSV against `ct` from
+`turbine.csv` at `rtol 1e-6` — and it is the regression test for the accounting
+question of issue #5; the lockstep test rotates the dumped normals together with
+the dumped positions, so a body-frame normal can no longer pass. `station` and
+`chord_fraction` are unchanged: they are azimuth-invariant labels, not
+coordinates. The same suite carried a stale assertion (`contains no triangles`
+for a source message that reads `contains no faces`) and two lint findings
+(unclosed files, `zip` without `strict`); both are fixed here.
+
 ### New Features
 
 #### 2. AeroDyn blade shape (prebend, sweep, curve angle) in the ALM

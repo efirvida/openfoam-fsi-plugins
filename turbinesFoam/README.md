@@ -444,7 +444,11 @@ Written on the master rank under `postProcessing/bladeSurface/`:
   conversion.
 - `<owner>.surface_nodes.csv` (`writeNodePerf`, default `false`):
   `time,node,x,y,z,nx,ny,nz,fx,fy,fz,area,station,chord_fraction`, per node in
-  the blade body frame with the force on the blade in SI units.
+  the **global mesh frame** (position, outward normal and force on the blade in
+  SI units, `rho`-scaled) — the same frame as the element and turbine CSVs, so
+  `sum X_i x F_i` reconstructs the reported torque without a frame change.
+  `station` (the canonical STL span coordinate) and `chord_fraction` are
+  azimuth-invariant labels, not coordinates.
 - `<owner>.surface_distribution.csv` (`logDistribution`, default `true`):
   `time,nodes,candidates,mean_candidates,max_candidates,seconds`, one row per
   `distribute()` call. `candidates` is the number of candidate cell entries
@@ -473,9 +477,9 @@ the reported torque.
 
 - **Rotating frame:** `rotate`, `translate` and both `pitch` overloads are
   forwarded by the blade source, so the nodes stay in lockstep with the
-  elements; `positions()` is the blade body-frame contract (it reflects the
-  azimuth) and the node ordering is fixed at construction. `setSpeed`,
-  `scaleVelocity` and `setOmega` do not move the geometry.
+  elements; the per-node CSV is global (it reflects the azimuth) and the node
+  ordering is fixed at construction. `setSpeed`, `scaleVelocity` and
+  `setOmega` do not move the geometry.
 - **MPI:** every rank holds the full canonical node list and builds candidate
   lists over its own cells; each local cell is written exactly once and the
   totals are `returnReduce`d. A node whose containing cell is on another rank
