@@ -162,6 +162,84 @@ Leídas directamente, no inferidas.
   de polar no llega al twin mesh-backed. Preexistente; no se toca en esta
   feature (el alcance es ALM).
 
+### S3b — Convergencia de malla (ANTES de la curva) ⏸ decisión pendiente
+
+Decisión del usuario (2026-10-07): la curva S se hace **después** de tener una
+malla convergida. Mecanismo pedido: **malla base fija + niveles de refinamiento
+alrededor del rotor**, al estilo IEA15MW pero **sin torre**, porque Phase VI no
+mide tower shadow.
+
+**Cómo lo hace IEA15MW** (`iea15mw/tools/generate_case.py`, sección "Castellated
+snappyHexMesh refinement"): `blockMesh` de fondo + `snappyHexMesh` **castellado**
+con regiones nombradas — cilindro de disco rotor (`DEFAULT_SNAPPY_LEVEL = 3`),
+cilindro de estela un nivel abajo, caja de torre — donde
+`cell = background_cell / 2^level`. Las extensiones son absolutas y afinadas a
+mano, con puentes por variable de entorno.
+
+**Phase VI hoy** (`phaseVI/tools/generate_case.py:render_block_mesh`): `blockMesh`
+puro, 18 bloques, **sin refinamiento**. La escalera coarse/fine/ultra refina
+**todo el dominio** — 6,67 M / 22,5 M / 53,4 M celdas, un factor 8 por nivel — así
+que el costo explota sin concentrar la resolución donde importa.
+
+**Diseño propuesto**
+
+#### Decisiones tomadas (2026-10-07)
+
+| Pieza | Valor | Por qué |
+| --- | --- | --- |
+| Mecanismo | **snappyHexMesh castellado** (`castellatedMesh true; snap false;`) | el camino ya probado en el repo y un solo knob (`level`); en ALM no hay geometría que snappear |
+| Malla base | **la `coarse` actual, sin tocar** (D/32 = 0,3143 m, 6.674.304 celdas) | no hace falta base nueva: ya está graduada hacia afuera, así que el campo lejano es barato y la zona del rotor ya está a D/32 |
+| Región | cilindro de disco rotor, radio **1,5R = 7,54 m**, semiespesor **3,0 m** | el semiespesor lo fija el **radio de muestreo del ALM en el nivel 0 (2,07 m)**, no la cuerda |
+| Estela | **sin refinamiento** | sólo se valida el performance del rotor |
+| Escalera | levels **{0, 1, 2}** → celda en el rotor 0,3143 / 0,1572 / 0,0786 m | 3 puntos, y el tope queda lejos de la malla ultra |
+| Δt | **fijo en el valor que exige el nivel 2** en las tres corridas (opción a) | lo único que cambia entre corridas es la malla |
+
+**Costo real** (cilindro de radio 7,54 m y 6 m de espesor; las capas de transición
+de snappy agregan y se miden al implementar):
+
+| level | celda en el rotor | celdas / cuerda min (0,218 m) | celdas / cuerda max (0,744 m) | celdas en el cilindro | total aprox. |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 0,3143 m | 0,7 | 2,4 | 28.789 | **6,67 M** (la base) |
+| 1 | 0,1572 m | 1,4 | 4,7 | 276.000 | **~6,9 M** |
+| 2 | 0,0786 m | 2,8 | 9,5 | 2.200.000 | **~8,7 M** |
+
+El tope de la escalera son **~8,7 M de celdas**: un 30 % más que la `coarse` actual
+y seis veces menos que la `ultra` de 53,4 M. La convergencia se busca por
+**concentración**, no por tamaño.
+
+**Tercer acoplamiento — ε del ALM (decisión pendiente).** `ε = 2·cbrt(V_celda)·meshFactor`,
+entonces refinar achica ε y con él el radio de muestreo de la línea actuadora:
+
+| level | ε con `meshFactor 1` | radio de muestreo (3,3ε) |
+| --- | --- | --- |
+| 0 | 0,629 m | 2,07 m |
+| 1 | 0,314 m | 1,04 m |
+| 2 | 0,157 m | 0,52 m |
+
+Con `meshFactor 1` **el modelo cambia con la malla**: la configuración validada
+(`velocitySampleRadius 3.3`) se calibró con ε = 0,629 m, y con level 2 el promedio
+de entrada se toma sobre 0,52 m en vez de 2,07 m. Una "convergencia de malla"
+así mezcla dos cosas distintas.
+
+1. **`meshFactor = 2^level`**: ε queda **fijo en 0,629 m** en las tres corridas y
+   lo único que cambia es la discretización. Es lo correcto para una convergencia
+   de malla, y es el mismo razonamiento que llevó a la opción (a) de Δt.
+2. `meshFactor = 1` en todas: ε se achica con la malla; la tendencia mide malla
+   **y** ancho de proyección a la vez.
+
+**Criterio de convergencia** (a fijar **antes** de correr):
+
+- `cp` integrado estable dentro del **1 %** entre los dos niveles más finos;
+- `c_n` spanwise en las 5 estaciones dentro de la banda del paquete;
+- tabla por revolución con drift < 0,2 %/rev sostenido 5 rev;
+- conteo de celdas y costo por nivel reportados.
+
+Tareas: decidir mecanismo y Δt → render del refinamiento + pipeline de malla →
+tests (celda resultante por nivel, unicidad del parámetro, bandas de `checkMesh`)
+→ correr la escalera → tabla de convergencia.
+
+**Requiere:** autorización de cola larga.
+
 ### S4 — Etapa 3: la corrida de validación (preparación)
 - [ ] Generalizar `sequence_s` a una tabla de velocidades (`sequence_s.speeds`)
       manteniendo la fila de 7 m/s como default, y extender `select_speed`/
