@@ -14,6 +14,7 @@ import importlib.util
 import math
 import re
 import sys
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -70,15 +71,15 @@ class TestGeometryTable:
     def test_fifty_monotone_stations(self):
         rows = blade_geometry.read_geometry(GEOMETRY)
         assert len(rows) == 50
-        assert all(b["r_over_R"] > a["r_over_R"] for a, b in zip(rows, rows[1:]))
-        assert all(b["radius_m"] > a["radius_m"] for a, b in zip(rows, rows[1:]))
-        assert all(b["span_m"] > a["span_m"] for a, b in zip(rows, rows[1:]))
+        assert all(b["r_over_R"] > a["r_over_R"] for a, b in pairwise(rows))
+        assert all(b["radius_m"] > a["radius_m"] for a, b in pairwise(rows))
+        assert all(b["span_m"] > a["span_m"] for a, b in pairwise(rows))
 
     def test_chord_and_twist_match_aerodyn_source(self):
         source = blade_geometry.read_blade_table()
         rows = blade_geometry.build_rows(source)
         assert len(rows) == len(source) == 50
-        for row, station in zip(rows, source):
+        for row, station in zip(rows, source, strict=True):
             assert row["chord_m"] == pytest.approx(station["chord"], abs=1e-9)
             assert row["twist_deg"] == pytest.approx(station["twist"], abs=1e-9)
             assert row["span_m"] == pytest.approx(station["span"], abs=1e-9)
@@ -90,7 +91,7 @@ class TestGeometryTable:
         # ``pitch_axis`` is filled by the WindIO cross-check only; it is covered
         # by ``test_pitch_axis_is_not_the_chord_mount``.
         columns = [key for key in blade_geometry.COLUMNS if key != "pitch_axis"]
-        for committed_row, built_row in zip(committed, built):
+        for committed_row, built_row in zip(committed, built, strict=True):
             for key in columns:
                 # The committed CSV carries 10 significant digits.
                 assert committed_row[key] == pytest.approx(built_row[key], abs=1e-6)
@@ -119,12 +120,12 @@ class TestGeometryTable:
         assert rows[0]["r_over_R"] > 0.0
 
     def test_published_values(self):
-        assert blade_geometry.ROTOR_DIAMETER_PUBLISHED == pytest.approx(241.35064632, abs=1e-8)
-        assert blade_geometry.ROTOR_RADIUS_PUBLISHED == pytest.approx(120.67532316, abs=1e-8)
-        assert blade_geometry.HUB_DIAMETER == pytest.approx(7.94, abs=1e-9)
-        assert blade_geometry.HUB_RADIUS == pytest.approx(3.97, abs=1e-9)
-        assert blade_geometry.TIP_RADIUS_STRUCTURAL == pytest.approx(120.97, abs=1e-9)
-        assert blade_geometry.PRECONE_DEG == pytest.approx(4.0, abs=1e-9)
+        assert pytest.approx(241.35064632, abs=1e-8) == blade_geometry.ROTOR_DIAMETER_PUBLISHED
+        assert pytest.approx(120.67532316, abs=1e-8) == blade_geometry.ROTOR_RADIUS_PUBLISHED
+        assert pytest.approx(7.94, abs=1e-9) == blade_geometry.HUB_DIAMETER
+        assert pytest.approx(3.97, abs=1e-9) == blade_geometry.HUB_RADIUS
+        assert pytest.approx(120.97, abs=1e-9) == blade_geometry.TIP_RADIUS_STRUCTURAL
+        assert pytest.approx(4.0, abs=1e-9) == blade_geometry.PRECONE_DEG
 
     def test_hub_radius_from_published_radius(self):
         # HubRad = R / cos(precone) - blade_span, i.e. the published R is not a
@@ -178,7 +179,7 @@ class TestAlmConventions:
         assert len(rows) == 50
         assert all(len(row) == 7 for row in rows)
         geometry = blade_geometry.read_geometry(GEOMETRY)
-        for element, row in zip(rows, geometry):
+        for element, row in zip(rows, geometry, strict=True):
             assert element[0] == pytest.approx(row["axial_distance_m"], abs=1e-9)
             assert element[1] == pytest.approx(row["radius_m"], abs=1e-9)
             assert element[2] == pytest.approx(row["azimuth_deg"], abs=1e-9)
@@ -190,7 +191,7 @@ class TestAlmConventions:
     def test_blade_shape_columns_match_aerodyn(self):
         rows = blade_geometry.read_geometry(GEOMETRY)
         source = blade_geometry.read_blade_table()
-        for row, station in zip(rows, source):
+        for row, station in zip(rows, source, strict=True):
             # The committed CSV carries 10 significant digits.
             assert row["crv_ac_m"] == pytest.approx(station["crv_ac"], abs=1e-9)
             assert row["swp_ac_m"] == pytest.approx(station["swp_ac"], abs=1e-9)
@@ -223,7 +224,7 @@ class TestAlmConventions:
         source = blade_geometry.read_blade_table()
         rows = blade_geometry.read_geometry(GEOMETRY)
         axis, radial, tangential = (-1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (0.0, 1.0, 0.0)
-        for row, station in zip(rows, source):
+        for row, station in zip(rows, source, strict=True):
             point = _v_add(
                 _v_scale(axis, row["axial_distance_m"]),
                 _v_scale(radial, row["radius_m"]),
@@ -295,8 +296,8 @@ class TestPolarConverter:
             parsed = build_polars.parse_airfoilinfo(source)
             emitted = _read_emitted_rows(POLARS / build_polars.OUTPUT_TEMPLATE.format(station=station))
             assert len(emitted) == len(parsed["rows"]) == 200
-            for got, want in zip(emitted, parsed["rows"]):
-                for column, (g, w) in enumerate(zip(got, want)):
+            for got, want in zip(emitted, parsed["rows"], strict=True):
+                for column, (g, w) in enumerate(zip(got, want, strict=True)):
                     assert abs(g - w) <= ROUND_TRIP_TOLERANCE, (
                         f"station {station} column {column}: {g} vs {w}"
                     )
@@ -307,7 +308,7 @@ class TestPolarConverter:
         for station, source in sorted(sources.items()):
             parsed = build_polars.parse_airfoilinfo(source)
             emitted = _read_emitted_rows(POLARS / build_polars.OUTPUT_TEMPLATE.format(station=station))
-            for got, want in zip(emitted, parsed["rows"]):
+            for got, want in zip(emitted, parsed["rows"], strict=True):
                 assert got[3] == pytest.approx(want[3], abs=ROUND_TRIP_TOLERANCE)
         # The physical sign is the standard quarter-chord nose-down at low
         # positive alpha; a flip would make it positive.
@@ -474,21 +475,21 @@ def _parse_foam(text: str) -> dict:
         nonlocal pos
         items: list = []
         while pos < len(tokens):
-            token = tokens[pos]
-            if token == ")":
+            sym = tokens[pos]
+            if sym == ")":
                 pos += 1
                 return items
-            if token == "(":
+            if sym == "(":
                 pos += 1
                 items.append(parse_list())
-            elif token == ";":
+            elif sym == ";":
                 pos += 1
-            elif token.startswith("#"):
+            elif sym.startswith("#"):
                 pos += 1
                 if pos < len(tokens) and tokens[pos].startswith('"'):
                     pos += 1
             else:
-                items.append(token)
+                items.append(sym)
                 pos += 1
         return items
 
@@ -496,24 +497,24 @@ def _parse_foam(text: str) -> dict:
         nonlocal pos
         result: dict = {}
         while pos < len(tokens):
-            token = tokens[pos]
-            if token == "}":
+            sym = tokens[pos]
+            if sym == "}":
                 pos += 1
                 return result
-            if token in (";", "{"):
+            if sym in (";", "{"):
                 pos += 1
                 continue
-            if token.startswith("#"):
+            if sym.startswith("#"):
                 pos += 1
                 if pos < len(tokens) and tokens[pos].startswith('"'):
                     pos += 1
                 continue
-            if token.startswith("$"):
+            if sym.startswith("$"):
                 pos += 1
                 if pos < len(tokens) and tokens[pos] == ";":
                     pos += 1
                 continue
-            key = token
+            key = sym
             pos += 1
             if pos >= len(tokens):
                 result[key] = None
@@ -607,7 +608,7 @@ class TestFvOptions:
         rows = _coeffs(fvoptions)["blades"]["blade1"]["elementData"]
         geometry = blade_geometry.read_geometry(GEOMETRY)
         assert len(rows) == len(geometry) == 50
-        for element, row in zip(rows, geometry):
+        for element, row in zip(rows, geometry, strict=True):
             assert len(element) == 7
             assert float(element[0]) == pytest.approx(
                 row["axial_distance_m"], abs=1e-6
@@ -622,7 +623,7 @@ class TestFvOptions:
     def test_element_twist_sign(self, fvoptions):
         rows = _coeffs(fvoptions)["blades"]["blade1"]["elementData"]
         geometry = blade_geometry.read_geometry(GEOMETRY)
-        for element, row in zip(rows, geometry):
+        for element, row in zip(rows, geometry, strict=True):
             if row["twist_deg"] > 0:
                 assert float(element[5]) < 0
             elif row["twist_deg"] < 0:
@@ -1027,15 +1028,15 @@ class TestCaseSkeleton:
         # work stays inside a refined zone; shrinking any of these would let the
         # deflected tip cross into the coarse background, so pin the absolute
         # numbers here rather than only asserting the nesting ratios.
-        assert generate_case.SNAPPY_DISK_RADIUS == pytest.approx(150.0)
-        assert generate_case.SNAPPY_DISK_HALF_THICKNESS == pytest.approx(10.0)
-        assert generate_case.SNAPPY_WAKE_RADIUS == pytest.approx(170.0)
-        assert generate_case.SNAPPY_WAKE_UPSTREAM == pytest.approx(20.0)
-        assert generate_case.SNAPPY_WAKE_DOWNSTREAM == pytest.approx(470.0)
-        assert generate_case.SNAPPY_TOWER_UPSTREAM == pytest.approx(20.0)
-        assert generate_case.SNAPPY_TOWER_DOWNSTREAM == pytest.approx(470.0)
-        assert generate_case.SNAPPY_TOWER_Z_MIN == pytest.approx(-170.0)
-        assert generate_case.SNAPPY_TOWER_Z_MAX == pytest.approx(10.0)
+        assert pytest.approx(150.0) == generate_case.SNAPPY_DISK_RADIUS
+        assert pytest.approx(10.0) == generate_case.SNAPPY_DISK_HALF_THICKNESS
+        assert pytest.approx(170.0) == generate_case.SNAPPY_WAKE_RADIUS
+        assert pytest.approx(20.0) == generate_case.SNAPPY_WAKE_UPSTREAM
+        assert pytest.approx(470.0) == generate_case.SNAPPY_WAKE_DOWNSTREAM
+        assert pytest.approx(20.0) == generate_case.SNAPPY_TOWER_UPSTREAM
+        assert pytest.approx(470.0) == generate_case.SNAPPY_TOWER_DOWNSTREAM
+        assert pytest.approx(-170.0) == generate_case.SNAPPY_TOWER_Z_MIN
+        assert pytest.approx(10.0) == generate_case.SNAPPY_TOWER_Z_MAX
         # ... and the committed default case renders exactly them (default
         # flow axis y).
         parsed = _parse_foam(
@@ -1214,7 +1215,7 @@ class TestMeshFactor:
 
     def test_default_constant_and_committed_case_unchanged(self, monkeypatch):
         monkeypatch.delenv(generate_case.MESH_FACTOR_ENV, raising=False)
-        assert generate_case.DEFAULT_MESH_FACTOR == pytest.approx(1.0)
+        assert pytest.approx(1.0) == generate_case.DEFAULT_MESH_FACTOR
         assert generate_case.MESH_FACTOR_ENV == "TURBINE_MESH_FACTOR"
         assert generate_case.resolve_mesh_factor() == pytest.approx(1.0)
         # The committed case still carries meshFactor 1 (regeneration is a
@@ -1283,7 +1284,7 @@ class TestDtFactor:
 
     def test_default_constant_and_env_bridge_name(self, monkeypatch):
         monkeypatch.delenv(generate_case.DT_FACTOR_ENV, raising=False)
-        assert generate_case.DEFAULT_DT_FACTOR == pytest.approx(1.0)
+        assert pytest.approx(1.0) == generate_case.DEFAULT_DT_FACTOR
         assert generate_case.DT_FACTOR_ENV == "TURBINE_DT_FACTOR"
         assert generate_case.resolve_dt_factor() == pytest.approx(1.0)
 
@@ -1446,7 +1447,7 @@ class TestVelocitySampling:
 
     def test_default_constant_and_committed_case_unchanged(self, monkeypatch):
         self._clear_env(monkeypatch)
-        assert generate_case.DEFAULT_VELOCITY_SAMPLE_RADIUS == pytest.approx(0.0)
+        assert pytest.approx(0.0) == generate_case.DEFAULT_VELOCITY_SAMPLE_RADIUS
         assert generate_case.DEFAULT_N_VELOCITY_SAMPLES == 20
         assert generate_case.VELOCITY_SAMPLE_RADIUS_ENV == "TURBINE_VELOCITY_SAMPLE_RADIUS"
         assert generate_case.N_VELOCITY_SAMPLES_ENV == "TURBINE_N_VELOCITY_SAMPLES"
