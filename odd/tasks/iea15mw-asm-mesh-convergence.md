@@ -27,6 +27,16 @@ Son **dos cosas separadas** y hay que tratarlas distinto:
 
 Mientras (a) no se cierre, ninguna curva de convergencia es interpretable.
 
+> **Resuelto (2026-10-07).** (a) **no existe**: el brazo de momento, la partición
+> de unidad y `moment()` están correctos y medidos contra los CSV de elemento
+> (cociente de torque nodos/elementos 1,0019 y 1,0026). El `cp` reportado *es* el
+> torque BEM de los elementos. La anomalía es de **cargas**: el ASM-mesh sube el
+> `α` en vez de bajarlo con la inducción, y el sospechoso pasa a ser el ancho de
+> deposición (`2·cbrt(V)`, sin cota de cuerda) sobre la malla refinada. Detalle y
+> evidencia en `odd/tasks/iea15mw-asm-mesh-cp-diagnosis.md`. Los números de la
+> tabla de arriba son de la campaña `asmcmp-2026-10-02`, con código previo a
+> `8898179`: la corrida actual arranca en `cp` 0,9446, igual que el ALM.
+
 ## Etapa 1 — separar "no convergió" de "está mal" (0 corridas, datos en disco)
 
 El run del ASM-mesh ya escribe todo lo necesario: los 147 CSV por elemento (mismas
@@ -97,17 +107,21 @@ esconde.
 
 | # | etapa | costo | por qué en ese lugar |
 | --- | --- | --- | --- |
-| 1 | brazo de momento y partición de unidad | **0 corridas** | cierra (a) antes de interpretar cualquier curva |
-| 2 | leer la corrida `11609926` (config validada) | ya corriendo | si con polares+muestreo+Glauert deja de derivar, media Etapa 2 hecha |
-| 3 | Etapa 2 con el horizonte medido | 40-60 rev | la evidencia de convergencia |
-| 4 | Etapa 3, segunda malla | 1 corrida | demuestra que no es artefacto de resolución |
-| 5 | Etapa 4, acoplado con Aeroelast | el proyecto FSI | recién con el rígido cerrado |
+| 1 | brazo de momento y partición de unidad | **0 corridas** | **cerrada**: el torque nodos/elementos da 1,0019 y 1,0026 |
+| 2 | el ancho de deposición del ASM (`α` contra el ALM) | 1 corrida corta (0,2 rev) | es la anomalía que quedó viva, y manda sobre (b) |
+| 3 | leer la corrida `11609926` (config validada) | ya corriendo | si con polares+muestreo+Glauert deja de derivar, media Etapa 2 hecha |
+| 4 | Etapa 2 con el horizonte medido | 40-60 rev | la evidencia de convergencia |
+| 5 | Etapa 3, segunda malla | 1 corrida | demuestra que no es artefacto de resolución |
+| 6 | Etapa 4, acoplado con Aeroelast | el proyecto FSI | recién con el rígido cerrado |
 
 ## Lo que NO sirve
 
-- **Correr 40 rev sin la Etapa 1**: si el brazo de momento está mal, vas a gastar
-  95 h para obtener una curva de convergencia de una cantidad mal calculada.
+- **Correr 40 rev antes de tocar el ancho de deposición**: el `cp` del ASM-mesh
+  sigue ~2× el del ALM en los primeros 5° de acimut, así que la curva seguiría
+  midiendo una carga que no se puede citar.
 - **Citar el `cp` 0,3205**: hoy es un punto de una trayectoria que se derrumba, no
   un resultado.
 - **Declarar convergencia por el último valor**: sin la tabla por revolución no hay
   evidencia.
+- **Comparar componentes de momento entre frames distintos**: fue el origen del
+  "+73,3e6 / −13,9e6"; el volcado de nodos ya es global (`b2d7ab0`).
