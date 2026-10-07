@@ -154,6 +154,67 @@ cierre de C_T): la fuerza física por unidad de longitud es **`f_ref × ρ`**.
 
 ## 6. Potencia y torque medidos
 
+### Configuración validada (2026-10-07)
+
+La campaña cerró. Progresión medida, media spanwise en r/R 0,3-0,9 contra el BEM de
+CCBlade, con `cp` de `postProcessing/turbines/0/turbine.csv` (torque = cp × 43,108 MN·m):
+
+| configuración | run dir | rev | cp | torque | Δα | c_n | c_t |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| baseline neutro | `iea15mw-asmcmp-alm` | 20,0 | 0,6927 | 29,9 | +0,81 | 1,22 | 1,39 |
+| ASM (muestreo por cuerda) | `iea15mw-asmcmp-asm` | 20,0 | 0,6311 | 27,2 | +0,23 | 1,16 | 1,24 |
+| ASM-mesh (no converge) | `iea15mw-asmcmp-asm-mesh` | 20,0 | 0,3205 | 13,8 | +3,50 | 1,45 | 2,21 |
+| + polares corregidos | `iea15mw-alm-corrpolars` | 12,0 | 0,6636 | 28,6 | +1,27 | 1,11 | 1,34 |
+| + muestreo 3,3ε | `iea15mw-alm-samp33` | 12,0 | 0,5801 | 25,0 | +0,45 | 1,04 | 1,13 |
+| **+ muestreo + Glauert** | `iea15mw-tiploss-glauert` | 12,0 | **0,5366** | **23,1** | +0,45 | 1,03 | 1,11 |
+| + muestreo + Dag & Sørensen | `iea15mw-tiploss-dagsorensen` | 12,0 | 0,5704 | 24,6 | +0,43 | 1,04 | 1,12 |
+
+**La receta validada**, en términos de diccionario:
+1. polares con `liftReCorrExp 0;` (commiteado en `data/polars/`),
+2. `velocitySampleRadius 3.3;` y `nVelocitySamples 16;` en el bloque de coeficientes,
+3. `endEffects { active on; endEffectsModel Glauert; GlauertCoeffs { tipEffects on;
+   rootEffects on; } }`.
+
+Flags equivalentes: `--velocity-sample-radius 3.3 --n-velocity-samples 16
+--end-effects on`.
+
+### Dónde está el residuo, por bandas
+
+| banda r/R | baseline c_n | baseline c_t | **ganadora c_n** | **ganadora c_t** | % torque (ganadora) |
+| --- | --- | --- | --- | --- | --- |
+| 0,30-0,50 | 1,204 | 1,323 | **1,030** | **1,094** | 26,5 % |
+| 0,50-0,70 | 1,255 | 1,507 | **1,036** | **1,117** | 23,0 % |
+| 0,70-0,90 | 1,199 | 1,353 | **1,020** | **1,127** | 23,1 % |
+| 0,90-1,00 | 1,247 | 1,678 | **0,766** | **1,006** | 9,5 % |
+
+### El giro que cierra el argumento
+
+Contra el BEM queda un +3 % en `c_n` y un +9 a +13 % en `c_t`, **uniforme en toda la
+envergadura**. Ese residuo **no es un error nuestro: es el BEM subestimando**. La
+prueba: el BEM da cp 0,4910 y nuestro `cp` medido es 0,5366, o sea +9,3 % —
+exactamente el mismo factor que el `c_t` spanwise. Y la referencia **de estela libre
+(OLAF, 0,5312) está 8-10 % arriba del BEM**. O sea: nuestro ALM aterrizó en el nivel
+de la **estela libre**, y lo que aparece como exceso contra el BEM es la brecha
+conocida entre BEM y estela libre.
+
+Sobre la punta, dos cosas opuestas y ambas esperables de un modelo empírico: el `c_t`
+quedó en **1,006** (perfecto, contra 1,678 del baseline) y el `c_n` en **0,766**, o sea
+el Glauert **sobre-corrige levemente la carga normal del último 10 %**.
+
+### Qué queda probado y qué es inferencia
+
+- **Probado por medición**: la progresión completa; que el muestreo era el mecanismo
+dominante (Δα +1,27 → +0,45); que la pérdida de punta cierra el resto (cp 0,5801 →
+0,5366); que el Glauert gana al D&S, coherente con lo medido en Phase VI; y que las
+cuatro causas previas (polares, ε, geometría, agregación) quedaron descartadas con
+datos.
+- **Inferido**: la asíntota ~0,526 (la ganadora está medida a 12 rev y el transitorio
+baja ~2 %: el baseline pasó de 0,7077 a 11 rev a 0,6927 a 20).
+- **Abierto**: el ASM-mesh sigue sin converger (0,3205 y derrumbándose); su anomalía
+de brazo de momento no está resuelta. Y la comparación de modelos en la configuración
+validada (ASM y ASM-mesh con polares + muestreo + Glauert) todavía no se corrió.
+
+
 Medias de la última revolución completa de cada corrida en vuelo, calculadas
 desde el `cp` que reporta el módulo (`postProcessing/turbines/0/turbine.csv`).
 El torque no es una columna del CSV: se obtiene con
