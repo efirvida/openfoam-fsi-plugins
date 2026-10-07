@@ -251,6 +251,12 @@ rev/h, la castellated ~1-3 rev/h con 112 rangos. Una serie a 20 revs en coarse
 curva de malla que hoy falta — y decide si el ALM valida antes de gastar 95 h en
 la asíntota temporal de **una** malla (que es lo que mide el plan de 40-60 revs).
 
+> **En curso.** La serie está diseñada y lanzada: ver
+> `odd/tasks/iea15mw-alm-convergence-series.md` (job `11610247`,
+> `runs/iea15mw-mconv-*`). Separa los dos ejes con `--dt-factor` (malla fija,
+> paso refinado) porque hoy `deltaT` se deriva de la celda y son la misma
+> palanca.
+
 **Consecuencias que hay que respetar al citar:**
 
 - El 0,559 de P1 es la asíntota de la malla **coarse**, no la de la configuración
