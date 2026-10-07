@@ -1,6 +1,8 @@
 # IEA 15 MW — serie de convergencia del ALM (malla y paso de tiempo)
 
-- **Estado:** corriendo (job `11610247`, `runs/iea15mw-mconv-*`)
+- **Estado:** corriendo en **paralelo**, un job por fase (`11610253` M1, `11610254`
+  M2, `11610255` M3, `11610256` M4, `11610257` M5); run dirs
+  `runs/iea15mw-mconv-*`
 - **Creado:** 2026-10-07
 - **Relacionado:** `odd/tasks/iea15mw-references.md` (configuración validada y el
   eje de malla medido), `odd/issues/asm-mesh-residual-vs-alm.md` (issue #9),
@@ -41,16 +43,30 @@ la resolución (y en M5 sólo el paso, con la malla fija).
 
 | fase | malla | celda | paso | pasos/rev | rev | costo | para qué |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| M1 | medium D/48 | 4,98 m | 0,0498 | 160 | 20 | ~3 h | repone el punto medium a un horizonte convergido |
-| M2 | fine uniforme D/64 | 3,75 m | 0,0375 | 213 | 20 | ~6 h | segunda familia de refinamiento (global, no el disco local) |
-| M3 | snappy L2 | 1,87 m | 0,0187 | 427 | 20 | ~6 h | puente entre la fine uniforme y la castellated |
-| M4 | snappy L3 | 0,94 m | 0,00937 | 852 | 20 | ~26 h | donde vive el 0,5366 del registro (y chequeo de reproducibilidad) |
-| M5 | snappy L3, `--dt-factor 0.5` | 0,94 m | 0,004685 | 1704 | 8 | ~10 h | **eje temporal a malla fija**, contra la ventana de 8 revs de M4 |
+| M1 | medium D/48 | 4,98 m | 0,0498 | 160 | 20 | ~3-6 h | repone el punto medium a un horizonte convergido |
+| M2 | fine uniforme D/64 | 3,75 m | 0,0375 | 213 | 20 | ~6-10 h | segunda familia de refinamiento (global, no el disco local) |
+| M3 | snappy L2 | 1,87 m | 0,0187 | 427 | 20 | ~6-10 h | puente entre la fine uniforme y la castellated |
+| M4 | snappy L3 | 0,94 m | 0,00937 | 852 | 20 | ~26-50 h | donde vive el 0,5366 del registro (y chequeo de reproducibilidad) |
+| M5 | snappy L3, `--dt-factor 0.5` | 0,94 m | 0,004685 | 1704 | 8 | ~10-20 h | **eje temporal a malla fija**, contra la ventana de 8 revs de M4 |
 
 M1..M3 + el punto coarse que ya existe (`runs/iea15mw-alm-20rev`, misma config,
-20 rev) completan una serie espacial de **cuatro puntos en ~15 h**. M4 agrega el
-punto fino y M5 el chequeo temporal. Total ~51 h, en una asignación de 72 h con
-guarda de tiempo por fase: la que no entra se saltea y se nombra en el log.
+20 rev) completan una serie espacial de **cuatro puntos**. M4 agrega el punto fino
+y M5 el chequeo temporal.
+
+**Modo de envío.** Las fases son independientes (cada una con su run dir, sin
+dependencias), así que van como **jobs separados en paralelo**
+(`TURBINE_MCONV_PHASE=M1..M5`, un `sbatch --time=` por fase): el wall clock pasa a
+ser el de la fase más larga en vez de la suma, y cada fase sobrevive o se reintenta
+por su cuenta. El script también soporta el modo serie en una asignación
+(`TURBINE_MCONV_PHASE=all`, el default) con guarda de tiempo por fase, como
+fallback para cuando la cola está ajustada.
+
+Los límites de pared por fase (12/20/20/72/24 h) son generosos a propósito: la
+medición de M1 en vuelo (0,5 rev en 8,4 min = 3,6 rev/h contra los 7,3 rev/h del
+mismo caso en la campaña) sugiere co-tenencia en los nodos, así que **los costos
+de arriba pueden ser 2× optimistas**. Si una fase muere por límite, su run dir
+queda resumible y se reenvía sin perder nada (el runner retoma de `latestTime` y
+escribe cada 60°).
 
 ## Criterio de aceptación (escrito antes de correr)
 
