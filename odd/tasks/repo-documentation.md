@@ -57,14 +57,14 @@ reconciled at merge).
 
 | ID | S# | Task | Route | Commit |
 | --- | --- | --- | --- | --- |
-| D1 | S9 | Write `solidBodyDisplacementLaplacianZone/README.md` (motion model, zone semantics, AMI protection, dict reference) | inline | pending |
-| D2 | S9 | Write `dynamicOversetZoneDisplacementFvMesh/README.md` (why it exists, overset usage, footer) | inline | pending |
-| D3 | S9 | Write `fsiOmega/README.md` (Function1 contract with the adapter, data flow) | inline | pending |
-| D4 | S4, S9 | Rewrite `precice-openfoam-adapter/README.md` as a fork README with a divergence section | inline | pending |
-| D5 | S2, S3, S7 | Rewrite the root `README.md`: purpose, AeroElast framing, preCICE independence, pieces table, quickstart, doc map | inline | pending |
-| D6 | S5, S8 | Add "Why these plugins and not the alternatives": verifiable capability differences plus the pending-rationale placeholder | inline | pending |
-| D7 | S4 | Fix the stale repository name (`AGENTS.md`, `turbinesFoam/README.md` clone URL) | inline | pending |
-| D8 | — | `CHANGELOG.md` entry for the documentation change | inline | pending |
+| D1 | S9 | Write `solidBodyDisplacementLaplacianZone/README.md` (motion model, zone semantics, AMI protection, dict reference) | inline | `f0c4950` |
+| D2 | S9 | Write `dynamicOversetZoneDisplacementFvMesh/README.md` (why it exists, overset usage, footer) | inline | `f0c4950` |
+| D3 | S9 | Write `fsiOmega/README.md` (Function1 contract with the adapter, data flow) | inline | `f0c4950` |
+| D4 | S4, S9 | Rewrite `precice-openfoam-adapter/README.md` as a fork README with a divergence section | inline | `6abfd2a` |
+| D5 | S2, S3, S7 | Rewrite the root `README.md`: purpose, AeroElast framing, preCICE independence, pieces table, quickstart, doc map | inline | `6abfd2a` |
+| D6 | S5, S8 | Add "Why these plugins and not the alternatives": verifiable capability differences plus the pending-rationale placeholder | inline | `6abfd2a` |
+| D7 | S4 | Fix the stale repository name (`AGENTS.md`, `turbinesFoam/README.md` clone URL) | inline | `56d715e` |
+| D8 | — | `CHANGELOG.md` entry for the documentation change | inline | `56d715e` |
 | D9 | S6, S10 | Document the rename cost and the deprecation options; publish separately | deferred | pending |
 
 ## Log
@@ -94,3 +94,11 @@ reconciled at merge).
   same document minus the ASM-MESH, nacelle, `geometry/` and rotational-augmentation content
   (`git diff main feat/nacelle-actuator-surface -- README.md` = +77/−11). The rewrite targets
   `main`; at merge, the branch's extra validation sections are re-added as links.
+
+- **L4** (parent, delivery): D1–D8 landed on `main` in three work units — `f0c4950`
+  (the three missing per-plugin READMEs), `6abfd2a` (root README as a landing page plus the
+  adapter fork README), `56d715e` (stale repository name in `AGENTS.md` and
+  `turbinesFoam/README.md`, plus the `CHANGELOG.md` entry). Check run: all 35 relative
+  Markdown links across the six touched documents resolve to existing files. No source file,
+  case dictionary or plugin name was modified, and no physics changed. D9 (rename cost and
+  deprecation options) stays deferred: plugin names are unchanged by design (S10).
