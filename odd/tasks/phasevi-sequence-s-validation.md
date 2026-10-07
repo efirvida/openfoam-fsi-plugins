@@ -10,13 +10,18 @@ Sequence S** real, aprovechando el archivo crudo completo que ya vive en el repo
 - **Definición experimental:** `turbinesFoam/articles/29955.pdf`
   (NREL/TP-500-29955), sha256
   `822ee980e97780599ad4ec1dc8b4cc8ad41131b0cbbdffa19999d571f6ce4958`
-- **Insumo nuevo:** `turbinesFoam/articles/uae6/` — 106 puntos de ensayo
-  Sequence S en crudo (`.hd1` + `.eng`) + Parquet, `channels.csv` (285 canales)
-  y `manifest.csv`
+- **Insumo nuevo:** `turbinesFoam/articles/uae6/` — **522 puntos de ensayo en 8
+  secuencias** (H, J, L, O, P, S, T, U) en crudo (`.hd1` + `.eng`) + Parquet,
+  `channels.csv` (285 canales) y `manifest.csv`
+- **Catálogo y selección:** `data/experiment/uae6-archive/CATALOG.md` — definición,
+  inventario cruzado, gramática del nombre y evaluación de qué secuencia validar
 - **Decisión del usuario (2026-10-07):** la secuencia de validación es
-  **Sequence S** (7 m/s puntual y curva a 0° yaw). Sequence H queda diferida; el
-  usuario busca el archivo crudo H. El diseño queda **agnóstico de secuencia**
-  para poder sumar H sin rediseñar.
+  **Sequence S** (7 m/s puntual y curva a 0° yaw), y pidió documentar el resto de
+  lo descargado para poder evaluar cuál conviene. El archivo crudo ya trae las 8
+  secuencias, **H incluida**, así que la recomendación del catálogo es **S como
+  principal y H como confirmación independiente**: mismo rig, mismo pitch 3°,
+  mismas 21 velocidades a 0° yaw — cambia sólo la referencia. El diseño queda
+  **agnóstico de secuencia**.
 
 ## Por qué
 
@@ -99,14 +104,14 @@ Leídas directamente, no inferidas.
       cruzada crudo-vs-workbook.
 - **Evidencia:** commit `9a4c932`; issue #8 de GitHub sincronizado.
 
-### S1 — Procedencia versionada del dataset Sequence S
-- [ ] `scripts/extractSequenceSReference.py` (committed): lee el Parquet del
+### S1 — Procedencia versionada del archivo UAE6
+- [ ] `scripts/extractUAE6Reference.py` (committed): lee el Parquet del
       archivo, decodifica `<stem>` como `s<WW><YYYY><R>` (velocidad, yaw en
       grados, repetición), enmascara `err != 128`, y emite las dos tablas con el
       **esquema exacto** de `load_experiment` (`file_name`, `sequence`,
       `wind_speed_m_s`, `yaw_token`, `yaw_deg`, `repetition`, `rpm`, `tsr`,
       `rotpow_kw`, `lsstqcor_nm`, `eaeroth_n`, … / `r_over_R`, `cn`, `ct`, `cm`).
-- [ ] Salida a `data/experiment/sequence-s-archive/` + `PROVENANCE.md` con:
+- [ ] Salida a `data/experiment/uae6-archive/` + `PROVENANCE.md` con:
       definición (reporte + sha256 del PDF), la regla del nombre y su verificación
       contra el canal `YAW`, el cruce de inventario contra la Tabla C-18, el
       sha256 del inventario del archivo y la fecha de extracción.
@@ -158,7 +163,9 @@ Leídas directamente, no inferidas.
 - [ ] Generalizar `sequence_s` a una tabla de velocidades (`sequence_s.speeds`)
       manteniendo la fila de 7 m/s como default, y extender `select_speed`/
       `assert_tsr_matches_experiment` sin cambiar el comportamiento de H (D4).
-- [ ] Habilitar los 21 puntos S a 0° yaw en el runner y en el comparador.
+- [ ] Habilitar los 21 puntos a 0° yaw de la secuencia elegida (S y, si se
+      confirma, H) en el runner y en el comparador. Extra barato: T (2°) y U (4°)
+      como sensibilidad de pitch.
 - **AC:** `--sequence S` acepta las 21 velocidades; H sigue byte-idéntico; un
   test fija el TSR de cada velocidad contra la tabla derivada en S1.
 
@@ -178,8 +185,9 @@ Leídas directamente, no inferidas.
 configuración del caso; comparador y referencia experimental; la corrida de
 validación; tests y documentación del paquete.
 
-**Out:** ASM y ASM-mesh (el alcance es ALM); Sequence H (diferida); push, PR y
-merge; la matriz de augmentación antes de que S2 la justifique.
+**Out:** ASM y ASM-mesh (el alcance es ALM); las secuencias estacionadas L y O y
+la de visualización P; push, PR y merge; la matriz de augmentación antes de que
+S2 la justifique.
 
 ## Registro de evidencia
 
@@ -189,6 +197,9 @@ merge; la matriz de augmentación antes de que S2 la justifique.
 | 2026-10-07 | Anclas de código leídas y fijadas | OK (tabla de anclas) |
 | 2026-10-07 | S3: `--check` sale 0 y `git diff -- case/` vacío | OK, render por defecto byte-idéntico |
 | 2026-10-07 | S3: `turbinesFoam/tests/` completo | **245 passed, 3 skipped** |
+| 2026-10-07 | Inventario de las 8 secuencias vs las tablas C-7…C-20 del reporte | **522 = 522**, las 8 cierran |
+| 2026-10-07 | Crudo vs workbook para `h0700000` (además de `s0700000`) | idéntico → H también queda corroborada por bytes |
+| 2026-10-07 | Catálogo de secuencias y evaluación de candidatas | `data/experiment/uae6-archive/CATALOG.md` |
 
 ## Registro de commits
 
@@ -196,3 +207,4 @@ merge; la matriz de augmentación antes de que S2 la justifique.
 | --- | --- |
 | `9a4c932` | S0 — issue #8 + doc de feature |
 | `c99e09e` | S3 — muestreo y exponente de Re renderizables |
+| _(catálogo)_ | Catálogo de las 8 secuencias + selección de candidata |

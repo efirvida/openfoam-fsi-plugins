@@ -4,6 +4,7 @@
 - **Alcance:** **sólo ALM** (sin ASM ni asm-mesh)
 - **Creado:** 2026-10-07 · **Revisado:** 2026-10-07 (correcciones C1–C3 + reorientación a Sequence S)
 - **Paquete:** `turbinesFoam/validation/phaseVI/`
+- **Catálogo de secuencias disponibles:** `data/experiment/uae6-archive/CATALOG.md`
 - **Feature:** `odd/tasks/phasevi-sequence-s-validation.md`
 - **Relacionado:** `odd/tasks/iea15mw-references.md` (la configuración validada del IEA),
   `odd/tasks/phasevi-tip-correction-dagsorensen.md`, `odd/tasks/phasevi-endeffect-diagnostic.md`,
@@ -14,7 +15,7 @@
 | # | Defecto | Corrección |
 | --- | --- | --- |
 | **C1** | Las estaciones spanwise de aceptación decían **25/35/60/82/92 %**. Esas son de MEXICO, no del Phase VI | Las instrumentadas reales son **30/47/63/80/95 %**. Coinciden tres fuentes: `data/experiment/PROVENANCE.md`, el README del paquete y las 22 descripciones por estación de `articles/uae6/channels.csv` |
-| **C2** | La Etapa 3 validaba contra **secuencia H**, que no tiene respaldo crudo en el repo | La secuencia de validación pasa a ser **Sequence S**. H queda diferida hasta que aparezca su archivo crudo |
+| **C2** | La Etapa 3 validaba contra **secuencia H** sin archivo crudo en el repo | El archivo crudo ahora trae **las 8 secuencias (522 puntos)**, H incluida. La selección pasa a ser una decisión documentada en el catálogo: **S como principal, H como confirmación independiente** |
 | **C3** | El archivo experimental real de Sequence S no estaba registrado en el issue | Se registra abajo, con la verificación que lo respalda |
 
 ### Por qué
@@ -66,15 +67,39 @@ Dos consecuencias:
 2. El paquete usa hoy **una sola fila S** (7 m/s) y 6 filas H, todas del workbook. El archivo
    crudo trae 21 velocidades a 0° yaw.
 
+### Qué trae el archivo hoy
+
+Cuando se abrió este issue el archivo era una sola campaña. Ahora trae **las 8
+secuencias del Phase VI, 522 puntos de ensayo**, cada una con su inventario
+cerrando contra la tabla correspondiente del reporte:
+
+| secuencia | puntos | (F)/(P) | rotor | pitch | presión de pala | 0° yaw |
+| --- | --- | --- | --- | --- | --- | --- |
+| H | 163 | (F) | girando | 3° | sí | 21 velocidades |
+| S | 106 | (F) | girando | 3° | sí | 21 velocidades |
+| J | 55 | (F) | girando | 6° | sí | 21 velocidades |
+| T | 21 | (F) | girando | 2° | sí | 21 velocidades |
+| U | 21 | (F) | girando | 4° | sí | 21 velocidades |
+| O | 131 | (P) | **estacionado** | sinusoidal | sí | — |
+| P | 19 | (P) | girando | 3°/12° | sólo visualización | 4 |
+| L | 6 | (P) | **estacionado** | rampa/escalón | sí | — |
+
+`(F)` = condiciones representativas de operación de campo; `(P)` = condiciones
+diseñadas para explorar física específica (leyenda de la Tabla 1 del reporte).
+El detalle, la gramática del nombre de archivo verificada contra el canal `YAW`,
+el cruce de inventario y la evaluación completa están en
+`data/experiment/uae6-archive/CATALOG.md`.
+
 ### Dos cosas que el archivo NO es
 
-- **No está versionado.** `turbinesFoam/.gitignore` ignora `/articles/` entero: el README, el
-  conversor, `channels.csv`, `manifest.csv`, los 2,15 GiB crudos, los 1,24 GiB de Parquet y
-  el propio `29955.pdf` son *untracked*. Un clon limpio no tiene nada. Por eso la **S1** de la
-  feature crea un registro de procedencia **dentro** del paquete de validación, que sí se
-  versiona.
-- **No trae Sequence H.** El archivo es `uae6.z18.00.s*` y nada más. H existe hoy sólo como
-  fila del workbook, sin corroboración por bytes.
+- **No está versionado.** `turbinesFoam/.gitignore` ignora `/articles/` entero:
+  el README, el conversor, `channels.csv`, `manifest.csv`, los 6 GiB crudos, los
+  Parquet y el propio `29955.pdf` son *untracked*. Un clon limpio no tiene nada.
+  Por eso la **S1** de la feature crea un registro de procedencia **dentro** del
+  paquete de validación, que sí se versiona.
+- **No convierte a todas las secuencias en candidatas.** Que los datos existan no
+  los hace validables con el ALM: L y O tienen el rotor **estacionado** y P no
+  tiene cargas cuantitativas.
 
 ## La configuración a aplicar (el patrón validado)
 
@@ -132,11 +157,12 @@ integrar cuánto vale en potencia. Eso decide si la Etapa 5 existe.
 - **Librería al día**: `libturbinesFoam.so` recompilada el 2026-10-07 14:02 con todo el árbol
   actual (incluye el fix de `writeNodeCsv`). No hace falta recompilar salvo que se toque C++.
 - **Datos experimentales**: `data/experiment/sequence_{H,S}_{performance,spanwise}.csv` con
-  `PROVENANCE.md` (workbook WDH). Para Sequence S quedan **corroborados por el crudo**; para H
-  son la única fuente.
-- **El archivo crudo Sequence S**: `articles/uae6/` — 106 puntos, 285 canales, 30 s a 520,83 Hz
-  (más los dos sweeps de 6 min), Parquet listo para pandas/polars. Trae ya derivados `CN/CT/CM`
-  y `QNORM` en las cinco estaciones, `B3AZI` (azimut) y el byte `err` por frame.
+  `PROVENANCE.md` (workbook WDH). Para H y S quedan **corroborados por el crudo** (ver el
+  catálogo).
+- **El archivo crudo**: `articles/uae6/` — **522 puntos de ensayo en 8 secuencias**, 285
+  canales, 30 s a 520,83 Hz (más los sweeps de 6 min), Parquet listo para pandas/polars.
+  Trae ya derivados `CN/CT/CM` y `QNORM` en las cinco estaciones, `B3AZI` (azimut), la
+  densidad y el estado del túnel (`WTBARO`, `WTATEMP`, `RHOTUN`) y el byte `err` por frame.
 - **Polares**: `data/polars/` + `data/polars/raw/` con procedencia documentada (y la advertencia
   de que el scaffold `S809_Re1M_extended` no se usa: tiene `Cm` invertidos).
 - **El generador**: `tools/generate_case.py` con `--rotational-augmentation`, `--root-effects`,
@@ -149,8 +175,8 @@ integrar cuánto vale en potencia. Eso decide si la Etapa 5 existe.
 
 - **No correr la matriz de augmentación** (la Etapa 5) antes de la Etapa 1: si el bug de polares
   explica el exceso, esa matriz mide un fantasma.
-- **No validar contra Sequence H** hasta que el archivo crudo H esté en el repo: hoy H sólo
-  existe como fila del workbook, sin corroboración por bytes.
+- **No validar contra una secuencia estacionada** (L, O) ni contra P: el ALM modela
+  un rotor girando y P no tiene cargas. La selección está argumentada en el catálogo.
 - **No citar el archivo de `articles/uae6/` como versionado**: está gitignored. Si algo tiene
   que sobrevivir a un clon limpio, va al paquete, no a `articles/`.
 - **No tocar el ASM/asm-mesh** en esta campaña: el alcance es ALM.
