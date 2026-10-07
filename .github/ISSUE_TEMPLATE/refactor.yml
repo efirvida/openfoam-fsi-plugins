@@ -69,6 +69,7 @@ body:
         The plugin this refactor changes. The other plugins listed stay
         unmodified.
       options:
+        - repository-wide
         - turbinesFoam
         - precice-openfoam-adapter
         - fsiOmega
