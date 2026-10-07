@@ -490,6 +490,15 @@ boundaryField
 """
 
 
+# Source defaults of `axialFlowTurbineALSource` (`velocitySampleRadius` 0.0,
+# `nVelocitySamples` 20) and of `profileData::updateRe` (`liftReCorrExp` 0.23).
+# `config/case.yaml` carries the same values, so the committed render omits the
+# three keys and stays byte-identical; the matching flags override them.
+SAMPLE_RADIUS_DEFAULT = 0.0
+SAMPLE_COUNT_DEFAULT = 20
+LIFT_RE_CORR_EXP_DEFAULT = 0.23
+
+
 def render_fv_options(
     cfg: dict[str, Any],
     speed: str,
@@ -506,6 +515,9 @@ def render_fv_options(
     tip_effects: bool | None = None,
     tip_correction: bool | None = None,
     polar: str | None = None,
+    velocity_sample_radius: float | None = None,
+    n_velocity_samples: int | None = None,
+    lift_re_corr_exp: float | None = None,
 ) -> str:
     """ALM/ASM/ASM-mesh twins rendered from one function.
 
@@ -531,6 +543,14 @@ def render_fv_options(
     `actuator.end_effects.tip`. `tip_correction` renders the Dag & Sorensen
     `tipCorrection` block beside `endEffects` and defaults to
     `actuator.tip_correction.active` (off for the committed case).
+
+    `velocity_sample_radius` and `n_velocity_samples` override the
+    `actuator.velocity_sampling` block and render the two keys at the
+    rotor-coeffs level, where `axialFlowTurbineALSource` reads them. The source
+    defaults (0.0 and 20, i.e. no sampling) render no key, so the committed case
+    stays byte-identical. `lift_re_corr_exp` overrides `profile.lift_re_corr_exp`
+    and renders `liftReCorrExp` inside the `profileData/S809` subdict, beside the
+    `Re` statement it modifies; the 0.23 source default renders no key.
     """
     values = kinematics(cfg, speed, mesh, sequence)
     turbine = cfg["turbine"]
@@ -541,6 +561,40 @@ def render_fv_options(
     # single-Re OSU Re = 1e6 baseline is used.
     polar_name = polar or "S809_OSU_Re1M_total.dat"
     polars = os.path.relpath(POLARS_DIR / polar_name, case_dir / "system")
+    sampling = actuator.get("velocity_sampling") or {}
+    sample_radius = (
+        float(sampling.get("velocity_sample_radius", SAMPLE_RADIUS_DEFAULT))
+        if velocity_sample_radius is None
+        else float(velocity_sample_radius)
+    )
+    n_samples = (
+        int(sampling.get("n_velocity_samples", SAMPLE_COUNT_DEFAULT))
+        if n_velocity_samples is None
+        else int(n_velocity_samples)
+    )
+    if sample_radius < 0.0:
+        raise ValueError("velocitySampleRadius must be zero or positive")
+    if n_samples <= 0:
+        raise ValueError("nVelocitySamples must be a positive integer")
+    sampling_block = ""
+    if sample_radius != SAMPLE_RADIUS_DEFAULT or n_samples != SAMPLE_COUNT_DEFAULT:
+        sampling_block = (
+            f"\n        velocitySampleRadius {sample_radius:.8g};"
+            f"\n        nVelocitySamples {n_samples};"
+        )
+    # `profileData` reads the exponent from its own subdict; the source default is
+    # 0.23, so the committed render stays byte-identical.
+    re_corr_cfg = cfg.get("profile") or {}
+    lift_exp = (
+        float(re_corr_cfg.get("lift_re_corr_exp", LIFT_RE_CORR_EXP_DEFAULT))
+        if lift_re_corr_exp is None
+        else float(lift_re_corr_exp)
+    )
+    re_corr_line = (
+        ""
+        if lift_exp == LIFT_RE_CORR_EXP_DEFAULT
+        else f"\n                liftReCorrExp {lift_exp:.8g};"
+    )
     profiles = " ".join(blade_element_profiles(cfg))
     if n_chordwise is None:
         n_chordwise = int(actuator["n_chordwise"])
@@ -641,7 +695,7 @@ def render_fv_options(
         freeStreamVelocity ({values['speed']:.8g} 0 0);
         tipSpeedRatio {values['tsr']:.8g};
         rotorRadius {float(turbine['radius']):.8g};
-        azimuthalOffset 0;
+        azimuthalOffset 0;{sampling_block}
 
         dynamicStall
         {{
@@ -700,7 +754,7 @@ def render_fv_options(
         {{
             S809
             {{
-                Re 1e6;
+                Re 1e6;{re_corr_line}
                 GaussianCoeffs
                 {{
                     chordFactor 0.25;
@@ -737,6 +791,9 @@ def outputs(
     tip_effects: bool | None = None,
     tip_correction: bool | None = None,
     polar: str | None = None,
+    velocity_sample_radius: float | None = None,
+    n_velocity_samples: int | None = None,
+    lift_re_corr_exp: float | None = None,
 ) -> dict[Path, str]:
     system = case_dir / "system"
     constant = case_dir / "constant"
@@ -758,6 +815,9 @@ def outputs(
             tip_effects=tip_effects,
             tip_correction=tip_correction,
             polar=polar,
+            velocity_sample_radius=velocity_sample_radius,
+            n_velocity_samples=n_velocity_samples,
+            lift_re_corr_exp=lift_re_corr_exp,
         ),
         system / "fvOptions.ASM": render_fv_options(
             cfg, speed, mesh, case_dir, ASM_ELEMENT, sequence, n_chordwise,
@@ -767,6 +827,9 @@ def outputs(
             tip_effects=tip_effects,
             tip_correction=tip_correction,
             polar=polar,
+            velocity_sample_radius=velocity_sample_radius,
+            n_velocity_samples=n_velocity_samples,
+            lift_re_corr_exp=lift_re_corr_exp,
         ),
         system / "fvOptions.ASM-MESH": render_fv_options(
             cfg,
@@ -783,6 +846,9 @@ def outputs(
             root_effects=root_effects,
             tip_effects=tip_effects,
             tip_correction=tip_correction,
+            velocity_sample_radius=velocity_sample_radius,
+            n_velocity_samples=n_velocity_samples,
+            lift_re_corr_exp=lift_re_corr_exp,
         ),
         constant / "transportProperties": render_transport_properties(cfg),
         constant / "turbulenceProperties": render_turbulence_properties(cfg, solver),
@@ -825,6 +891,13 @@ def _positive_int(value: str) -> int:
     number = int(value)
     if number <= 0:
         raise argparse.ArgumentTypeError("must be a positive integer")
+    return number
+
+
+def _non_negative_float(value: str) -> float:
+    number = float(value)
+    if number < 0.0:
+        raise argparse.ArgumentTypeError("must be zero or positive")
     return number
 
 
@@ -918,6 +991,35 @@ def main(argv: list[str] | None = None) -> int:
         help="render the Dag & Sorensen tip-correction switch; default from "
              "config/case.yaml (off). `on` is the campaign arm",
     )
+    parser.add_argument(
+        "--velocity-sample-radius",
+        type=_non_negative_float,
+        default=None,
+        metavar="R",
+        help="override the actuator element inflow sampling radius, in units "
+             "of the element projection epsilon; the config/case.yaml value "
+             "(0.0, the source default, renders no key) applies unless "
+             "overridden. The validated Phase VI method uses 3.3",
+    )
+    parser.add_argument(
+        "--n-velocity-samples",
+        type=_positive_int,
+        default=None,
+        metavar="N",
+        help="override the number of inflow samples per element; the "
+             "config/case.yaml value (20, the source default, renders no key) "
+             "applies unless overridden. The validated Phase VI method uses 16",
+    )
+    parser.add_argument(
+        "--lift-re-corr-exp",
+        type=_non_negative_float,
+        default=None,
+        metavar="N",
+        help="override the profileData Reynolds-rescaling exponent; the "
+             "config/case.yaml value (0.23, the source default, renders no key) "
+             "applies unless overridden. The Phase VI validation uses 0 to "
+             "disable the rescaling that the declared `Re 1e6` would apply",
+    )
     parser.add_argument("--case-dir", type=Path, default=DEFAULT_CASE_DIR)
     parser.add_argument("--end-revs", type=float, default=None)
     parser.add_argument("--start-from", choices=START_FROM_CHOICES, default="startTime")
@@ -964,6 +1066,9 @@ def main(argv: list[str] | None = None) -> int:
             tip_effects=tip_effects,
             tip_correction=tip_correction,
             polar=args.polar,
+            velocity_sample_radius=args.velocity_sample_radius,
+            n_velocity_samples=args.n_velocity_samples,
+            lift_re_corr_exp=args.lift_re_corr_exp,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)

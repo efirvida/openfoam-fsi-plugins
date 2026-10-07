@@ -3,119 +3,196 @@
 Rediseñar y ejecutar la validación del ALM de NREL Phase VI contra la **campaña
 Sequence S** real, aprovechando el archivo crudo completo que ya vive en el repo.
 
-- **Issue:** #8 `Phase VI: redisenar la validacion del ALM con la configuracion
-  validada en el IEA` (`odd/issues/phasevi-alm-validation-redesign.md`)
+- **Issue:** #8 `Phase VI: reorientar la validacion del ALM a la campana Sequence S`
+  (`odd/issues/phasevi-alm-validation-redesign.md`)
 - **Paquete:** `turbinesFoam/validation/phaseVI/`
+- **Rama:** `feat/phasevi-sequence-s`
 - **Definición experimental:** `turbinesFoam/articles/29955.pdf`
   (NREL/TP-500-29955), sha256
   `822ee980e97780599ad4ec1dc8b4cc8ad41131b0cbbdffa19999d571f6ce4958`
 - **Insumo nuevo:** `turbinesFoam/articles/uae6/` — 106 puntos de ensayo
-  Sequence S en crudo (`.hd1` + `.eng`) + conversión Parquet, `channels.csv`
-  (285 canales) y `manifest.csv`
+  Sequence S en crudo (`.hd1` + `.eng`) + Parquet, `channels.csv` (285 canales)
+  y `manifest.csv`
 - **Decisión del usuario (2026-10-07):** la secuencia de validación es
-  **Sequence S** (7 m/s puntual y curva de potencia a 0° yaw). Sequence H queda
-  fuera por ahora; el usuario está buscando el archivo crudo H. El diseño debe
-  quedar **agnóstico de la secuencia** para poder sumar H sin rediseñar.
+  **Sequence S** (7 m/s puntual y curva a 0° yaw). Sequence H queda diferida; el
+  usuario busca el archivo crudo H. El diseño queda **agnóstico de secuencia**
+  para poder sumar H sin rediseñar.
 
 ## Por qué
 
 El paquete valida hoy contra `data/experiment/*.csv`, derivado del workbook WDH
 `wt_loads_statistics.xls` (medias de registros, 0° yaw, 5 estaciones): 6 filas H
-+ **1 sola fila S**. El archivo crudo de Sequence S trae la medición completa —
-y su inventario cierra exactamente contra la Tabla C-18 del reporte (104
-archivos de 30 s + 2 de 6 min = 106).
++ **1 sola fila S**. El archivo crudo de Sequence S trae la medición completa.
 
-Evidencia ya verificada (2026-10-07, esta sesión):
+Evidencia ya verificada (2026-10-07):
 
 | Chequeo | Resultado |
 | --- | --- |
-| Inventario local vs Tabla C-18 (p. 202 / PDF 212) | 106 = 106, coincide el desglose 104 × 30 s + 2 × 6 min |
+| Inventario local vs Tabla C-18 (p. 202 / PDF 212) | **106 = 106**; coincide el desglose **104 × 30 s + 2 × 6 min** |
 | `articles/29955.pdf` sha256 vs el `29955_nlr.pdf` del openspec | idéntico (`822ee980…ce4958`) |
-| `s07ysu00` / `s10ysu00` = 199 502 frames (383 s) | son los barridos de yaw a 1°/s que el reporte describe para 7 y 10 m/s |
-| Convención `SWWYYYYR` (p. 212) vs canal medido `YAW` | token `0050`→5,05°; `0100`→10,02°; `0200`→20,02°; `0300`→29,95°; `0450`→44,98°; `0600`→59,98°; `0750`→75,04°; `0900`→90,04°; `1350`→135,06° |
-| Crudo `s0700000` vs `data/experiment/sequence_S_performance.csv` | rpm 71,8667 / 6,0304 kW / 801,265 Nm / 1149,53 N — idéntico |
-| Crudo `s0700000` vs `sequence_S_spanwise.csv` (5 estaciones) | cn/ct/cm idénticos dígito a dígito |
-| Cobertura 0° yaw | **21 velocidades** (5…25 m/s) — curva de potencia completa |
-| Cobertura de yaw | juego completo (5/10/20/30/45/60/75/90/135/180°) a 5, 7, 10 y 15 m/s; 5°/10° en el resto |
+| `s07ysu00` / `s10ysu00` = 199 502 frames (383 s) | los barridos de yaw a 1°/s que el reporte describe para 7 y 10 m/s |
+| Convención `SWWYYYYR` (p. 212) vs canal medido `YAW` | `0050`→5,05°; `0100`→10,02°; `0200`→20,02°; `0300`→29,95°; `0450`→44,98°; `0600`→59,98°; `0750`→75,04°; `0900`→90,04°; `1350`→135,06° |
+| Crudo `s0700000` vs `data/experiment/sequence_S_performance.csv` | rpm 71,8667 / 6,0304 kW / 801,265 Nm / 1149,53 N — **idéntico** |
+| Crudo `s0700000` vs `sequence_S_spanwise.csv` | cn/ct/cm de las 5 estaciones, **idénticos dígito a dígito** |
+| Cobertura 0° yaw | **21 velocidades** (5…25 m/s) |
+| Cobertura de yaw | juego completo a 5, 7, 10 y 15 m/s; 5°/10° en el resto |
 
-Dos defectos detectados en el issue #8 que esta feature corrige:
+Dos consecuencias: (1) el workbook queda **corroborado** por los bytes crudos;
+(2) el paquete usa hoy una sola fila S y el archivo trae 21 velocidades a 0°.
 
-1. Las estaciones spanwise de aceptación están escritas como **25/35/60/82/92 %**
-   (son de MEXICO). Las reales del Phase VI son **30/47/63/80/95 %**
-   (`PROVENANCE.md`, README del paquete y `channels.csv` coinciden).
-2. La Etapa 3 apuntaba a **secuencia H**, sin respaldo crudo en el repo.
+Dos defectos del issue que esta feature corrige: estaciones spanwise escritas
+como 25/35/60/82/92 % (son de MEXICO; las reales son 30/47/63/80/95 %) y la
+Etapa 3 apuntando a secuencia H sin respaldo crudo.
 
-## Alcance
+## Anclas verificadas en el código
 
-**In:** el issue #8; la procedencia versionada del dataset Sequence S; el
-generador y los polares de Phase VI; el comparador; la corrida de validación ALM
-a 7 m/s; tests y documentación del paquete.
+Leídas directamente, no inferidas.
 
-**Out:** ASM y ASM-mesh (el alcance es ALM); Sequence H (diferida hasta que
-aparezca el crudo); push, PR y merge; la matriz de augmentación antes de que el
-residuo la justifique.
+| Qué | Ancla |
+| --- | --- |
+| Bloque `axialFlowTurbineALSourceCoeffs` renderizado | `tools/generate_case.py:633` (dentro de `render_fv_options`, `:493`) |
+| `Re 1e6;` y `GaussianCoeffs` viven en `…Coeffs.profileData.S809` | `generate_case.py:~703-711` |
+| `meshFactor` sale de `turbine['gaussian_mesh_factor']` | `generate_case.py:708` |
+| `velocitySampleRadius` / `nVelocitySamples` los lee el source | `src/fvOptions/axialFlowTurbineALSource/axialFlowTurbineALSource.C:358-364` (`coeffs_.lookupOrDefault`, defaults 0.0 y 20) |
+| Nivel donde deben quedar | `axialFlowTurbineALSourceCoeffs` (el `coeffs_` del source) |
+| `Re` y `liftReCorrExp` los lee `profileData` de **su propio** diccionario | `src/…/profileData/profileData.C:137` y `:714` (default 0.23) |
+| Los polares `.dat` **no** declaran `Re` | formato `(alpha Cl Cd Cm)` + comentarios `//`; sólo `S809_multiRe.dat` tiene `tableType multiRe;` / `ReList` |
+| Referencia experimental del comparador | `scripts/comparePhaseVI.py:143` `load_experiment` → `sequence_{sequence}_{performance,spanwise}.csv`; banda ±15 % en `:67` y `:598`; banda spanwise en `:68-69` y `:632-637` |
+| `EXPERIMENT_DIR` y validación TSR | `tools/case_config.py:32`, `assert_tsr_matches_experiment` `:243` (sequence H en `:255`, bloque S en `:274-292`), `select_speed(...,"S")` `:301-311` |
+| Config: tabla de velocidades H y fila S única | `config/case.yaml:32` (`kinematics.speeds`) y `:60-64` (`sequence_s`) |
+| Tests que NO pueden romperse | `tests/test_phasevi_data.py:127` (`test_experimental_anchors`), `:146` (`test_sequence_s_repeat`), `:157-160` (`stations == [0.3, 0.47, 0.63, 0.8, 0.95]`), `:323` (`test_provenance_fields`), `:362` (`test_no_report_artefacts_committed`); `tests/test_phasevi_case.py:837` (`test_generated_case_is_current`) |
+| El archivo no lo lee nadie | `grep` de `parquet\|pyarrow\|uae6\|\.eng` fuera de `articles/uae6/`: cero lectores |
+
+## Decisiones de diseño
+
+- **D1 — `liftReCorrExp` no va en los polares.** Va en el bloque `profileData/S809`
+  renderizado por el generador, al lado de `Re 1e6;`, porque es de ahí de donde
+  `profileData` lo lee. Tocar los `.dat` no serviría y rompería
+  `test_original_polars_byte_unchanged`.
+- **D2 — claves de muestreo ausentes por defecto.** `velocitySampleRadius` y
+  `nVelocitySamples` se renderizan **sólo cuando difieren del default del
+  source** (0.0 y 20), igual que `liftReCorrExp` respecto de 0.23. Así el render
+  por defecto es **byte-idéntico**, `case/` no se toca, `--check` sigue pasando y
+  el riesgo de la campaña futura queda aislado en el override. Contrapartida
+  asumida: el caso commiteado no declara explícitamente el muestreo neutro.
+- **D3 — la referencia nueva no reemplaza la vieja.** Se agrega un directorio
+  propio con los **mismos nombres y esquema** (`sequence_S_performance.csv`,
+  `sequence_S_spanwise.csv`) derivado del crudo, y se selecciona con el flag
+  `--experiment` que ya existe. `data/experiment/` (workbook) queda intacto, así
+  que los tests de procedencia y de la fila S siguen verdes, y el acuerdo entre
+  las dos fuentes se fija con un test nuevo.
+- **D4 — la tabla de TSR por velocidad sale del crudo.** El extractor emite
+  `rpm` y `tsr` por punto; de ahí se genera el bloque de cinemática de las 21
+  velocidades S. `kinematics.speeds` (H) no se toca.
+- **D5 — el archivo se versiona como tabla numérica derivada, no como binario.**
+  `/articles/` está gitignored; lo que se versiona es el extractor, la tabla
+  derivada y el `PROVENANCE.md` con sha256 del inventario — el mismo patrón que
+  ya usa `data/experiment/PROVENANCE.md` ("no report PDF or workbook is
+  redistributed").
 
 ## Tareas
 
-### S0 — Corregir el issue #8 y registrar el archivo Sequence S
-- [ ] Corregir las estaciones spanwise a 30/47/63/80/95 %.
-- [ ] Reorientar las Etapas 3–5 a Sequence S (7 m/s + curva a 0°).
-- [ ] Registrar el archivo crudo: inventario, definición, cobertura y la
-      verificación cruzada crudo-vs-workbook.
-- [ ] Dejar explícito que H queda diferida y por qué.
-- **AC:** el issue no contiene ningún radio inexistente y toda cifra que afirma
-  tiene su fuente (tabla del reporte o chequeo reproducible).
+### S0 — Corregir el issue #8 y registrar el archivo Sequence S ✅
+- [x] Estaciones spanwise corregidas a 30/47/63/80/95 %.
+- [x] Etapas 3–5 reorientadas a Sequence S; H declarada diferida.
+- [x] Archivo registrado con inventario, definición, cobertura y la verificación
+      cruzada crudo-vs-workbook.
+- **Evidencia:** commit `9a4c932`; issue #8 de GitHub sincronizado.
 
 ### S1 — Procedencia versionada del dataset Sequence S
-- [ ] Decodificar el yaw en `manifest.csv` (token `YYYYR`, con la
-      correspondencia verificada contra el canal `YAW`) y documentarlo en el
-      README del dataset.
-- [ ] Registrar en el repo (no en `/articles/`, que está gitignored) un
-      `PROVENANCE.md` con: definición (reportero + sha256 del PDF), inventario,
-      sha256 por archivo (o del inventario), script de extracción, y la
-      verificación cruzada contra `data/experiment/sequence_S_*.csv`.
-- **AC:** un clon limpio puede reproducir y auditar la procedencia; el spec
-  `phasevi-data-provenance` queda satisfecho para la fuente nueva.
+- [ ] `scripts/extractSequenceSReference.py` (committed): lee el Parquet del
+      archivo, decodifica `<stem>` como `s<WW><YYYY><R>` (velocidad, yaw en
+      grados, repetición), enmascara `err != 128`, y emite las dos tablas con el
+      **esquema exacto** de `load_experiment` (`file_name`, `sequence`,
+      `wind_speed_m_s`, `yaw_token`, `yaw_deg`, `repetition`, `rpm`, `tsr`,
+      `rotpow_kw`, `lsstqcor_nm`, `eaeroth_n`, … / `r_over_R`, `cn`, `ct`, `cm`).
+- [ ] Salida a `data/experiment/sequence-s-archive/` + `PROVENANCE.md` con:
+      definición (reporte + sha256 del PDF), la regla del nombre y su verificación
+      contra el canal `YAW`, el cruce de inventario contra la Tabla C-18, el
+      sha256 del inventario del archivo y la fecha de extracción.
+- [ ] Decodificar yaw/repetition en `articles/uae6/manifest.csv` **desde el
+      script** `eng2parquet.py` (no editar el CSV a mano: se regenera) y
+      documentar la regla en su README §4.6.
+- **AC:** el extractor corre desde un clon limpio salvo por el archivo
+  (gitignored) y aborta con mensaje claro si falta; `PROVENANCE.md` pasa
+  `test_provenance_fields`; los valores de `s0700000` reproducen la fila del
+  workbook.
+- **Verificación:** test nuevo que compara la tabla derivada contra
+  `data/experiment/sequence_S_*.csv` en 7 m/s.
 
 ### S2 — Etapa 1: cuantificar el bug de polares (0 corridas)
-- [ ] Leer la línea `Re` de cada polar commiteado de Phase VI.
-- [ ] Calcular `K = (Re_local/Re_polar)^0.23` y el corrimiento de α₀ por estación.
-- [ ] Integrar el efecto en potencia y decidir si la Etapa de augmentación
-      existe.
-- **AC:** escribe el número y decide; sin corridas de solver.
+- [ ] Por estación (30/47/63/80/95 %) y para el Re local simulado a 7 m/s:
+      `K = (Re_local/Re_polar)^n` con `n = liftReCorrExp` (0,23) y el corrimiento
+      de α₀, más el Δ`cl` en el α operativo.
+- [ ] Integrar el efecto en potencia y **decidir si S6 existe**.
+- **AC:** número escrito, con el método y sus límites declarados; sin correr el
+  solver.
+- **Ojo:** `Re 1e6` es el nivel declarado en el `profileData` renderizado, así que
+  `K` se mide contra 1e6, no contra el Re del archivo.
 
-### S3 — Etapa 2: habilitar la configuración validada (código)
-- [ ] Espejar `velocitySampleRadius` / `nVelocitySamples` (y `meshFactor` si
-      aplica) en `tools/generate_case.py`, **con default byte-idéntico** al
-      render actual.
-- [ ] Aplicar `liftReCorrExp 0` a los polares de Phase VI.
-- **AC:** `generate_case.py --check` pasa sin cambios en `case/`; los tests de
-  contrato del caso siguen verdes; el render por defecto es byte-idéntico.
+### S3 — Etapa 2: habilitar la configuración validada (código) ✅
+- [x] `config/case.yaml`: `actuator.velocity_sampling.{velocity_sample_radius:
+      0.0, n_velocity_samples: 20}` y `profile.lift_re_corr_exp: 0.23`, cada uno
+      documentado como "igual al default del source ⇒ no se renderiza" (D2).
+- [x] `tools/generate_case.py`: tres flags nuevas
+      (`--velocity-sample-radius`, `--n-velocity-samples`,
+      `--lift-re-corr-exp`) espejando el patrón de `--root-effects`; render
+      condicional en `render_fv_options`: las dos de muestreo al nivel
+      `axialFlowTurbineALSourceCoeffs`, `liftReCorrExp` dentro de
+      `profileData/S809` junto a `Re` (D1).
+- [x] README del paquete: las tres flags, la tabla de defaults y por qué
+      `liftReCorrExp 0` es lo que desarma el reescalado.
+- **AC cumplido:** `--check` sale 0 y `git diff -- case/` queda **vacío** (render
+  por defecto byte-idéntico); el override renderiza
+  `velocitySampleRadius 3.3; / nVelocitySamples 16;` al nivel del coeffs y
+  `liftReCorrExp 0;` inmediatamente después de `Re 1e6;`; los tres twins llevan
+  las mismas claves.
+- **Verificación:** 26 passed en `tests/test_phasevi_case.py` (2 tests nuevos);
+  suite completa `turbinesFoam/tests/` **245 passed, 3 skipped**.
+- **Anomalía observada, fuera de alcance:** el render de `fvOptions.ASM-MESH` no
+  recibe `polar` (a diferencia de `fvOptions.ALM`/`.ASM`), así que una ablación
+  de polar no llega al twin mesh-backed. Preexistente; no se toca en esta
+  feature (el alcance es ALM).
 
-### S4 — Etapa 3: la referencia experimental Sequence S
-- [ ] Derivar la curva a 0° yaw (21 velocidades) y las estaciones spanwise del
-      crudo, con el `err` byte enmascarado.
-- [ ] Extender `data/experiment/` (o un directorio nuevo) + PROVENANCE.
-- [ ] Hacer que `scripts/comparePhaseVI.py` consuma la referencia nueva sin
-      romper la actual; mantenerlo agnóstico de la secuencia.
-- **AC:** los valores del crudo reproducen la fila `s0700000` del workbook; un
-  test lo fija.
+### S4 — Etapa 3: la corrida de validación (preparación)
+- [ ] Generalizar `sequence_s` a una tabla de velocidades (`sequence_s.speeds`)
+      manteniendo la fila de 7 m/s como default, y extender `select_speed`/
+      `assert_tsr_matches_experiment` sin cambiar el comportamiento de H (D4).
+- [ ] Habilitar los 21 puntos S a 0° yaw en el runner y en el comparador.
+- **AC:** `--sequence S` acepta las 21 velocidades; H sigue byte-idéntico; un
+  test fija el TSR de cada velocidad contra la tabla derivada en S1.
 
-### S5 — Etapa 4: la corrida de validación
-- [ ] ALM D/32 con la configuración completa, Sequence S 7 m/s.
-- [ ] Potencia dentro de ±15 % (ideal ±10 %); empuje reportado; spanwise `c_n` en
-      las 5 estaciones; tabla por revolución con drift < 0,2 %/rev sostenido 5 rev.
-- **AC:** resultado verificado dos veces antes de reportarlo.
+### S5 — Etapa 4: la corrida
+- [ ] ALM D/32, configuración completa (S3), Sequence S 7 m/s.
+- [ ] Potencia ±15 % (ideal ±10 %), empuje reportado, `c_n` en 30/47/63/80/95 %,
+      tabla por revolución con drift < 0,2 %/rev sostenido 5 rev.
+- **AC:** resultado medido dos veces antes de reportarlo.
+- **Requiere:** autorización de cola larga (el runner la exige explícitamente).
 
-### S6 — Etapa 5: augmentación rotacional (condicional)
+### S6 — Etapa 5: augmentación rotacional (condicional a S2)
 - [ ] Sólo si S5 deja un residuo que la justifique.
+
+## Alcance
+
+**In:** issue #8; procedencia versionada del archivo Sequence S; generador y
+configuración del caso; comparador y referencia experimental; la corrida de
+validación; tests y documentación del paquete.
+
+**Out:** ASM y ASM-mesh (el alcance es ALM); Sequence H (diferida); push, PR y
+merge; la matriz de augmentación antes de que S2 la justifique.
 
 ## Registro de evidencia
 
 | Fecha | Qué | Resultado |
 | --- | --- | --- |
-| 2026-10-07 | Archivo Sequence S verificado contra Tabla C-18 y contra los CSV commiteados | OK, ver tabla de arriba |
+| 2026-10-07 | Archivo Sequence S vs Tabla C-18 y vs los CSV commiteados | OK (tabla de arriba) |
+| 2026-10-07 | Anclas de código leídas y fijadas | OK (tabla de anclas) |
+| 2026-10-07 | S3: `--check` sale 0 y `git diff -- case/` vacío | OK, render por defecto byte-idéntico |
+| 2026-10-07 | S3: `turbinesFoam/tests/` completo | **245 passed, 3 skipped** |
 
 ## Registro de commits
 
-(pendiente)
+| Commit | Tarea |
+| --- | --- |
+| `9a4c932` | S0 — issue #8 + doc de feature |
+| _(S3)_ | S3 — muestreo y exponente de Re renderizables |

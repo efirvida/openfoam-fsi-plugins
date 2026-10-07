@@ -675,6 +675,147 @@ def test_tip_correction_rendered(cfg, tmp_path):
         assert "active off;" in block(rendered, "tipCorrection")
 
 
+def test_validated_sampling_and_re_correction_render_at_the_source_levels(cfg):
+    """The validated Phase VI method renders where the C++ reads it.
+
+    `velocitySampleRadius`/`nVelocitySamples` are read from
+    `axialFlowTurbineALSource::coeffs_`, and `liftReCorrExp` is read by
+    `profileData` from its own `profileData/S809` subdict, beside the `Re`
+    statement it modifies. Both are absent by default because the configured
+    values equal the source defaults (0.0/20/0.23), which keeps the committed
+    render byte-identical.
+    """
+    def render(element_type, **kwargs):
+        return generate_case.render_fv_options(
+            cfg, "7", "coarse", PACKAGE / "case", element_type, **kwargs
+        )
+
+    # Committed render omits all three keys.
+    for name in ("ALM", "ASM", "ASM-MESH"):
+        committed = (
+            PACKAGE / "case" / "system" / f"fvOptions.{name}"
+        ).read_text(encoding="utf-8")
+        for key in ("velocitySampleRadius", "nVelocitySamples", "liftReCorrExp"):
+            assert key not in committed
+
+    alm = render(generate_case.ALM_ELEMENT)
+    assert "velocitySampleRadius" not in alm
+    assert "nVelocitySamples" not in alm
+    assert "liftReCorrExp" not in alm
+
+    # The validated Phase VI method: sampling at the rotor-coeffs level, the
+    # Reynolds rescaling disabled inside the S809 profile subdict.
+    validated = render(
+        generate_case.ALM_ELEMENT,
+        velocity_sample_radius=3.3,
+        n_velocity_samples=16,
+        lift_re_corr_exp=0,
+    )
+    coeffs = block(validated, "axialFlowTurbineALSourceCoeffs")
+    assert "velocitySampleRadius 3.3;" in coeffs
+    assert "nVelocitySamples 16;" in coeffs
+    # Not inside a blade subdict, where the source never looks for them.
+    assert "velocitySampleRadius" not in block(coeffs, "blade1")
+    assert "nVelocitySamples" not in block(coeffs, "blade1")
+    s809 = block(block(coeffs, "profileData"), "S809")
+    assert "liftReCorrExp 0;" in s809
+    assert s809.index("Re 1e6;") < s809.index("liftReCorrExp 0;")
+    # `liftReCorrExp` is a profileData key, never a blade or rotor key.
+    assert "liftReCorrExp" not in block(coeffs, "blade1")
+    assert "liftReCorrExp" not in block(coeffs, "dynamicStall")
+
+    # Every twin carries the same keys: they differ only in the blade keys.
+    twins = (
+        (generate_case.ALM_ELEMENT, {}),
+        (generate_case.ASM_ELEMENT, {}),
+        (
+            generate_case.ASM_ELEMENT,
+            {"surface_geometry": generate_case.SURFACE_GEOMETRY},
+        ),
+    )
+    for element_type, surface in twins:
+        twin = block(
+            render(
+                element_type,
+                velocity_sample_radius=3.3,
+                n_velocity_samples=16,
+                lift_re_corr_exp=0,
+                **surface,
+            ),
+            "axialFlowTurbineALSourceCoeffs",
+        )
+        assert "velocitySampleRadius 3.3;" in twin
+        assert "nVelocitySamples 16;" in twin
+        assert "liftReCorrExp 0;" in block(block(twin, "profileData"), "S809")
+
+    # A non-physical radius is rejected before any render.
+    with pytest.raises(ValueError, match="zero or positive"):
+        render(generate_case.ALM_ELEMENT, velocity_sample_radius=-1.0)
+
+
+def test_sampling_config_and_flags_drive_the_render(cfg, tmp_path):
+    """The YAML governs the three keys and the matching flags override it."""
+    def generate(*flags):
+        return subprocess.run(
+            [sys.executable, str(PACKAGE / "tools" / "generate_case.py"), *flags],
+            capture_output=True,
+            text=True,
+        )
+
+    case_dir = tmp_path / "case-cli"
+    cli = generate(
+        "--velocity-sample-radius", "3.3",
+        "--n-velocity-samples", "16",
+        "--lift-re-corr-exp", "0",
+        "--case-dir", str(case_dir),
+    )
+    assert cli.returncode == 0, cli.stderr
+    for name in ("ALM", "ASM", "ASM-MESH"):
+        rendered = (case_dir / "system" / f"fvOptions.{name}").read_text(
+            encoding="utf-8"
+        )
+        assert "velocitySampleRadius 3.3;" in rendered
+        assert "nVelocitySamples 16;" in rendered
+        assert "liftReCorrExp 0;" in rendered
+
+    # The YAML carries the same three values and renders without any flag.
+    config = tmp_path / "case.yaml"
+    variant = yaml.safe_load(
+        (PACKAGE / "config" / "case.yaml").read_text(encoding="utf-8")
+    )
+    variant["actuator"]["velocity_sampling"]["velocity_sample_radius"] = 2.5
+    variant["actuator"]["velocity_sampling"]["n_velocity_samples"] = 8
+    variant["profile"]["lift_re_corr_exp"] = 0.5
+    config.write_text(yaml.safe_dump(variant, sort_keys=False), encoding="utf-8")
+    from_yaml = tmp_path / "case-yaml"
+    yaml_run = generate("--config", str(config), "--case-dir", str(from_yaml))
+    assert yaml_run.returncode == 0, yaml_run.stderr
+    rendered = (from_yaml / "system" / "fvOptions.ALM").read_text(encoding="utf-8")
+    assert "velocitySampleRadius 2.5;" in rendered
+    assert "nVelocitySamples 8;" in rendered
+    assert "liftReCorrExp 0.5;" in rendered
+
+    # An explicit flag overrides the YAML.
+    overridden = tmp_path / "case-yaml-override"
+    yaml_override = generate(
+        "--config", str(config),
+        "--velocity-sample-radius", "3.3",
+        "--case-dir", str(overridden),
+    )
+    assert yaml_override.returncode == 0, yaml_override.stderr
+    rendered = (overridden / "system" / "fvOptions.ALM").read_text(encoding="utf-8")
+    assert "velocitySampleRadius 3.3;" in rendered
+    assert "nVelocitySamples 8;" in rendered
+
+    # Non-physical inputs are rejected before any render (exit 2).
+    negative = generate("--velocity-sample-radius", "-1")
+    assert negative.returncode == 2
+    assert "zero or positive" in negative.stderr
+    zero_samples = generate("--n-velocity-samples", "0")
+    assert zero_samples.returncode == 2
+    assert "positive integer" in zero_samples.stderr
+
+
 def test_asm_mesh_selection(cfg, tmp_path):
     """`asm-mesh` is selectable end-to-end and its runs are prepared-only."""
     selected = subprocess.run(

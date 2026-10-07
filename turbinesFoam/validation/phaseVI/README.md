@@ -83,8 +83,27 @@ python3 tools/generate_case.py --check    # exit 1 on missing/stale, never write
 `--domain long|squat`, `--sequence H|S`, `--profile production|smoke`,
 `--solver urans|iddes`, `--n-chordwise N`, `--ranks N`,
 `--surface-kernel cosine|gaussian`, `--rotational-augmentation on|off`,
-`--root-effects on|off`, `--case-dir DIR`,
+`--root-effects on|off`, `--velocity-sample-radius R`, `--n-velocity-samples N`,
+`--lift-re-corr-exp N`, `--case-dir DIR`,
 `--end-revs FLOAT`, `--start-from startTime|latestTime`.
+
+The last three flags expose the configuration the IEA 15 MW campaign validated.
+Each of them renders **no key** at its source default, so the committed `case/`
+is byte-identical and `--check` passes untouched:
+
+| Flag | YAML key | Source default | Validated Phase VI value |
+|---|---|---|---|
+| `--velocity-sample-radius R` | `actuator.velocity_sampling.velocity_sample_radius` | `0.0` (no sampling) | `3.3` |
+| `--n-velocity-samples N` | `actuator.velocity_sampling.n_velocity_samples` | `20` | `16` |
+| `--lift-re-corr-exp N` | `profile.lift_re_corr_exp` | `0.23` | `0` |
+
+`velocitySampleRadius`/`nVelocitySamples` are written at the rotor-coeffs level,
+where `axialFlowTurbineALSource` reads them from `coeffs_`. `liftReCorrExp` is
+written inside the `profileData/S809` subdict, beside the `Re 1e6;` statement it
+modifies: `profileData` reads both from that same dictionary, and the declared
+`Re` is what arms `profileData::updateRe`, whose `K = (Re/ReRef)^0.23` rescaling
+rotates the polar about its zero-lift angle and inflates `cl`. The Phase VI
+validation therefore sets the exponent to `0`.
 Rendered files carry a "Generated from config/case.yaml" banner; `case/` is
 the only committed copy and hand edits are detected by `--check`.
 
