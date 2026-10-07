@@ -67,6 +67,14 @@ if [ -z "$snappy" ]; then
     if [ "$model" = "asm-mesh" ]; then snappy=on; else snappy=off; fi
 fi
 domain_args=(--mesh "$mesh" --ranks "$ranks" --model "$model" --snappy "$snappy")
+# TSR sweep: the rotor speed sets the tip-speed ratio, so it must be forwarded
+# explicitly (the campaign's validated configuration is a point of that curve).
+if [ -n "${TURBINE_RPM:-}" ]; then
+    domain_args+=(--rpm "$TURBINE_RPM")
+fi
+if [ -n "${TURBINE_SPEED:-}" ]; then
+    domain_args+=(--speed "$TURBINE_SPEED")
+fi
 if [ -n "${TURBINE_N_CHORDWISE:-}" ]; then
     domain_args+=(--n-chordwise "$TURBINE_N_CHORDWISE")
 fi
