@@ -192,35 +192,73 @@ limpia. Resultados (media de la última revolución completa, criterio de deriva
 | P4 | validada, 12 rev | medium | 6.508.528 | 160 | 0,5490 | −0,239 % |
 
 **P1 no es el 0,5366 del registro, y la diferencia es la malla.** El 0,5366 de
-`iea15mw-tiploss-glauert` está medido en la malla **castellated** (786 pasos/rev,
-`deltaT` ≈ 0,0094 s); P1 corrió la **coarse sin refinar** (106 pasos/rev,
-`deltaT` 0,075 s). El `deltaT` no es libre: `generate_case.delta_t()` lo ata a la
-celda más fina que ve el rotor (`0,95·celda/velocidad de punta`, redondeado a 3
-cifras — su docstring dice *"rounded to 3 significant figures so the coarse case
-keeps deltaT 0.075"*). O sea: **refinar la malla y refinar el paso de tiempo son
-la misma palanca**, y el ALM tiene ~4 % de sensibilidad a ella.
+`iea15mw-tiploss-glauert` está medido en la malla **castellated** (852 pasos/rev,
+`deltaT` 0,00937 s, según la Fase B de
+`odd/tasks/iea15mw-validation-campaign.md`: *"misma malla (11.612.692 celdas),
+mismo dominio (3D / 7D / ±3D), mismo deltaT (0,00937 s)"*); P1 corrió la **coarse
+sin refinar** (106 pasos/rev, `deltaT` 0,075 s). El `deltaT` no es libre:
+`generate_case.delta_t()` lo ata a la celda más fina que ve el rotor
+(`0,95·celda/velocidad de punta`, redondeado a 3 cifras — su docstring dice
+*"rounded to 3 significant figures so the coarse case keeps deltaT 0.075"*).
+O sea: **refinar la malla y refinar el paso de tiempo son la misma palanca**.
 
-La propia campaña lo confirma con su eje de malla, monótono:
+El generador da las celdas y los pasos de cada opción:
 
-| malla | pasos/rev | cp | vs la castellated |
+| malla | celda más fina | `deltaT` | pasos/rev |
 | --- | --- | --- | --- |
-| coarse (2,36 M) | 106 | 0,5591 | **+4,1 %** |
-| medium (6,51 M) | 160 | 0,5490 | +2,2 % |
-| castellated (11,6 M) | 786 | 0,5370 | — |
+| coarse (D/32) | 7,50 m | 0,07500 s | 106 |
+| medium (D/48) | 4,98 m | 0,04980 s | 160 |
+| fine uniforme (D/64) | 3,75 m | 0,03750 s | 213 |
+| snappy L2 | 1,87 m | 0,01870 s | 427 |
+| **snappy L3** (la castellated) | **0,94 m** | **0,00937 s** | **852** |
+| snappy L4 | 0,47 m | 0,00468 s | 1705 |
+
+## La malla NO está convergida (y el eje está confundido con el transitorio)
+
+Los tres puntos disponibles, todos con la configuración validada:
+
+| malla | celda más fina | pasos/rev | rev | cp | deriva/rev |
+| --- | --- | --- | --- | --- | --- |
+| coarse | 7,50 m | 106 | 20 | 0,5591 | −0,057 % |
+| medium | 4,98 m | 160 | 12 | 0,5490 | **−0,239 %** |
+| castellated L3 | 0,94 m | 852 | 12 | 0,5370 | +0,063 % |
+| *referencia OLAF* | — | — | 15 | *0,5312* | — |
+
+Dos observaciones que impiden tratarlo como una curva de convergencia:
+
+1. **Las caídas no se achican al refinar.** Con `cp(h) = cp∞ + C·h^p`, el primer
+   intervalo (7,50 → 4,98 m) cae 0,0101 y el segundo (4,98 → 0,94 m, 5,3× más
+   refinamiento) cae 0,0121. Ningún `p` único ajusta los tres puntos: no estamos
+   en régimen asintótico, así que **no hay extrapolación de Richardson creíble**.
+2. **Los puntos no están igual de convergidos en el tiempo.** La deriva del
+   medium (−0,239 %/rev) es 4× la de la coarse y 3,8× la de la castellated: a 12
+   revs el medium está ~2 % por encima de su propia asíntota. Corregido por su
+   transitorio baja a ~0,54, y entonces el eje se ve bastante más benigno (~0,537
+   como meseta). O sea: **la serie de malla está confundida con el transitorio**,
+   y por eso no se puede afirmar todavía ni que converge por debajo de 0,537 ni
+   que la referencia 0,5312 esté alcanzada.
+
+**Consecuencia dura:** el "ALM validado +1,0 % contra la estela libre" es un
+resultado **de una sola resolución**. A la resolución coarse el ALM queda +5,3 %,
+a la medium ~+2 %, a la castellated +1,1 %. Con la serie sin converger, el acuerdo
+del 1 % **no está probado que sea propiedad del modelo**: puede ser en parte
+eaerocompensación de la discretización. Antes de citarlo hay que correr la serie
+a un horizonte temporal común y convergido.
+
+La palanca es barata y ya está medida: la coarse hace 46 rev/h, la medium ~7
+rev/h, la castellated ~1-3 rev/h con 112 rangos. Una serie a 20 revs en coarse
+(0,5 h) + medium (3 h) + castellated (8-20 h) ≈ **12-24 h de cola** compra la
+curva de malla que hoy falta — y decide si el ALM valida antes de gastar 95 h en
+la asíntota temporal de **una** malla (que es lo que mide el plan de 40-60 revs).
 
 **Consecuencias que hay que respetar al citar:**
 
 - El 0,559 de P1 es la asíntota de la malla **coarse**, no la de la configuración
-  validada: no se puede citar como "el ALM validado" contra la referencia (0,5312),
-  porque a esa resolución el ALM queda +5,3 % en vez del +1,0 % que sí cumple en la
-  castellated.
-- Los tres valores son correctos **a su propia resolución**: la deriva por
-  revolución los acredita como convergidos, pero converger en la coarse no es
-  converger al número de la validación.
+  validada: no se puede citar como "el ALM validado".
+- Los tres valores son correctos **a su propia resolución**: converger en la
+  coarse no es converger al número de la validación.
 - Cuando se compare el ASM/ASM-mesh contra el ALM (issue #9), el trío tiene que
-  correr en la **castellated** (`--snappy on` para los tres, como hace
-  `asmcmp.slurm`): es la malla donde vive el 0,5366, y la sensibilidad de malla del
-  ALM (+4 %) es del mismo orden que el hueco que se está midiendo.
+  correr en **una misma malla** y en un estado de convergencia común.
 
 ### Dónde está el residuo, por bandas
 
