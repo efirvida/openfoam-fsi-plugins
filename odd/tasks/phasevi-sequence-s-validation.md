@@ -254,28 +254,47 @@ VI por aritmética exacta y contra la medición, no por prosa:
   reproducen esa forma.
 
 **Conclusión: el modo de falla de IEA15MW (handedness / `flow_axis`) NO está
-presente en Phase VI.** Pero la verificación destapó el problema real:
+presente en Phase VI.**
 
-| r/R | `c_ref_n` sim | `c_n` medido | Δ | `c_ref_t` sim | `c_t` medido | Δ |
-| --- | --- | --- | --- | --- | --- | --- |
-| 0,30 | 0,5066 | 0,8139 | **−37,8 %** | 0,2319 | 0,0973 | **+138 %** |
-| 0,47 | 0,8081 | 0,9204 | −12,2 % | 0,2489 | 0,1184 | +110 % |
-| 0,63 | 0,8398 | 0,8668 | −3,1 % | 0,1989 | 0,0956 | +108 % |
-| 0,80 | 0,7420 | 0,7673 | −3,3 % | 0,1189 | 0,0730 | +63 % |
-| 0,95 | 0,4225 | 0,5175 | −18,4 % | 0,0437 | 0,0407 | +7 % |
+**Corrección de un error mío (2026-10-07).** En la revisión anterior reporté un
+"`c_ref_t` ≈2× el medido" leyendo `results/U7-H/spanwise_comparison.csv`. **Ese
+CSV es viejo**: se generó antes del fix de marco de referencia, y `results/` está
+gitignored, así que leerlo no dice nada sobre el código actual. El propio
+docstring de `spanwise_profile` describe ese 2× *en pasado*, como el defecto que
+ya arregla. Re-corrido el comparador commiteado sobre la corrida de control
+existente (`runs/alm-U7-coarse-aug-off-tip-off-root-off`):
 
-El `c_n` normal está bien en la mitad exterior y flojo en la raíz (la deficiencia
-que ya siguen `phasevi-endeffect-diagnostic.md` y `phasevi-tip-correction-*`),
-pero el `c_ref_t` **tangencial está ≈2× el medido en las cinco estaciones**. El
-comparador ya lo anota como *"definitional mismatch"* y **no lo arregla**
-(`comparePhaseVI.py:spanwise_profile` toma el `ct` del elemento referido al chord
-en su propio marco). Un factor sistemático de 2× huele a **longitud o marco de
-referencia en la definición del coeficiente**, no a física — y está en el mismo
-marco que el criterio de aceptación spanwise, así que hay que resolverlo antes de
-usarlo como criterio.
+| r/R | `c_ref_n` NUEVO | `c_n` medido | Δ | `c_ref_t` NUEVO | `c_t` medido | Δ | banda |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0,30 | 0,8502 | 0,8139 | **+4,5 %** | 0,1209 | 0,0973 | +24,2 % | sí |
+| 0,47 | 0,8892 | 0,9204 | −3,4 % | 0,1365 | 0,1184 | +15,3 % | sí |
+| 0,63 | 0,9034 | 0,8668 | +4,2 % | 0,1108 | 0,0956 | +15,9 % | sí |
+| 0,80 | 0,8900 | 0,7673 | +16,0 % | 0,1108 | 0,0730 | +51,7 % | sí |
+| 0,95 | 0,8855 | 0,5175 | **+71,1 %** | 0,1102 | 0,0407 | **+170,7 %** | no |
 
-- [ ] **Diagnosticar el 2× del `c_ref_t`** antes de congelar el criterio spanwise: comparar la definición experimental de `CT` (base de normalización) contra la del `ct` del elemento, estación por estación, y fijar cuál es la correcta.
-- [ ] **Test de contrato de orientación**: el producto cruz `axis × verticalDirection`, la dirección azimutal resultante y la dirección de cuerda del elemento 0 contra la geometría commiteada. Hoy la cadena está bien pero **nada la fija**: un cambio en `vertical_direction` la invierte en silencio.
+El marco de referencia está bien resuelto: **el tramo medio (30/47/63 %) queda
+dentro del ±4,5 % en `c_n`**. El único punto que falla es la **punta**, y esta
+corrida tiene `tipEffects off` + `rootEffects off` por construcción — la punta
+sobre-predicha es *esperable* ahí, no un defecto. La comparación de punta hay que
+hacerla contra un brazo con `endEffects on`, no contra el control.
+
+**Lección de proceso:** `results/` y `campaign-results/` son salidas regenerables
+y gitignored. Citarlas como evidencia del código actual es exactamente el error
+que la nota de método de este feature advierte. Antes de citar un número hay que
+**re-derivarlo con el script commiteado**: cuesta un comando y evita reportar un
+fantasma.
+
+**Defecto abierto real, declarado por la propia herramienta:** el camino
+ASM-mesh (`read_surface_stations`) sigue leyendo las columnas del elemento
+**referidas al plano de rotación**, así que sus filas spanwise **no están en el
+marco del experimento**. Fuera del alcance ALM de esta campaña, pero queda
+anotado.
+
+- [ ] **Reescribir esta verificación como test de contrato**: hoy la cadena de
+      orientación está bien pero **nada la fija**; un cambio en
+      `vertical_direction` la invierte en silencio.
+- [ ] Al comparar spanwise, usar siempre un brazo con `endEffects on` y
+declararlo; el control `tip-off` no sirve para el criterio de punta.
 
 **Criterio de convergencia** (a fijar **antes** de correr):
 
