@@ -1,7 +1,8 @@
 # Plugin rename: cost analysis and deprecation options
 
-**Status:** analysis only. No rename is authorised by this document (deferred by S10 of
-`odd/tasks/repo-documentation.md`).
+**Status:** analysis only. No rename is authorised by this document. Plugin names are
+unchanged, by decision.
+**Published:** [efirvida/openfoam-fsi-plugins#4](https://github.com/efirvida/openfoam-fsi-plugins/issues/4).
 **Question it answers:** what does it actually cost to rename a plugin here, at each level of
 the name, and how do existing cases survive it?
 

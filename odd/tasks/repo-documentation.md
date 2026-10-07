@@ -65,7 +65,7 @@ reconciled at merge).
 | D6 | S5, S8 | Add "Why these plugins and not the alternatives": verifiable capability differences plus the pending-rationale placeholder | inline | `6abfd2a` |
 | D7 | S4 | Fix the stale repository name (`AGENTS.md`, `turbinesFoam/README.md` clone URL) | inline | `56d715e` |
 | D8 | — | `CHANGELOG.md` entry for the documentation change | inline | `56d715e` |
-| D9 | S6, S10 | Document the rename cost and the deprecation options; publish separately | deferred | pending |
+| D9 | S6, S10 | Document the rename cost and the deprecation options; publish separately | inline | `72986a4`, [#4](https://github.com/efirvida/openfoam-fsi-plugins/issues/4) |
 
 ## Log
 
@@ -95,10 +95,15 @@ reconciled at merge).
   (`git diff main feat/nacelle-actuator-surface -- README.md` = +77/−11). The rewrite targets
   `main`; at merge, the branch's extra validation sections are re-added as links.
 
-- **L4** (parent, delivery): D1–D8 landed on `main` in three work units — `f0c4950`
-  (the three missing per-plugin READMEs), `6abfd2a` (root README as a landing page plus the
+- **L4** (parent, delivery): D1–D8 landed on `main` in three work units — `f0c4950`  (the three missing per-plugin READMEs), `6abfd2a` (root README as a landing page plus the
   adapter fork README), `56d715e` (stale repository name in `AGENTS.md` and
   `turbinesFoam/README.md`, plus the `CHANGELOG.md` entry). Check run: all 35 relative
   Markdown links across the six touched documents resolve to existing files. No source file,
   case dictionary or plugin name was modified, and no physics changed. D9 (rename cost and
   deprecation options) stays deferred: plugin names are unchanged by design (S10).
+- **L5** (parent, delivery): D9 landed as `72986a4`
+  (`odd/tasks/plugin-rename.md`, the measured name contract and the T1/T2/T3 tiers) and was
+  published as [#4](https://github.com/efirvida/openfoam-fsi-plugins/issues/4) through the
+  `refactor.yml` issue form, verified by target-host read-back (title and body match, state
+  `OPEN`, label `enhancement`). The form gained a `repository-wide` option before publication,
+  because a rename spans all five plugins. No plugin name was changed.
