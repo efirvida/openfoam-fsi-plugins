@@ -102,42 +102,85 @@ frame, contra el `ct` de `turbine.csv`. Lo mismo para el lockstep de rotación, 
 ahora comprueba los frames de verdad. La suite entera de `test_blade_surface.py`
 tiene que terminar en verde.
 
-## Lo que queda abierto (follow-up, no es #5)
+## La anomalía de cargas: causa encontrada, y es un bug del depósito
 
-Cerrada la contabilidad, la anomalía **sobrevive** y ahora está localizada en las
-**cargas**, no en el torque. Misma malla, mismo punto, mismo código: los 147
-elementos del ASM-mesh y del ALM son **idénticos elemento a elemento** en el paso
-1 (cl, α, Vrel iguales a 3 decimales) y divergen en 5° de acimut:
+La sospecha de arriba (ancho de deposición, muestreo de cuerda) era **la
+pregunta equivocada**. La causa es más simple y más grave:
 
-| t | ángulo | cp ASM-mesh | cp ALM | ratio | α @ r/R 0,57 | α ALM |
-| --- | --- | --- | --- | --- | --- | --- |
-| 0,00937 | 0,42° | 0,94457 | 0,94487 | 1,000 | 9,9° | 9,9° |
-| 0,05622 | 2,54° | 0,58373 | 0,48536 | 1,203 | — | — |
-| 0,11244 | 5,07° | 1,15437 | 0,62536 | 1,846 | 11,6–15,0° | 7,5–8,8° |
+`bladeSurfaceSampler::buildCandidates()` cacheaba **una sola vez**, en el
+constructor, las celdas locales dentro del soporte de cada nodo — el propio
+comentario dice *"once: the background mesh and h_i are static"*. La malla de
+fondo es estática; **los nodos no**. Después `distributeNodeForces()` evaluaba el
+kernel en la posición **actual** del nodo sobre esa lista del instante de
+construcción, así que a medida que la pala avanza por la malla euleriana las
+celdas cacheadas se salen del soporte `2,5·h_i` y el depósito se apaga.
 
-El ASM-mesh sube el α (y el `Vrel`) en vez de bajarlo con la inducción. Dos
-diferencias de configuración respecto del ALM, ambas en el acoplamiento y no en
-el BEM:
+Medido en el fixture rotante (`tests/bladeSurfaceAFTAL`: malla uniforme de
+0,1 m → soporte 0,25 m; nodos hasta 0,44 m del eje; 0,005 s = 38° por paso), la
+integral volumétrica de la fuerza que recibe el flujo contra la fuerza reportada
+de la pala:
 
-1. la **deposición** del ASM es `2·cbrt(V)·meshFactor` por celda, **sin cota de
-   cuerda**, sobre una malla refinada por snappy en la superficie (el ALM usa
-   `max(0,25c, malla)`);
-2. el **muestreo** del ASM promedia 5 puntos de cuerda por interpolación puntual
-   (el ALM muestrea el punto de la línea), y `velocitySampleRadius` está en 0 en
-   este caso.
+| t | acimut | fuerza reportada (pala) | integral del campo (flujo) | fracción |
+| --- | --- | --- | --- | --- |
+| 0,005 | 38° | (2,62, 9,63, 7,57) | (−0,87, −3,20, −2,52) | **33 %** |
+| 0,010 | 76° | (2,62, 2,87, 11,87) | (−0,002, −0,003, −0,011) | **0,1 %** |
+| 0,015 | 115° | (2,62, −5,09, 11,13) | (0, 0, 0) | **0 %** |
+| 0,020 | 153° | (2,62, −10,89, 5,60) | (0, 0, 0) | **0 %** |
 
-La nota de convergencia (`odd/tasks/iea15mw-asm-mesh-convergence.md`, Etapa 3) ya
-nombra el eje correcto: el ε del ASM depende de la malla, así que el ASM+mesh
-tiene un eje **espacial**, no sólo temporal. El próximo chequeo es una corrida
-corta (0,2 rev) con el ancho de deposición fijado al del ALM; si el `cp` decae
-como el del ALM, la causa es el ancho y la corrección es acotarlo por cuerda.
+Por qué esto explica todo lo medido en #5:
+
+- **El flujo nunca recibe la carga de la pala** → no se desarrolla la inducción
+  → el BEM ve un inflow sin cargar y responde con **α y `Vrel` más altos** → `cp`
+  alto y creciente con el acimut (1,154 a 5,07°, contra 0,625 del ALM).
+- **Todos los oráculos por CSV quedan verdes**: `moment()`, el CSV por estación y
+  el volcado por nodo salen de `nodeForces_`, no del campo. Por eso el lado
+  "diagnóstico" del issue cerraba bien mientras el modelo mentía.
+- **El ASM sin malla nunca estuvo afectado**: recorre todas las celdas locales por
+  nodo (`distributeForce` con `candidates = nullptr`), sin lista cacheada. Esa es
+  la razón de que la anomalía pareciera propia del camino de superficie.
+- **El paso 1 coincide con el ALM**: con el campo uniforme la carga es la misma, y
+  el primer depósito todavía está casi alineado; la divergencia empieza en el
+  segundo paso.
+
+## El fix
+
+- El **grid de bins** por rango (que depende sólo de la malla) pasa a ser la
+  **única** estructura cacheada.
+- `distributeNodeForce()` consulta los bins que cubren la caja de soporte del nodo
+  **en su posición actual** y aplica el prefiltro S1: las celdas receptoras siguen
+  al nodo.
+- `h_i` (ancho del kernel y soporte de la consulta) se refresca en cada movimiento
+  rígido y en la actualización de geometría FSI con `refreshNodeH()`: un `findCell`
+  por nodo más **una sola reducción de lista**. El centinela por nodo al que
+  reemplaza costaba un colectivo por nodo (100.236 en la superficie del IEA 15 MW),
+  así que la construcción y el camino por paso salen **más baratos** que antes.
+- La instrumentación D6 reporta las celdas receptoras efectivamente visitadas, no
+  el tamaño de una lista estática.
+
+Test de regresión: `test_deposit_partition_of_unity_under_rotation` (serial y
+paralelo de 2 rangos) corre el fixture rotante hasta 153° de acimut y exige que la
+integral de la fuerza sobre el flujo sea menos el total reportado en **cada** paso.
+En rojo antes del fix (33 % / 0,1 % / 0 / 0), en verde después.
+
+## Lo que queda
+
+- **Rehacer la validación del ASM+mesh**: con este fix el modelo deposita lo que
+  reporta, así que **ninguna corrida ASM+mesh anterior sirve** (ni las de
+  `_archive`, ni las del volcado de nodos). El próximo paso es la corrida de 0,2 rev
+  con la librería arreglada; si el `cp` decae como el del ALM, la anomalía de #5
+  está cerrada de punta a punta.
+- **La pregunta del ancho de deposición queda pospuesta**: no tiene sentido medir
+  `ε` contra el ALM mientras el flujo no reciba la carga. Después de la corrida se
+  sabrá si además hace falta acotar el ancho por cuerda.
 
 ## Lo que NO hay que hacer
 
 - No volver a comparar componentes de momento entre frames distintos: fue el
   origen del "+73,3e6 / −13,9e6". El dump global lo hace innecesario.
-- No citar el `cp` 1,068: es de la campaña `asmcmp-2026-10-02` (código previo a
-  `8898179`). La corrida actual arranca en 0,9446, igual que el ALM.
-- No declarar resuelto #5 por el `cp`: lo resuelto es la **contabilidad**. El `cp`
-  sigue alto y es una anomalía de cargas con su propio follow-up.
-- No correr 20 rev del ASM+mesh hasta cerrar el ancho de deposición.
+- No citar el `cp` 1,068 ni los `cp` 0,32/1,07 de las campañas ASM+mesh anteriores:
+  todas son de código previo a este fix (y el 1,068 también a `8898179`).
+- No buscar la causa del `cp` en el ancho del kernel ni en el muestreo de cuerda
+  antes de repetir la corrida con el depósito arreglado.
+- No confiar en un oráculo que sólo lea CSV: el reporte (`nodeForces_`) y el campo
+  son dos cosas distintas y pueden discrepar en silencio. El invariante es la
+  integral del campo contra el total reportado, y ya es un test.
