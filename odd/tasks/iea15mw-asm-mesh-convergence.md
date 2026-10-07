@@ -108,11 +108,17 @@ esconde.
 | # | etapa | costo | por qué en ese lugar |
 | --- | --- | --- | --- |
 | 1 | brazo de momento y partición de unidad | **0 corridas** | **cerrada**: el torque nodos/elementos da 1,0019 y 1,0026 |
-| 2 | el ancho de deposición del ASM (`α` contra el ALM) | 1 corrida corta (0,2 rev) | es la anomalía que quedó viva, y manda sobre (b) |
-| 3 | leer la corrida `11609926` (config validada) | ya corriendo | si con polares+muestreo+Glauert deja de derivar, media Etapa 2 hecha |
-| 4 | Etapa 2 con el horizonte medido | 40-60 rev | la evidencia de convergencia |
-| 5 | Etapa 3, segunda malla | 1 corrida | demuestra que no es artefacto de resolución |
-| 6 | Etapa 4, acoplado con Aeroelast | el proyecto FSI | recién con el rígido cerrado |
+| 2 | el depósito del ASM (el bug del acimut de construcción) | **1 corrida corta, hecha** | **cerrada**: `11610140`, 0,2 rev; el `cp` pasó de 1,85× a 0,89× del ALM (`5026c97`) |
+| 3 | el trío sobre la **misma malla** (ALM/ASM/ASM-mesh) | 3 corridas cortas | aísla el ~10 % que queda: malla vs muestreo vs ancho de deposición |
+| 4 | leer la corrida `11609926` (config validada) | ya corriendo | si con polares+muestreo+Glauert deja de derivar, media Etapa 2 hecha |
+| 5 | Etapa 2 con el horizonte medido | 40-60 rev | la evidencia de convergencia (ahora sí interpretable) |
+| 6 | Etapa 3, segunda malla | 1 corrida | demuestra que no es artefacto de resolución |
+| 7 | Etapa 4, acoplado con Aeroelast | el proyecto FSI | recién con el rígido cerrado |
+
+> **Nota (2026-10-07).** Las corridas `asmcmp-2026-10-02` y todas las ASM+mesh
+> anteriores a `5026c97` **no son citables**: el flujo nunca recibió la carga de la
+> pala (el depósito quedaba cacheado en el acimut de construcción), así que su `cp`
+> no describe el modelo. Ver `odd/tasks/iea15mw-asm-mesh-cp-diagnosis.md`.
 
 ## Lo que NO sirve
 

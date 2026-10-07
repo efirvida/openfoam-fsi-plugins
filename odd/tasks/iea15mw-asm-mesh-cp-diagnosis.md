@@ -162,16 +162,40 @@ paralelo de 2 rangos) corre el fixture rotante hasta 153° de acimut y exige que
 integral de la fuerza sobre el flujo sea menos el total reportado en **cada** paso.
 En rojo antes del fix (33 % / 0,1 % / 0 / 0), en verde después.
 
+## El fix, validado en el caso real
+
+Job `11610140` (`runs/iea15mw-asm-mesh-fix`, 0,2 rev = 71,85°, 48 rangos, una
+asignación, 1 h 07). La malla es **idéntica** al run de referencia
+(`cells:4299792`), así que es un A/B limpio sobre la librería.
+
+| acimut | cp con fix | cp antes | cp ALM | ratio con fix | ratio antes |
+| --- | --- | --- | --- | --- | --- |
+| 0,42° | 0,9446 | 0,9446 | 0,9449 | **1,000** | 1,000 |
+| 2,11° | 0,4328 | 0,4855 | 0,4554 | **0,950** | 1,066 |
+| 2,96° | 0,4595 | 0,7242 | 0,5144 | **0,893** | 1,408 |
+| 5,07° | 0,5563 | 1,1544 | 0,6254 | **0,890** | 1,846 |
+
+El ratio se sostiene en 0,87-0,92 hasta 71,85°. El α outboard a 5,07° cae de
+14,58° a 5,16° (el ALM pide 8,76°). `ct` y `cd` acompañan al `cp` con el mismo
+offset: es diferencia de **carga**, no de brazo de momento. La instrumentación D6
+confirma el cambio de régimen: `mean_candidates` ahora varía por llamada
+(176,3 → 174,4 al avanzar la pala) en vez de quedar congelado.
+
 ## Lo que queda
 
-- **Rehacer la validación del ASM+mesh**: con este fix el modelo deposita lo que
-  reporta, así que **ninguna corrida ASM+mesh anterior sirve** (ni las de
-  `_archive`, ni las del volcado de nodos). El próximo paso es la corrida de 0,2 rev
-  con la librería arreglada; si el `cp` decae como el del ALM, la anomalía de #5
-  está cerrada de punta a punta.
-- **La pregunta del ancho de deposición queda pospuesta**: no tiene sentido medir
-  `ε` contra el ALM mientras el flujo no reciba la carga. Después de la corrida se
-  sabrá si además hace falta acotar el ancho por cuerda.
+- **El ~10 % restante es diferencia de modelo, no anomalía**: con el fix el
+  ASM+mesh queda *por debajo* del ALM. Candidatos: la malla (superficie refinada
+  por snappy contra la malla del ALM), el muestreo promediado en cuerda, el
+  momento de cabeceo que `moment()` no incluye para el ASM (el ALM sí) y el ancho
+  de deposición. Se aísla con el trío sobre **la misma malla** (Etapa 3 de
+  `iea15mw-asm-mesh-convergence.md`), que no se lanzó.
+- **La convergencia del ASM+mesh** vuelve a la Etapa 2 de la campaña, ahora con
+  una librería que deposita lo que reporta: `cp` por revolución, con el criterio
+  ya escrito (<0,2 % sostenido 5 rev, spanwise <2 % por banda, ripple 3/rev
+  estable en amplitud y fase).
+- **El ancho de deposición sigue sin medirse**: con el depósito arreglado la
+  pregunta vuelve a tener sentido, pero ahora es una optimización de modelo, no
+  un bug.
 
 ## Lo que NO hay que hacer
 
