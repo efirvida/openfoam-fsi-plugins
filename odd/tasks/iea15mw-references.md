@@ -279,3 +279,8 @@ escalón del post-proceso. En el ALM cada pala cae una vez por revolución
 (≈−3,5 % de su media) y los tres mínimos están a 120,0/119,6/120,4°. El
 ASM-mesh, en cambio, muestra una oscilación 1/rev enorme (de 13,8 a
 76,9 MN·m) que es artefacto de la corrida viva, no ripple de paso de pala.
+
+### Issues de GitHub de esta campaña
+
+- [#5](https://github.com/efirvida/openfoam-fsi-plugins/issues/5) — **abierto**: el `cp` del ASM+mesh es imposible; criterio de aceptación y próximo chequeo en `odd/issues/asm-mesh-cp-imposible.md`.
+- Los dos hallazgos resueltos (polares y muestreo) están como issues cerrados con su causa, su fix y la evidencia medida.

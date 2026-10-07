@@ -1,5 +1,6 @@
 # Issue: ASM+mesh — el `cp` reportado es físicamente imposible
 
+- **GitHub:** [#5](https://github.com/efirvida/openfoam-fsi-plugins/issues/5)
 - **Estado:** abierto, acotado
 - **Prioridad:** alta — es el modelo que el FSI va a usar
 - **Creado:** 2026-10-07
