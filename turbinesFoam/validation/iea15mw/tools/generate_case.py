@@ -128,6 +128,21 @@ DEFAULT_MESH_FACTOR = 1.0
 #: ``TURBINE_*`` -> flag loop (the ``for pair in "TURBINE_UPSTREAM:--domain-
 #: upstream" ...`` block) as ``"TURBINE_MESH_FACTOR:--mesh-factor"``.
 MESH_FACTOR_ENV = "TURBINE_MESH_FACTOR"
+#: Time-step refinement factor on top of the derived ``deltaT``.
+#:
+#: ``delta_t()`` derives the step from the finest cell the rotor sees, so
+#: refining the mesh and refining the step are THE SAME LEVER: a series of meshes
+#: at their own derived steps cannot separate the spatial axis from the temporal
+#: one, and a convergence claim on it is confounded. ``dtFactor`` below 1 refines
+#: in time at a FIXED mesh, which is what a convergence study needs.
+#:
+#: Above 1 is rejected: the derived step is the ceiling that keeps the tip
+#: displacement per step under one cell (``0.95*cell/tip_speed``), so a larger
+#: step makes the rotating actuator force jump cells.
+DEFAULT_DT_FACTOR = 1.0
+#: Environment bridge (see ``MESH_FACTOR_ENV``): the runner cannot be edited
+#: while live jobs execute it.
+DT_FACTOR_ENV = "TURBINE_DT_FACTOR"
 
 # --- Per-node surface dump (bladeSurfaceSource writeNodePerf) ----------------
 #: ``writeNodePerf`` in every rendered blade dictionary. The C++ gate already
@@ -831,6 +846,7 @@ def render_control_dict(
     start_from: str = "startTime",
     write_interval_deg: float = WRITE_INTERVAL_DEG,
     snappy_level: int = 0,
+    dt_factor: float = DEFAULT_DT_FACTOR,
 ) -> str:
     domain = _as_domain(domain)
     t_rev = revolution_period(rpm)
@@ -849,7 +865,7 @@ startFrom {start_from};
 startTime 0;
 stopAt endTime;
 endTime {end_time:.8g};
-deltaT {delta_t(domain, rpm, snappy_level):.8g};
+deltaT {delta_t(domain, rpm, snappy_level)*float(dt_factor):.8g};
 writeControl runTime;
 writeInterval {write_interval:.8g};
 purgeWrite {snaps_per_rev};
@@ -1707,6 +1723,7 @@ def outputs(
     wake_turns: int = DEFAULT_WAKE_TURNS,
     wake_azimuthal_step: float = DEFAULT_WAKE_AZIMUTHAL_STEP,
     tip_correction_epsilon: float = DEFAULT_TIP_CORRECTION_EPSILON,
+    dt_factor: float = DEFAULT_DT_FACTOR,
 ) -> dict[Path, str]:
     domain = _as_domain(domain)
     case_dir = Path(case_dir)
@@ -1724,7 +1741,8 @@ def outputs(
         system / "blockMeshDict": render_block_mesh(domain, flow_axis),
         system / "topoSetDict": render_toposet(flow_axis),
         system / "controlDict": render_control_dict(
-            speed, rpm, domain, end_revs, start_from, write_interval_deg, dt_level
+            speed, rpm, domain, end_revs, start_from, write_interval_deg, dt_level,
+            dt_factor=dt_factor,
         ),
         system / "decomposeParDict": render_decompose_par(ranks),
         system / "fvSchemes": render_fv_schemes(),
@@ -1843,6 +1861,34 @@ def _display(path: Path, case_dir: Path) -> str:
         return str(path.relative_to(case_dir))
     except ValueError:
         return str(path)
+
+
+def resolve_dt_factor(cli_value: float | None = None) -> float:
+    """Resolve the rendered ``deltaT`` refinement factor.
+
+    Precedence: an explicit ``--dt-factor`` wins, else the ``TURBINE_DT_FACTOR``
+    environment bridge, else ``DEFAULT_DT_FACTOR`` (1.0, the derived step).
+    Accepted range is ``0 < dtFactor <= 1``: above 1 the tip displacement per
+    step exceeds one cell and the rotating actuator force jumps cells, so the
+    derived step is a ceiling and the knob only refines.
+    """
+    if cli_value is not None:
+        factor = float(cli_value)
+    else:
+        env_value = os.environ.get(DT_FACTOR_ENV)
+        if env_value is not None and env_value.strip():
+            factor = float(env_value)
+        else:
+            return DEFAULT_DT_FACTOR
+
+    if not 0.0 < factor <= 1.0:
+        raise ValueError(
+            f"the time-step factor must be in (0, 1], got {factor:g}: the "
+            "derived deltaT keeps the tip displacement per step under one "
+            "cell, so it is a ceiling and the knob only refines"
+        )
+
+    return factor
 
 
 def resolve_mesh_factor(cli_value: float | None = None) -> float:
@@ -2301,6 +2347,20 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--dt-factor",
+        type=float,
+        default=None,
+        help=(
+            "multiplies the derived deltaT (effective default "
+            f"{DEFAULT_DT_FACTOR:g}); below 1 it refines in TIME at a FIXED "
+            "mesh, which is what a convergence study needs because the derived "
+            "step is tied to the finest cell and a mesh series at its own "
+            "steps cannot separate the two axes. Above 1 is rejected: the tip "
+            "displacement per step would exceed one cell. Explicit flag beats "
+            f"{DT_FACTOR_ENV}, which beats {DEFAULT_DT_FACTOR:g}"
+        ),
+    )
+    parser.add_argument(
         "--write-node-perf",
         action="store_true",
         default=None,
@@ -2416,6 +2476,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         mesh_factor = resolve_mesh_factor(args.mesh_factor)
+        dt_factor = resolve_dt_factor(args.dt_factor)
         write_node_perf = resolve_write_node_perf(args.write_node_perf)
         velocity_sample_radius = resolve_velocity_sample_radius(
             args.velocity_sample_radius
@@ -2504,6 +2565,7 @@ def main(argv: list[str] | None = None) -> int:
             wake_turns=wake_turns,
             wake_azimuthal_step=wake_azimuthal_step,
             tip_correction_epsilon=tip_correction_epsilon,
+            dt_factor=dt_factor,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)

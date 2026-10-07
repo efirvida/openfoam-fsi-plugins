@@ -1269,6 +1269,73 @@ class TestMeshFactor:
         assert generate_case.resolve_mesh_factor(0.5) == pytest.approx(0.5)
 
 
+class TestDtFactor:
+    """The ``--dt-factor`` knob (time-step refinement at a FIXED mesh).
+
+    ``delta_t()`` derives ``deltaT`` from the finest cell the rotor sees, so a
+    series of meshes at their own derived steps cannot separate the spatial axis
+    from the temporal one. The factor multiplies the derived step, so a value
+    below 1 refines in time without touching the mesh; above 1 is rejected
+    because the tip displacement per step would exceed one cell. The default
+    (1.0) must render the derived step unchanged, byte for byte, or ``--check``
+    breaks on the committed case.
+    """
+
+    def test_default_constant_and_env_bridge_name(self, monkeypatch):
+        monkeypatch.delenv(generate_case.DT_FACTOR_ENV, raising=False)
+        assert generate_case.DEFAULT_DT_FACTOR == pytest.approx(1.0)
+        assert generate_case.DT_FACTOR_ENV == "TURBINE_DT_FACTOR"
+        assert generate_case.resolve_dt_factor() == pytest.approx(1.0)
+
+    @staticmethod
+    def _delta_t(case_dir, *args):
+        assert generate_case.main(["--case-dir", str(case_dir)] + list(args)) == 0
+        text = (case_dir / "system" / "controlDict").read_text(encoding="utf-8")
+        for line in text.splitlines():
+            if line.startswith("deltaT "):
+                return float(line.split()[1].rstrip(";"))
+        raise AssertionError("no deltaT in the rendered controlDict")
+
+    def test_flag_refines_the_step_at_a_fixed_mesh(self, tmp_path, monkeypatch):
+        monkeypatch.delenv(generate_case.DT_FACTOR_ENV, raising=False)
+        base = self._delta_t(tmp_path / "base")
+        half = self._delta_t(tmp_path / "half", "--dt-factor", "0.5")
+        quarter = self._delta_t(tmp_path / "quarter", "--dt-factor", "0.25")
+        assert base == pytest.approx(generate_case.DEFAULT_DT_FACTOR * base)
+        assert half == pytest.approx(base / 2.0)
+        assert quarter == pytest.approx(base / 4.0)
+
+    def test_env_bridge_changes_the_default_render(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(generate_case.DT_FACTOR_ENV, "0.5")
+        half = self._delta_t(tmp_path / "case")
+        monkeypatch.delenv(generate_case.DT_FACTOR_ENV)
+        base = self._delta_t(tmp_path / "reference")
+        assert half == pytest.approx(base / 2.0)
+
+    def test_cli_flag_beats_the_env_bridge(self, monkeypatch):
+        monkeypatch.setenv(generate_case.DT_FACTOR_ENV, "0.25")
+        assert generate_case.resolve_dt_factor(0.5) == pytest.approx(0.5)
+
+    def test_above_one_is_rejected(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.delenv(generate_case.DT_FACTOR_ENV, raising=False)
+        with pytest.raises(ValueError):
+            generate_case.resolve_dt_factor(1.5)
+        with pytest.raises(ValueError):
+            generate_case.resolve_dt_factor(0.0)
+        monkeypatch.setenv(generate_case.DT_FACTOR_ENV, "2")
+        with pytest.raises(ValueError):
+            generate_case.resolve_dt_factor()
+        # Through the CLI it is a generation error, not a traceback
+        monkeypatch.delenv(generate_case.DT_FACTOR_ENV, raising=False)
+        assert (
+            generate_case.main(
+                ["--case-dir", str(tmp_path / "case"), "--dt-factor", "1.5"]
+            )
+            == 2
+        )
+        assert "time-step factor" in capsys.readouterr().err
+
+
 class TestWriteNodePerf:
     """The opt-in per-node surface dump gate (``writeNodePerf``).
 
