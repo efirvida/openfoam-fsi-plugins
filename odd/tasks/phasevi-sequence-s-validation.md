@@ -104,14 +104,14 @@ Leídas directamente, no inferidas.
       cruzada crudo-vs-workbook.
 - **Evidencia:** commit `9a4c932`; issue #8 de GitHub sincronizado.
 
-### S1 — Procedencia versionada del archivo UAE6
-- [ ] `scripts/extractUAE6Reference.py` (committed): lee el Parquet del
+### S1 — Procedencia versionada del archivo UAE6 ✅
+- [x] `scripts/extractUAE6Reference.py` (committed): lee el Parquet del
       archivo, decodifica `<stem>` como `s<WW><YYYY><R>` (velocidad, yaw en
       grados, repetición), enmascara `err != 128`, y emite las dos tablas con el
       **esquema exacto** de `load_experiment` (`file_name`, `sequence`,
       `wind_speed_m_s`, `yaw_token`, `yaw_deg`, `repetition`, `rpm`, `tsr`,
       `rotpow_kw`, `lsstqcor_nm`, `eaeroth_n`, … / `r_over_R`, `cn`, `ct`, `cm`).
-- [ ] Salida a `data/experiment/uae6-archive/` + `PROVENANCE.md` con:
+- [x] Salida a `data/experiment/uae6-archive/` + `PROVENANCE.md` con:
       definición (reporte + sha256 del PDF), la regla del nombre y su verificación
       contra el canal `YAW`, el cruce de inventario contra la Tabla C-18, el
       sha256 del inventario del archivo y la fecha de extracción.
@@ -200,6 +200,9 @@ S2 la justifique.
 | 2026-10-07 | Inventario de las 8 secuencias vs las tablas C-7…C-20 del reporte | **522 = 522**, las 8 cierran |
 | 2026-10-07 | Crudo vs workbook para `h0700000` (además de `s0700000`) | idéntico → H también queda corroborada por bytes |
 | 2026-10-07 | Catálogo de secuencias y evaluación de candidatas | `data/experiment/uae6-archive/CATALOG.md` |
+| 2026-10-07 | S1: crudo vs workbook en S (8 cantidades + 5 estaciones spanwise) | <1e-5 relativo; spanwise idéntico; `yaw_deg` difiere 2,1e-3 por redondeo del workbook |
+| 2026-10-07 | S1: `extractUAE6Reference.py --check` | exit 0, tablas reproducibles |
+| 2026-10-07 | S1: tests nuevos | **15 passed** (gramática del stem, cobertura, cruce con el workbook, inventario) |
 
 ## Registro de commits
 
@@ -208,3 +211,5 @@ S2 la justifique.
 | `9a4c932` | S0 — issue #8 + doc de feature |
 | `c99e09e` | S3 — muestreo y exponente de Re renderizables |
 | `fd6ecdf` | Catálogo de las 8 secuencias + selección de candidata |
+| `dfdb9d5` | Borrado del downloader + registro del método de descarga |
+| _(S1)_ | Extractor, tablas derivadas, PROVENANCE e inventario |
