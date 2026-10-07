@@ -480,14 +480,18 @@ the reported torque.
   elements; the per-node CSV is global (it reflects the azimuth) and the node
   ordering is fixed at construction. `setSpeed`, `scaleVelocity` and
   `setOmega` do not move the geometry.
-- **MPI:** every rank holds the full canonical node list and builds candidate
-  lists over its own cells; each local cell is written exactly once and the
-  totals are `returnReduce`d. A node whose containing cell is on another rank
-  is resolved with the S1 `findCell` + reduce/minimum sentinel; an unreachable
+- **MPI:** every rank holds the full canonical node list and queries the bins
+  over its own cells; each local cell is written exactly once and the totals
+  are `returnReduce`d. A node whose containing cell is on another rank is
+  resolved with the S1 `findCell` + reduce/minimum sentinel; an unreachable
   sample is a fatal error.
-- **Bounded query:** each node needs one `cellSize` lookup and one support
-  query at construction; each `addSup` iterates only the cached candidate
-  list, never every local cell.
+- **Bounded query:** the per-rank uniform bin grid over the local cell centres
+  is built once (the mesh is static). Each `addSup` visits only the bins
+  overlapping each node's support box **at the node's current position** —
+  never every local cell — so the blade can rotate through the mesh without
+  losing the receiving cells of a node. The per-node local cell size `h_i` (the
+  kernel width) is refreshed on every rigid move with one `findCell` per node
+  and a single list reduction.
 - **Fork divergence:** `bladeSurfaceSource`, `bladeSurfaceSampler` and the
   shared `surfaceSamplerBase` are new in this fork and are not part of
   upstream turbinesFoam. The nacelle sampler is re-based on

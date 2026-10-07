@@ -209,23 +209,66 @@ Foam::scalar Foam::fv::bladeSurfaceSampler::nodeSupport(const scalar h) const
 }
 
 
-void Foam::fv::bladeSurfaceSampler::buildCandidates()
+void Foam::fv::bladeSurfaceSampler::refreshNodeH()
 {
-    candidates_.setSize(nNodes());
-    nodeH_.setSize(nNodes());
-
-    scalar minSupport = VGREAT;
+    // One findCell per node plus ONE list reduction. The node set is replicated
+    // on every rank and each node's containing cell lives on its owner, so the
+    // per-node sentinel has to be reduced globally: a per-node reduce() would be
+    // one collective per node (100 236 of them on the IEA 15 MW surface).
+    List<scalar> h(nNodes(), VGREAT);
 
     forAll(positions_, i)
     {
-        // Local cell size h = cbrt(V[cell]); fatal on an unreachable sample
-        nodeH_[i] = cellSize(positions_[i]);
+        const label cellI = mesh_.findCell(positions_[i]);
+
+        if (cellI >= 0)
+        {
+            h[i] = Foam::cbrt(mesh_.V()[cellI]);
+        }
+    }
+
+    // One MPI_Allreduce on the whole list (UList::begin() is not a raw pointer
+    // in v2506 and this overload's tag has no default, so the contiguous array
+    // is taken as &h[0] with an explicit message tag)
+    reduce(&h[0], int(h.size()), minOp<scalar>(), UPstream::msgType());
+
+    forAll(h, i)
+    {
+        if (!(h[i] < VGREAT))
+        {
+            FatalErrorInFunction
+                << "Blade surface sample " << i << " at " << positions_[i]
+                << " not found in mesh" << nl
+                << exit(FatalError);
+        }
+    }
+
+    nodeH_ = h;
+}
+
+
+void Foam::fv::bladeSurfaceSampler::buildBins()
+{
+    // Per-node local cell size at the construction geometry: the kernel width
+    // and the query support follow the cells the node is actually in, and
+    // refreshNodeH() keeps them following the nodes as the blade rotates
+    nodeH_.setSize(nNodes());
+    refreshNodeH();
+
+    scalar minSupport = VGREAT;
+
+    forAll(nodeH_, i)
+    {
         minSupport = min(minSupport, nodeSupport(nodeH_[i]));
     }
 
-    // A rank with no local cells owns no receiving cell: empty candidates
+    // A rank with no local cells owns no receiving cell: empty bins
     if (mesh_.nCells() == 0)
     {
+        nBinsX_ = 0;
+        nBinsY_ = 0;
+        nBinsZ_ = 0;
+        bins_.clear();
         return;
     }
 
@@ -274,7 +317,17 @@ void Foam::fv::bladeSurfaceSampler::buildCandidates()
     }
     while (true);
 
-    List<List<label>> bins(nBinsX*nBinsY*nBinsZ);
+    // The grid is the reusable part of the query: it depends on the mesh only.
+    // The per-node query is done at distribution time, from the node's current
+    // position (the nodes rotate through the mesh; a per-node list cached here
+    // would be bound to the construction azimuth).
+    binMin_ = minC;
+    binSize_ = binSize;
+    nBinsX_ = nBinsX;
+    nBinsY_ = nBinsY;
+    nBinsZ_ = nBinsZ;
+
+    bins_.setSize(nBinsX_*nBinsY_*nBinsZ_);
 
     forAll(mesh_.C(), cellI)
     {
@@ -287,58 +340,7 @@ void Foam::fv::bladeSurfaceSampler::buildCandidates()
         const label iz =
             min(max(label((C.z() - minC.z())/binSize), label(0)), nBinsZ - 1);
 
-        bins[(iz*nBinsY + iy)*nBinsX + ix].append(cellI);
-    }
-
-    // Per-node query over the bins overlapping [X - support, X + support]
-    forAll(positions_, i)
-    {
-        const point& X = positions_[i];
-        const scalar s = nodeSupport(nodeH_[i]);
-
-        const label i0x =
-            min(max(label((X.x() - s - minC.x())/binSize), label(0)), nBinsX - 1);
-        const label i1x =
-            min(max(label((X.x() + s - minC.x())/binSize), label(0)), nBinsX - 1);
-        const label i0y =
-            min(max(label((X.y() - s - minC.y())/binSize), label(0)), nBinsY - 1);
-        const label i1y =
-            min(max(label((X.y() + s - minC.y())/binSize), label(0)), nBinsY - 1);
-        const label i0z =
-            min(max(label((X.z() - s - minC.z())/binSize), label(0)), nBinsZ - 1);
-        const label i1z =
-            min(max(label((X.z() + s - minC.z())/binSize), label(0)), nBinsZ - 1);
-
-        for (label iz = i0z; iz <= i1z; ++iz)
-        {
-            for (label iy = i0y; iy <= i1y; ++iy)
-            {
-                for (label ix = i0x; ix <= i1x; ++ix)
-                {
-                    const List<label>& bin =
-                        bins[(iz*nBinsY + iy)*nBinsX + ix];
-
-                    forAll(bin, k)
-                    {
-                        const label cellI = bin[k];
-                        const vector d = mesh_.C()[cellI] - X;
-
-                        // S1 axis-aligned prefilter on the kernel support
-                        if
-                        (
-                            mag(d.x()) > s
-                         || mag(d.y()) > s
-                         || mag(d.z()) > s
-                        )
-                        {
-                            continue;
-                        }
-
-                        candidates_[i].append(cellI);
-                    }
-                }
-            }
-        }
+        bins_[(iz*nBinsY_ + iy)*nBinsX_ + ix].append(cellI);
     }
 }
 
@@ -392,55 +394,124 @@ void Foam::fv::bladeSurfaceSampler::rotateGeometry
     pitchAxis_ = RM & pitchAxis_;
 
     updateBodyFrame();
+
+    // The nodes changed cells: h_i (the kernel width) must follow the mesh the
+    // node is actually in
+    refreshNodeH();
+}
+
+
+Foam::label Foam::fv::bladeSurfaceSampler::distributeNodeForce
+(
+    volVectorField& ff,
+    const label i,
+    const vector& F
+) const
+{
+    // A rank with no local cell owns no receiving cell
+    if (nBinsX_ == 0)
+    {
+        return 0;
+    }
+
+    const point& X = positions_[i];
+    const scalar h = nodeH_[i];
+    const scalar s = nodeSupport(h);
+    const scalar eps = 2.0*h*meshFactor_;
+
+    const scalarField& V = mesh_.V();
+    const vectorField& C = mesh_.C();
+
+    const label i0x =
+        min(max(label((X.x() - s - binMin_.x())/binSize_), label(0)), nBinsX_ - 1);
+    const label i1x =
+        min(max(label((X.x() + s - binMin_.x())/binSize_), label(0)), nBinsX_ - 1);
+    const label i0y =
+        min(max(label((X.y() - s - binMin_.y())/binSize_), label(0)), nBinsY_ - 1);
+    const label i1y =
+        min(max(label((X.y() + s - binMin_.y())/binSize_), label(0)), nBinsY_ - 1);
+    const label i0z =
+        min(max(label((X.z() - s - binMin_.z())/binSize_), label(0)), nBinsZ_ - 1);
+    const label i1z =
+        min(max(label((X.z() + s - binMin_.z())/binSize_), label(0)), nBinsZ_ - 1);
+
+    label visited = 0;
+
+    for (label iz = i0z; iz <= i1z; ++iz)
+    {
+        for (label iy = i0y; iy <= i1y; ++iy)
+        {
+            for (label ix = i0x; ix <= i1x; ++ix)
+            {
+                const List<label>& bin =
+                    bins_[(iz*nBinsY_ + iy)*nBinsX_ + ix];
+
+                forAll(bin, k)
+                {
+                    const label cellI = bin[k];
+                    const vector d = C[cellI] - X;
+
+                    // S1 axis-aligned prefilter on the kernel support
+                    if
+                    (
+                        mag(d.x()) > s
+                     || mag(d.y()) > s
+                     || mag(d.z()) > s
+                    )
+                    {
+                        continue;
+                    }
+
+                    scalar w = 0.0;
+
+                    if (kernelMode_ == "gaussian")
+                    {
+                        // No-mesh ASM Gaussian ablation: the dimensionless cell
+                        // weight is V_c*phi so that F*(w/V_c) below is the
+                        // element's exp(-d^2/eps^2)/(eps^3*pi^1.5) factor
+                        w =
+                            V[cellI]*Foam::exp(-magSqr(d)/sqr(eps))
+                           /(Foam::pow(eps, 3)
+                             *Foam::pow(constant::mathematical::pi, 1.5));
+                    }
+                    else
+                    {
+                        w = kernel(d.x()/h)*kernel(d.y()/h)*kernel(d.z()/h);
+                    }
+
+                    if (w > 0.0)
+                    {
+                        // Eq. 18 with the paper's negative sign: the distributed
+                        // force acts on the flow, F acts on the blade
+                        ff[cellI] -= F*(w/V[cellI]);
+                        ++visited;
+                    }
+                }
+            }
+        }
+    }
+
+    return visited;
 }
 
 
 void Foam::fv::bladeSurfaceSampler::distributeNodeForces
 (
     volVectorField& ff,
-    const List<vector>& nodeForces
+    const List<vector>& nodeForces,
+    label& localCandidates,
+    label& localMax
 ) const
 {
-    const scalarField& V = mesh_.V();
+    localCandidates = 0;
+    localMax = 0;
 
     forAll(nodeForces, i)
     {
-        const point& X = positions_[i];
-        const vector F = nodeForces[i];
-        const scalar h = nodeH_[i];
-        const List<label>& cells = candidates_[i];
+        const label visited = distributeNodeForce(ff, i, nodeForces[i]);
 
-        const scalar eps = 2.0*h*meshFactor_;
-
-        forAll(cells, k)
-        {
-            const label cellI = cells[k];
-            const vector d = mesh_.C()[cellI] - X;
-
-            scalar w = 0.0;
-
-            if (kernelMode_ == "gaussian")
-            {
-                // No-mesh ASM Gaussian ablation: the dimensionless cell
-                // weight is V_c*phi so that F*(w/V_c) below is the element's
-                // exp(-d^2/eps^2)/(eps^3*pi^1.5) factor
-                w =
-                    V[cellI]*Foam::exp(-magSqr(d)/sqr(eps))
-                   /(Foam::pow(eps, 3)
-                     *Foam::pow(constant::mathematical::pi, 1.5));
-            }
-            else
-            {
-                w = kernel(d.x()/h)*kernel(d.y()/h)*kernel(d.z()/h);
-            }
-
-            if (w > 0.0)
-            {
-                // Eq. 18 with the paper's negative sign: the distributed
-                // force acts on the flow, F acts on the blade
-                ff[cellI] -= F*(w/V[cellI]);
-            }
-        }
+        localCandidates += visited;
+        localMax = max(localMax, visited);
     }
 }
 
@@ -463,7 +534,12 @@ Foam::fv::bladeSurfaceSampler::bladeSurfaceSampler
     nodeH_(),
     nodeForces_(),
     forces_(),
-    candidates_(),
+    bins_(),
+    binMin_(point::zero),
+    binSize_(0.0),
+    nBinsX_(0),
+    nBinsY_(0),
+    nBinsZ_(0),
     elementStation_(),
     patchArea_(),
     surfaceOrigin_(dict.lookupOrDefault("surfaceOrigin", bodyOrigin_)),
@@ -597,9 +673,10 @@ Foam::fv::bladeSurfaceSampler::bladeSurfaceSampler
     nodeForces_.setSize(nNodes(), vector::zero);
     forces_.setSize(nNodes(), vector::zero);
 
-    // Per-node cell size, kernel support and bounded candidate lists (once:
-    // the background mesh and h_i are static)
-    buildCandidates();
+    // Per-node cell size, kernel support and the per-rank bin grid (once: the
+    // background mesh is static; the nodes are not, so the query and h_i are
+    // refreshed when the geometry moves)
+    buildBins();
 
     Info<< "Blade surface sampler: " << nNodes() << " nodes over "
         << elements.size() << " element patches, kernel " << kernelMode_;
@@ -665,6 +742,7 @@ void Foam::fv::bladeSurfaceSampler::translate(const vector& translation)
     pitchPoint_ += translation;
 
     updateBodyFrame();
+    refreshNodeH();
 }
 
 

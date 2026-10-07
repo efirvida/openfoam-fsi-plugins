@@ -57,22 +57,28 @@ Description
     assigned, that every element owns a non-empty patch and that the patch
     areas sum to the total surface area.
 
-    The distribution uses a per-node candidate list built once on top of a
-    per-rank uniform bin grid over the local cell centres (bin size
-    max(min_i support_i, small)). Each query visits the bins overlapping the
-    node's kernel support and applies the S1 axis-aligned prefilter, so a
-    per-addSup update is O(sum_i |candidates_i|) instead of a full local-cell
-    scan. The support is 2.5*h_i for the paper cosine kernel (Eq. 8) or
-    eps_i*sqrt(ln(1000)) with eps_i = 2*cbrt(V_i)*meshFactor for the Gaussian
-    ablation (D7).
+    The distribution uses a per-rank uniform bin grid over the local cell
+    centres (bin size max(min_i support_i, small)), built once: the mesh is
+    static, so the grid is the reusable part of the query. The per-node query
+    visits the bins overlapping the node's kernel support **at its current
+    position** and applies the S1 axis-aligned prefilter, so a per-addSup
+    update is O(sum_i |support_i|) instead of a full local-cell scan. The
+    nodes rotate with the blade through an Eulerian mesh, so the receiving
+    cells may not be cached per node: a list cached at the construction
+    azimuth would make the deposit miss (and then silently lose) the receiving
+    cells as the blade advances. The support is 2.5*h_i for the paper cosine
+    kernel (Eq. 8) or eps_i*sqrt(ln(1000)) with eps_i = 2*cbrt(V_i)*meshFactor
+    for the Gaussian ablation (D7).
 
     Body frame contract: the frame is built from the optional bodyOrigin and
     bodyAxis entries (defaults surfaceOrigin and surfaceSpanDirection), i.e.
     fixed at construction, so positions()/normals() are azimuth-dependent
     while the node ordering is fixed. Every rigid transform the owning blade
-    forwards (rotate/translate/pitch) moves the global nodes and refreshes the
-    body-frame copies. pitch() is the documented rigid approximation about the
-    root element pitch axis through the root chord pitch-axis point (D5).
+    forwards (rotate/translate/pitch) moves the global nodes, refreshes the
+    body-frame copies and refreshes the per-node local cell size h_i (the
+    kernel width follows the cells the node is actually in). pitch() is the
+    documented rigid approximation about the root element pitch axis through
+    the root chord pitch-axis point (D5).
 
     MPI follows the S1 replicated-node/local-cell design: every rank holds the
     full node list and builds candidates over its own local cells only, so
@@ -138,8 +144,20 @@ class bladeSurfaceSampler
         //- Per-node force on the blade in SI newtons, body frame (contract)
         List<vector> forces_;
 
-        //- Bounded candidate local cell labels per node
-        List<List<label>> candidates_;
+        //- Per-rank uniform bin grid over the local cell centres (static: the
+        //  mesh does not move, the nodes do)
+        List<List<label>> bins_;
+
+        //- Bin-grid origin (lower corner of the local cell-centre bounding box)
+        point binMin_;
+
+        //- Bin size of the grid above
+        scalar binSize_;
+
+        //- Bin-grid dimensions
+        label nBinsX_;
+        label nBinsY_;
+        label nBinsZ_;
 
         //- Span station of every element, m
         List<scalar> elementStation_;
@@ -197,8 +215,21 @@ class bladeSurfaceSampler
         //- Kernel support radius of a node
         scalar nodeSupport(const scalar h) const;
 
-        //- Build the per-rank bin grid and the per-node candidate lists
-        void buildCandidates();
+        //- Build the per-rank bin grid and the per-node local cell size
+        void buildBins();
+
+        //- Refresh the per-node local cell size h_i at the current geometry
+        //  (one findCell per node plus a single list reduction)
+        void refreshNodeH();
+
+        //- Distribute one node's force over the cells of its support box at
+        //  the node's current position; returns the number of receiving cells
+        label distributeNodeForce
+        (
+            volVectorField& ff,
+            const label i,
+            const vector& F
+        ) const;
 
         //- Rotate the node geometry rigidly about point/axis and refresh the
         //  body frame
@@ -224,12 +255,16 @@ class bladeSurfaceSampler
             vector& t
         );
 
-        //- Distribute the node forces onto their candidate cells (Eq. 18);
-        //  the kernel is the paper cosine or the Gaussian ablation
+        //- Distribute the node forces onto the cells of their support boxes at
+        //  the current node positions (Eq. 18); the kernel is the paper cosine
+        //  or the Gaussian ablation. \c localCandidates receives the number of
+        //  receiving cells visited and \c localMax the largest per-node count.
         void distributeNodeForces
         (
             volVectorField& ff,
-            const List<vector>& nodeForces
+            const List<vector>& nodeForces,
+            label& localCandidates,
+            label& localMax
         ) const;
 
 

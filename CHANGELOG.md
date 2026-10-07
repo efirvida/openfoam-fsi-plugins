@@ -134,6 +134,50 @@ coordinates. The same suite carried a stale assertion (`contains no triangles`
 for a source message that reads `contains no faces`) and two lint findings
 (unclosed files, `zip` without `strict`); both are fixed here.
 
+#### 15. Bind the blade-surface deposit to the current node position
+
+**Files:**
+- `turbinesFoam/src/fvOptions/bladeSurface/bladeSurfaceSampler.C`
+- `turbinesFoam/src/fvOptions/bladeSurface/bladeSurfaceSampler.H`
+- `turbinesFoam/src/fvOptions/bladeSurface/bladeSurfaceSource.C`
+- `turbinesFoam/src/fvOptions/bladeSurface/bladeSurfaceSourceI.H`
+- `turbinesFoam/tests/test_blade_surface.py`
+- `turbinesFoam/README.md`
+
+**Problem:** `buildCandidates()` cached, once at construction, the local cell
+labels inside each node's kernel support -- its own comment reads "once: the
+background mesh and h_i are static". The background mesh is static; the nodes
+are not. `distributeNodeForces()` then evaluated the kernel at the node's
+*current* position over that construction-time list, so as the blade advanced
+through the Eulerian mesh the cached cells fell out of the 2.5*h support and the
+deposit decayed to nothing. On the minimal rotating fixture (uniform 0.1 m mesh,
+0.25 m support, nodes up to 0.44 m from the axis, 38 deg per step) the volume
+integral of the force applied to the flow is 33 % of the reported blade force
+after one step, 0.1 % after two and exactly zero from the third step on -- while
+`moment()`, the per-station CSV and the per-node CSV keep reporting the full
+load, so every CSV-only oracle stays green. This is the defect behind the
+ASM+mesh `cp` of issue #5: the flow never received the blade load, the induction
+never developed, and the BEM answered with a rising angle of attack (at 5 deg of
+azimuth the ASM+mesh asked 11.6-15 deg where the ALM asked 7.5-8.8 deg, `cp`
+1.154 against 0.625). The pure ASM (no surface) was never affected: it scans the
+local cells per node instead of using a cached list.
+
+**Fix:** the per-rank uniform bin grid is now the only cached structure (it
+depends on the mesh alone) and `distributeNodeForce()` queries the bins
+overlapping the node's support box at its current position with the S1
+prefilter, so the receiving cells always follow the node; the D6 instrumentation
+reports the receiving cells actually visited instead of a static list size. The
+per-node local cell size `h_i` -- which sets both the kernel width and the query
+support -- is refreshed on every rigid move and on the FSI geometry update by
+`refreshNodeH()`, which does one `findCell` per node plus a *single* list
+reduction: the per-node `reduce()` sentinel it replaces cost one collective per
+node (100 236 of them on the IEA 15 MW surface), so both the construction and
+the per-step path are now cheaper than before. New regression test
+`test_deposit_partition_of_unity_under_rotation` (serial and 2-rank parallel)
+runs the rotating fixture to 153 deg of azimuth and asserts the flow-side force
+integral equals minus the reported patch total at every step: 33 % / 0.1 % / 0 / 0
+before the fix, equal to machine precision after.
+
 ### New Features
 
 #### 2. AeroDyn blade shape (prebend, sweep, curve angle) in the ALM

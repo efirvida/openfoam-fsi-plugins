@@ -182,6 +182,28 @@ FRONTAL_AREA = np.pi * ROTOR_RADIUS**2
 TORQUE_DENOMINATOR = 0.5 * FRONTAL_AREA * ROTOR_RADIUS * U_INF**2
 ROTOR_AXIS = np.array([1.0, 0.0, 0.0])
 
+# Rotating-deposit invariant: the committed fixture stops after 0.002 s (15 deg
+# of azimuth), which is inside the construction support box of every node. The
+# mesh is a uniform 0.1 m, so the 2.5*h kernel support is 0.25 m and a node at
+# r = 0.44 m leaves that box after 0.25/0.44 rad = 33 deg. Four steps of 0.005 s
+# reach 153 deg, well past it.
+AFTAL_ROTATION_DT = 0.005
+AFTAL_ROTATION_STEPS = 4
+AFTAL_BLADE_FIELD = "force.turbine.blade1"
+AFTAL_FORCE_INTEGRAL_FO = """
+functions
+{
+    forceIntegral
+    {
+        type            volFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        fields          (%s);
+        operation       volIntegrate;
+        writeFields     false;
+    }
+}
+""" % AFTAL_BLADE_FIELD
+
 
 def _copy_case(src, dst):
     """Copy a case without generated run artifacts."""
@@ -270,6 +292,41 @@ def _read_aftal_element(case_dir):
 
 def _read_turbine(case_dir):
     return pd.read_csv(os.path.join(case_dir, TURBINE_CSV))
+
+
+def _read_aftal_station(case_dir):
+    return pd.read_csv(os.path.join(case_dir, AFTAL_STATION_CSV))
+
+
+def _run_aftal_rotating(case_dir, parallel=False):
+    """Run the AFTAL fixture past its construction support box.
+
+    Patches endTime/deltaT for `AFTAL_ROTATION_STEPS` steps of
+    `AFTAL_ROTATION_DT` seconds and adds the flow-side force integral
+    (`volFieldValue` on the blade force field); the committed fixture files are
+    never mutated because every test runs on a throwaway copy.
+    """
+    control = os.path.join(case_dir, "system", "controlDict")
+    with open(control) as fh:
+        text = fh.read()
+
+    end_time = AFTAL_ROTATION_DT * AFTAL_ROTATION_STEPS
+    text, n_end = re.subn(r"endTime\s+0\.002;", "endTime         %g;" % end_time, text)
+    text, n_dt = re.subn(r"deltaT\s+0\.001;", "deltaT          %g;" % AFTAL_ROTATION_DT, text)
+    assert n_end == 1 and n_dt == 1
+    text = text.replace(
+        "// ************************************************************************* //",
+        AFTAL_FORCE_INTEGRAL_FO
+        + "\n// ************************************************************************* //",
+    )
+
+    with open(control, "w") as fh:
+        fh.write(text)
+
+    if parallel:
+        _run_case(case_dir, "-parallel")
+    else:
+        _run_case(case_dir)
 
 
 def _axis_rotation(radians):
@@ -685,6 +742,40 @@ def test_surface_moment_in_torque(aftal_case):
         )
         assert not np.isclose(element_moment @ ROTOR_AXIS, torque, rtol=1e-6)
         assert abs(element_moment @ ROTOR_AXIS - torque) > 0.05 * abs(torque)
+
+
+@pytest.mark.parametrize("parallel", [False, True], ids=["serial", "parallel"])
+def test_deposit_partition_of_unity_under_rotation(tmp_path, parallel):
+    """The deposited field carries the reported blade force at every azimuth.
+
+    The blade force is reported from `nodeForces_` (and so is the moment, and
+    so is every surface CSV), but the load the flow actually receives is the
+    distribution over the receiving cells. The two must agree at any azimuth:
+    the blade rotates through an Eulerian mesh, so a distribution bound to the
+    construction azimuth deposits nothing once the nodes leave the cells that
+    were cached for them — a failure every CSV-only oracle misses. Both the
+    serial and the split-node parallel path are covered: every rank holds the
+    full node list and writes only its own receiving cells.
+
+    The integral of the force applied to the flow is
+    `-sum_cells w_i F_i`; it must equal minus the reported per-patch total.
+    """
+    name = "rotating-parallel" if parallel else "rotating"
+    case_dir = _copy_case(AFTAL_CASE_DIR, str(tmp_path / name))
+    _run_aftal_rotating(case_dir, parallel=parallel)
+
+    station = _read_aftal_station(case_dir)
+    integral = _read_force_integral(case_dir)
+
+    assert len(integral) == AFTAL_ROTATION_STEPS
+    for time, vec in integral:
+        rows = station[station.time == time]
+        assert len(rows) == 1, f"no reported patch force at t = {time:g}"
+        patch = _row_vector(rows.iloc[-1], ["force_x", "force_y", "force_z"])
+        # The reported load is non-zero at every step: a zero field integral is
+        # a lost deposit, not an absent load
+        assert np.linalg.norm(patch) > 0.0
+        assert_allclose(vec, -patch, rtol=1e-5, atol=1e-9)
 
 
 def test_parallel_total_preserved(surface_case, tmp_path):

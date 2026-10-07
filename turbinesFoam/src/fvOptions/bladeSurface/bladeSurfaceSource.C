@@ -307,8 +307,18 @@ void Foam::fv::bladeSurfaceSource::distribute
         }
     }
 
-    // Eq. 18 over the bounded candidate lists
-    sampler_.distributeNodeForces(bladeForceField, distributed);
+    // Eq. 18 over the bins overlapping each node's support box at the node's
+    // CURRENT position; the counters are the D6 instrumentation
+    label localCandidates = 0;
+    label localMax = 0;
+
+    sampler_.distributeNodeForces
+    (
+        bladeForceField,
+        distributed,
+        localCandidates,
+        localMax
+    );
 
     // FSI layer: publish the per-vertex force to the registry (no-op when the
     // 'fsi' sub-dictionary is absent)
@@ -334,19 +344,10 @@ void Foam::fv::bladeSurfaceSource::distribute
     bladeForce = total;
 
     // Per-addSup instrumentation (D6, spec "Bounded distribution and
-    // performance measurement"): candidate entries and wall seconds. The
-    // candidate lists are static, so the counts repeat on every call. The
-    // reductions are collective; only the master rank prints/writes.
-    label localCandidates = 0;
-    label localMax = 0;
-
-    forAll(sampler_.candidates_, i)
-    {
-        const label n = sampler_.candidates_[i].size();
-        localCandidates += n;
-        localMax = max(localMax, n);
-    }
-
+    // performance measurement"): receiving cells and wall seconds. The query
+    // follows the current node positions, so the counts are per call and are
+    // no longer the static construction-time list size. The reductions are
+    // collective; only the master rank prints/writes.
     lastCandidateTotal_ = returnReduce(localCandidates, sumOp<label>());
     const label maxCandidates = returnReduce(localMax, maxOp<label>());
     lastSeconds_ = std::chrono::duration<scalar>

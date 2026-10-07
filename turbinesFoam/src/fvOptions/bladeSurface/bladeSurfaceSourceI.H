@@ -76,6 +76,10 @@ inline void Foam::fv::bladeSurfaceSource::initializeFsiElements()
 inline void Foam::fv::bladeSurfaceSource::fsiUpdateGeometry()
 {
     sampler_.fsiUpdateGeometry();
+
+    // The FSI path moves the nodes without going through rotateGeometry, so
+    // h_i (the kernel width and the query support) has to be refreshed here
+    sampler_.refreshNodeH();
 }
 
 
