@@ -39,7 +39,7 @@ stale, without writing anything.
 Usage:
     generate_case.py [--speed 10.659] [--rpm 7.518] [--pitch 0]
                      [--mesh coarse] [--n-elements 147] [--cone-angle 4]
-                     [--mesh-factor F] [--end-revs 3]
+                     [--mesh-factor F] [--end-revs 3] [--write-node-perf]
                      [--velocity-sample-radius R] [--n-velocity-samples N]
                      [--snappy-disk-radius R] [--snappy-disk-half-thickness T]
                      [--snappy-wake-radius R] [--snappy-wake-upstream U]
@@ -128,6 +128,23 @@ DEFAULT_MESH_FACTOR = 1.0
 #: ``TURBINE_*`` -> flag loop (the ``for pair in "TURBINE_UPSTREAM:--domain-
 #: upstream" ...`` block) as ``"TURBINE_MESH_FACTOR:--mesh-factor"``.
 MESH_FACTOR_ENV = "TURBINE_MESH_FACTOR"
+
+# --- Per-node surface dump (bladeSurfaceSource writeNodePerf) ----------------
+#: ``writeNodePerf`` in every rendered blade dictionary. The C++ gate already
+#: exists (``bladeSurfaceSource.C:100``): with the per-station ``writePerf`` on
+#: and ``writeNodePerf`` set it also emits ``<owner>.surface_nodes.csv``, one
+#: row per sampled surface node with the body-frame position, normal, SI force
+#: and area (``writeNodeCsv()``). No case rendered the key, so the dump was
+#: unreachable. It is OFF by default because the file is enormous (~100k nodes
+#: per blade per write step, written every step), so it is only ever useful for
+#: a very short capture run. The key is rendered only when a surface is actually
+#: sampled (``asm-mesh``), next to ``surfaceGeometry``.
+DEFAULT_WRITE_NODE_PERF = False
+#: Environment bridge (see ``MESH_FACTOR_ENV``): the runner cannot be edited
+#: while live jobs execute it, so a non-default value reaches the generator
+#: subprocess through the inherited environment. Truthy strings (``1``, ``true``,
+#: ``yes``, ``on``) enable the dump; falsy strings disable it.
+WRITE_NODE_PERF_ENV = "TURBINE_WRITE_NODE_PERF"
 
 # --- Inflow sampling (ALM velocity sample ring) ------------------------------
 #: ``velocitySampleRadius`` in the turbine coeffs, in units of the ALM/ASM
@@ -1162,6 +1179,7 @@ def render_fv_options(
     element_type: str = ALM_ELEMENT,
     n_chordwise: int | None = None,
     surface_geometry: str = "",
+    write_node_perf: bool = DEFAULT_WRITE_NODE_PERF,
     mesh_factor: float = DEFAULT_MESH_FACTOR,
     velocity_sample_radius: float = DEFAULT_VELOCITY_SAMPLE_RADIUS,
     n_velocity_samples: int = DEFAULT_N_VELOCITY_SAMPLES,
@@ -1208,6 +1226,12 @@ def render_fv_options(
         surface_keys += f"                nChordwise {strips};\n"
         if surface_geometry:
             surface_keys += f'                surfaceGeometry "{surface_geometry}";\n'
+            if write_node_perf:
+                # Opt-in per-node dump (see WRITE_NODE_PERF_ENV). blade2/blade3
+                # inherit this through `$blade1;`, so every blade sub-dictionary
+                # carries the gate; only blade1 has writePerf true, so only its
+                # surface actually writes the file.
+                surface_keys += "                writeNodePerf true;\n"
     polars = _polars_include_dir(case_dir)
     profiles = " ".join(blade_element_profiles())
     blade_rows = "\n".join(
@@ -1664,6 +1688,7 @@ def outputs(
     mesh_factor: float = DEFAULT_MESH_FACTOR,
     velocity_sample_radius: float = DEFAULT_VELOCITY_SAMPLE_RADIUS,
     n_velocity_samples: int = DEFAULT_N_VELOCITY_SAMPLES,
+    write_node_perf: bool = DEFAULT_WRITE_NODE_PERF,
     snappy_disk_radius: float = SNAPPY_DISK_RADIUS,
     snappy_disk_half_thickness: float = SNAPPY_DISK_HALF_THICKNESS,
     snappy_wake_radius: float = SNAPPY_WAKE_RADIUS,
@@ -1707,6 +1732,7 @@ def outputs(
         system / "fvOptions.ALM": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
             flow_axis, tower, hub, rotation, ALM_ELEMENT,
+            write_node_perf=write_node_perf,
             mesh_factor=mesh_factor,
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
@@ -1721,6 +1747,7 @@ def outputs(
         system / "fvOptions.ASM": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
             flow_axis, tower, hub, rotation, ASM_ELEMENT, n_chordwise,
+            write_node_perf=write_node_perf,
             mesh_factor=mesh_factor,
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
@@ -1736,6 +1763,7 @@ def outputs(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
             flow_axis, tower, hub, rotation, ASM_ELEMENT, n_chordwise,
             SURFACE_GEOMETRY,
+            write_node_perf=write_node_perf,
             mesh_factor=mesh_factor,
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
@@ -1753,6 +1781,7 @@ def outputs(
             ASM_ELEMENT if model in ("asm", "asm-mesh") else ALM_ELEMENT,
             n_chordwise,
             SURFACE_GEOMETRY if model == "asm-mesh" else "",
+            write_node_perf=write_node_perf,
             mesh_factor=mesh_factor,
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
@@ -1830,6 +1859,29 @@ def resolve_mesh_factor(cli_value: float | None = None) -> float:
     if env_value is not None and env_value.strip():
         return float(env_value)
     return DEFAULT_MESH_FACTOR
+
+
+def resolve_write_node_perf(cli_value: bool | None = None) -> bool:
+    """Resolve the rendered ``writeNodePerf``.
+
+    Precedence: an explicit ``--write-node-perf`` wins, else the
+    ``TURBINE_WRITE_NODE_PERF`` environment bridge, else
+    ``DEFAULT_WRITE_NODE_PERF`` (off; the dump is only for a short capture run).
+    """
+    if cli_value is not None:
+        return bool(cli_value)
+    env_value = os.environ.get(WRITE_NODE_PERF_ENV)
+    if env_value is not None and env_value.strip():
+        value = env_value.strip().lower()
+        if value in ("1", "true", "yes", "on"):
+            return True
+        if value in ("0", "false", "no", "off"):
+            return False
+        raise ValueError(
+            f"{WRITE_NODE_PERF_ENV}={value!r} must be a boolean "
+            "(1/0, true/false, yes/no, on/off)"
+        )
+    return DEFAULT_WRITE_NODE_PERF
 
 
 def resolve_velocity_sample_radius(cli_value: float | None = None) -> float:
@@ -2249,6 +2301,17 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--write-node-perf",
+        action="store_true",
+        default=None,
+        help=(
+            "render writeNodePerf true in every blade sub-dictionary when a "
+            "surface is sampled (asm-mesh), enabling the per-node "
+            "<owner>.surface_nodes.csv dump. Off by default (the file is "
+            f"large); explicit flag beats {WRITE_NODE_PERF_ENV}"
+        ),
+    )
+    parser.add_argument(
         "--velocity-sample-radius",
         type=float,
         default=None,
@@ -2353,6 +2416,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         mesh_factor = resolve_mesh_factor(args.mesh_factor)
+        write_node_perf = resolve_write_node_perf(args.write_node_perf)
         velocity_sample_radius = resolve_velocity_sample_radius(
             args.velocity_sample_radius
         )
@@ -2431,6 +2495,7 @@ def main(argv: list[str] | None = None) -> int:
             mesh_factor,
             velocity_sample_radius,
             n_velocity_samples,
+            write_node_perf=write_node_perf,
             **snappy_geometry,
             end_effects_active=end_effects_active,
             tip_effects=tip_effects,

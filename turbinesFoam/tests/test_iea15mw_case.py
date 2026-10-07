@@ -1269,6 +1269,98 @@ class TestMeshFactor:
         assert generate_case.resolve_mesh_factor(0.5) == pytest.approx(0.5)
 
 
+class TestWriteNodePerf:
+    """The opt-in per-node surface dump gate (``writeNodePerf``).
+
+    ``bladeSurfaceSource.C:100`` already writes ``<owner>.surface_nodes.csv``
+    when ``writeNodePerf`` is set -- one row per sampled surface node with the
+    body-frame position, normal, SI force and area -- but the generator never
+    rendered the key, so the dump was unreachable. It is OFF by default (the
+    file is enormous) and the key is rendered only when a surface is actually
+    sampled (``asm-mesh``), next to ``surfaceGeometry`` and inherited by
+    blade2/blade3 through ``$blade1;``.
+    """
+
+    def test_default_render_is_unchanged_and_carries_no_key(self, monkeypatch):
+        monkeypatch.delenv(generate_case.WRITE_NODE_PERF_ENV, raising=False)
+        assert generate_case.DEFAULT_WRITE_NODE_PERF is False
+        assert generate_case.WRITE_NODE_PERF_ENV == "TURBINE_WRITE_NODE_PERF"
+        assert generate_case.resolve_write_node_perf() is False
+        # The committed case is the default model (alm): byte-identical ...
+        assert (CASE_DIR / "system" / "fvOptions").read_text(
+            encoding="utf-8"
+        ) == generate_case.render_fv_options()
+        assert "writeNodePerf" not in generate_case.render_fv_options()
+        # ... and the mesh twin rendered OFF carries no key either.
+        mesh = generate_case.render_fv_options(
+            element_type=generate_case.ASM_ELEMENT,
+            surface_geometry=generate_case.SURFACE_GEOMETRY,
+        )
+        assert "writeNodePerf" not in mesh
+
+    def test_flag_renders_the_gate_in_every_blade(self, tmp_path, monkeypatch):
+        monkeypatch.delenv(generate_case.WRITE_NODE_PERF_ENV, raising=False)
+        case_dir = tmp_path / "asm-mesh"
+        assert (
+            generate_case.main(
+                [
+                    "--case-dir",
+                    str(case_dir),
+                    "--model",
+                    "asm-mesh",
+                    "--write-node-perf",
+                ]
+            )
+            == 0
+        )
+        text = (case_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+        # Immediately after the surfaceGeometry line, in the blade1 template.
+        assert (
+            'surfaceGeometry "constant/triSurface/iea15mw_blade.stl";\n'
+            "                writeNodePerf true;\n"
+        ) in text
+        blades = _coeffs(_parse_foam(text))["blades"]
+        # blade2/blade3 inherit blade1 with `$blade1;`; resolve that merge so
+        # every blade's effective dictionary carries the gate.
+        effective = {
+            name: {**blades["blade1"], **blade} for name, blade in blades.items()
+        }
+        assert {blade["writeNodePerf"] for blade in effective.values()} == {"true"}
+
+    def test_flag_is_inert_without_a_surface(self, tmp_path, monkeypatch):
+        monkeypatch.delenv(generate_case.WRITE_NODE_PERF_ENV, raising=False)
+        case_dir = tmp_path / "alm"
+        assert (
+            generate_case.main(["--case-dir", str(case_dir), "--write-node-perf"])
+            == 0
+        )
+        text = (case_dir / "system" / "fvOptions").read_text(encoding="utf-8")
+        assert "writeNodePerf" not in text
+
+    def test_environment_bridge_reaches_the_render(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(generate_case.WRITE_NODE_PERF_ENV, "1")
+        case_dir = tmp_path / "asm-mesh"
+        assert (
+            generate_case.main(["--case-dir", str(case_dir), "--model", "asm-mesh"])
+            == 0
+        )
+        assert "writeNodePerf true;" in (
+            case_dir / "system" / "fvOptions"
+        ).read_text(encoding="utf-8")
+
+    def test_resolve_precedence_and_invalid_env(self, monkeypatch):
+        monkeypatch.delenv(generate_case.WRITE_NODE_PERF_ENV, raising=False)
+        assert generate_case.resolve_write_node_perf() is False
+        assert generate_case.resolve_write_node_perf(True) is True
+        monkeypatch.setenv(generate_case.WRITE_NODE_PERF_ENV, "on")
+        assert generate_case.resolve_write_node_perf() is True
+        # An explicit flag wins over the environment.
+        assert generate_case.resolve_write_node_perf(False) is False
+        monkeypatch.setenv(generate_case.WRITE_NODE_PERF_ENV, "maybe")
+        with pytest.raises(ValueError):
+            generate_case.resolve_write_node_perf()
+
+
 class TestVelocitySampling:
     """The ALM inflow-sampling knob (``velocitySampleRadius``/``nVelocitySamples``).
 

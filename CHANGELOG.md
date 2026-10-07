@@ -336,6 +336,33 @@ off so the default render is unchanged. New flags: `--end-effects`,
 `--wake-azimuthal-step` and `--tip-correction-epsilon`. The committed case is
 not regenerated; `--check` still passes.
 
+#### 13. Render the per-node blade-surface dump gate (`writeNodePerf`)
+
+**Files:**
+- `turbinesFoam/validation/iea15mw/tools/generate_case.py`
+- `turbinesFoam/tests/test_iea15mw_case.py`
+
+**Problem:** the ASM+mesh case (the critical FSI case) has a flat rotor `cp` of
+1.068 from the first step, so it is not a convergence problem, and the forces
+deposited on the blade surface sum to only 0.81x the element reference force —
+a violation of the partition of unity the code's own
+`bladeSurfaceSource::writeStationCsv` comment promises. `moment()` uses the same
+`nodeForces_` but `sampler_.positionsGlobal()`, while the node dump writes
+`sampler_.positions()`, so those two accessors are the remaining suspect. The
+C++ gate already exists (`bladeSurfaceSource.C:100`:
+`if (writeNodePerf_) { writeNodeCsv(); }`) but no case rendered the key, so the
+per-node dump (body-frame position, normal, SI force and area for all 100 236
+nodes per blade) was unreachable.
+
+**Fix:** a `--write-node-perf` flag (and a documented `TURBINE_WRITE_NODE_PERF`
+environment bridge, in the `meshFactor` pattern) renders `writeNodePerf true;`
+in the blade sub-dictionary immediately after `surfaceGeometry`, only when a
+surface is actually sampled (`asm-mesh`); blade2/blade3 inherit it through
+`$blade1;`. It is OFF by default because the dump is large (roughly 20 MB per
+blade per step, written every step), so it is only usable for a very short
+capture run. The default `alm` render stays byte-identical, the committed case
+is not regenerated, and `--check` still passes.
+
 ## [Unreleased] — 2026-04-02
 
 ### New Features
