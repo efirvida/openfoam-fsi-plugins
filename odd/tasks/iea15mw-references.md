@@ -170,6 +170,7 @@ CCBlade, con `cp` de `postProcessing/turbines/0/turbine.csv` (torque = cp × 43,
 | + muestreo + Dag & Sørensen | `iea15mw-tiploss-dagsorensen` | 12,0 | 0,5704 | 24,6 | +0,43 | 1,04 | 1,12 |
 
 **La receta validada**, en términos de diccionario:
+
 1. polares con `liftReCorrExp 0;` (commiteado en `data/polars/`),
 2. `velocitySampleRadius 3.3;` y `nVelocitySamples 16;` en el bloque de coeficientes,
 3. `endEffects { active on; endEffectsModel Glauert; GlauertCoeffs { tipEffects on;
@@ -301,7 +302,6 @@ baja ~2 %: el baseline pasó de 0,7077 a 11 rev a 0,6927 a 20).
 - **Abierto**: el ASM-mesh sigue sin converger (0,3205 y derrumbándose); su anomalía
 de brazo de momento no está resuelta. Y la comparación de modelos en la configuración
 validada (ASM y ASM-mesh con polares + muestreo + Glauert) todavía no se corrió.
-
 
 Medias de la última revolución completa de cada corrida en vuelo, calculadas
 desde el `cp` que reporta el módulo (`postProcessing/turbines/0/turbine.csv`).
