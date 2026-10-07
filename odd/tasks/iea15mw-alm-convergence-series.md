@@ -1,8 +1,8 @@
 # IEA 15 MW — serie de convergencia del ALM (malla y paso de tiempo)
 
-- **Estado:** corriendo en **paralelo**, un job por fase (`11610253` M1, `11610254`
-  M2, `11610255` M3, `11610256` M4, `11610257` M5); run dirs
-  `runs/iea15mw-mconv-*`
+- **Estado:** corriendo — **un solo job** (`11610258`, 15 nodos, 360 tareas) con
+  las fases concurrentes en dos olas; run dirs `runs/iea15mw-mconv-*` y logs por
+  fase en `runs/mconv-M<k>.log`
 - **Creado:** 2026-10-07
 - **Relacionado:** `odd/tasks/iea15mw-references.md` (configuración validada y el
   eje de malla medido), `odd/issues/asm-mesh-residual-vs-alm.md` (issue #9),
@@ -53,20 +53,43 @@ M1..M3 + el punto coarse que ya existe (`runs/iea15mw-alm-20rev`, misma config,
 20 rev) completan una serie espacial de **cuatro puntos**. M4 agrega el punto fino
 y M5 el chequeo temporal.
 
-**Modo de envío.** Las fases son independientes (cada una con su run dir, sin
-dependencias), así que van como **jobs separados en paralelo**
-(`TURBINE_MCONV_PHASE=M1..M5`, un `sbatch --time=` por fase): el wall clock pasa a
-ser el de la fase más larga en vez de la suma, y cada fase sobrevive o se reintenta
-por su cuenta. El script también soporta el modo serie en una asignación
-(`TURBINE_MCONV_PHASE=all`, el default) con guarda de tiempo por fase, como
-fallback para cuando la cola está ajustada.
+**Modo de envío: un solo job, fases concurrentes en dos olas.** Las fases son
+independientes (cada una con su run dir, sin consumir salida de otra), así que el
+job reparte sus **15 nodos** en grupos **disjuntos** y confina el `mpirun` de cada
+fase a su grupo con su propio `TURBINE_MPI_MCA`
+(`--host <grupo> --map-by ppr:24:node`). Sin el `--host`, tres `mpirun`
+concurrentes dentro de una misma asignación ven **toda** la asignación y
+sobre-suscriben los mismos nodos: por eso el script hace un **smoke test** de
+`mpirun --host` antes de arrancar y aborta con mensaje claro si el clúster no lo
+permite (fallar en 10 s, no a las 20 h).
 
-Los límites de pared por fase (12/20/20/72/24 h) son generosos a propósito: la
-medición de M1 en vuelo (0,5 rev en 8,4 min = 3,6 rev/h contra los 7,3 rev/h del
-mismo caso en la campaña) sugiere co-tenencia en los nodos, así que **los costos
-de arriba pueden ser 2× optimistas**. Si una fase muere por límite, su run dir
-queda resumible y se reenvía sin perder nada (el runner retoma de `latestTime` y
-escribe cada 60°).
+| ola | fases | rangos por fase | nodos por fase |
+| --- | --- | --- | --- |
+| 1 | M1 \|\| M2 \|\| M3 | 112 | 5 (24 slots/nodo, sobra el 5°) |
+| 2 | M4 \|\| M5 | 168 | 7 |
+
+Los rangos por fase son **parte de la identidad de la fase**: un caso ya
+descompuesto no se puede reusar con otro número de rangos. M1/M2/M3 = 112 (M1 ya
+tenía 112 con 0,5 rev escritas, así que **retoma**), M4/M5 = 168. El modo de fase
+única para reenvíos puntuales es `TURBINE_MCONV_PHASE=M4` (usa toda la asignación).
+
+**Una cola, no cinco.** Una entrada de 15 nodos de los 240 de la partición, en
+vez de cinco jobs de 112 rangos cada uno. Las olas no cambian el trabajo total
+mientras la asignación sea la misma; lo que cambia el reloj es el tamaño de la
+asignación, y acá la concurrencia sirve para que la ola 1 corra mientras la 2
+espera turno y para que un fallo no se lleve puestas las otras fases.
+
+**Stagger de las dos castellations.** En la ola 2, M4 y M5 construyen su malla con
+un `snappyHexMesh` **serie** cuyo pico cae en un nodo (15,5 GB para los 11,6 M de
+celdas), y el script de batch corre en un solo nodo: **M5 espera a que M4 termine
+su malla** (se detecta por `log.topoSet`) para que los dos picos no se solapen. En
+la ola 1 hay una sola fase castellated, así que no hace falta.
+
+Estimación de reloj con la tasa medida en vuelo (3,6 rev/h en medium a 112
+rangos, la mitad de lo que dio el mismo caso en la campaña por co-tenencia de
+nodos): ola 1 ≈ 12 h (el polo es M2, la malla fine) y ola 2 ≈ 13-26 h según cuánto
+pese M4 a 168 rangos. Límite pedido: **48 h**. Si una fase muere, su run dir queda
+resumible y se reenvía sola con `TURBINE_MCONV_PHASE=<fase>`.
 
 ## Criterio de aceptación (escrito antes de correr)
 
