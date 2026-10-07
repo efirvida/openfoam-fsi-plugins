@@ -55,13 +55,19 @@ below). Two 6-minute files per sequence are the 1°/s 360° yaw sweeps.
 | T | (F) | Rotating 72 rpm | 2° | X | X | 21 | 1 (0) |
 | U | (F) | Rotating 72 rpm | 4° | X | X | 21 | 1 (0) |
 | P | (P) | Rotating 72 rpm | 3°, 12° | *visualize* | — | 4 | 1 (0) |
-| L | (P) | **Parked** (rotor lock) | ramp/step | X | X | 1 | — |
-| O | (P) | **Parked** (rotor lock) | sinusoidal | X | X | 1 | — |
+| L | (P) | **Parked** (rotor lock) | ramp/step | X | X | — | — |
+| O | (P) | **Parked** (rotor lock) | sinusoidal | X | X | — | — |
 
 Sequences L and O do not use the `YYYY` yaw field at all: L is
 `l<WW>00<RU|RD|ST>0` (20/30 m/s × ramp-up / ramp-down / step) and O is a
 sinusoidal AOA campaign indexed sequentially. Their counts are file counts, not
 speed counts.
+
+The decoded `manifest.csv` columns confirm it: **144 of the 522 names carry no
+fixed-yaw field** — all of L (6) and O (131), the six 6-minute sweeps (two each
+in H, J and S), and P's pitch-marker variant `p10000a0`. They are left empty
+rather than guessed. The same columns also confirm the `m` sign rule outside H:
+P carries 14 names with a negative yaw (`p05m0450` → −45°).
 
 ## File-name grammar (verified against the data, not assumed)
 

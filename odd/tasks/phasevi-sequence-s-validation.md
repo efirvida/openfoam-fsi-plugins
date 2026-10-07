@@ -115,9 +115,12 @@ Leídas directamente, no inferidas.
       definición (reporte + sha256 del PDF), la regla del nombre y su verificación
       contra el canal `YAW`, el cruce de inventario contra la Tabla C-18, el
       sha256 del inventario del archivo y la fecha de extracción.
-- [ ] Decodificar yaw/repetition en `articles/uae6/manifest.csv` **desde el
+- [x] Decodificar yaw/repetition en `articles/uae6/manifest.csv` **desde el
       script** `eng2parquet.py` (no editar el CSV a mano: se regenera) y
-      documentar la regla en su README §4.6.
+      documentar la regla en su README §4.6. **Ojo:** el conversor vive en
+      `articles/`, que está gitignored — ese arreglo es **local**, no versionado.
+      Lo versionado es la gramática autoritativa (el extractor) y el test que
+      fija ambas implementaciones para que no diverjan.
 - **AC:** el extractor corre desde un clon limpio salvo por el archivo
   (gitignored) y aborta con mensaje claro si falta; `PROVENANCE.md` pasa
   `test_provenance_fields`; los valores de `s0700000` reproducen la fila del
@@ -203,6 +206,9 @@ S2 la justifique.
 | 2026-10-07 | S1: crudo vs workbook en S (8 cantidades + 5 estaciones spanwise) | <1e-5 relativo; spanwise idéntico; `yaw_deg` difiere 2,1e-3 por redondeo del workbook |
 | 2026-10-07 | S1: `extractUAE6Reference.py --check` | exit 0, tablas reproducibles |
 | 2026-10-07 | S1: tests nuevos | **15 passed** (gramática del stem, cobertura, cruce con el workbook, inventario) |
+| 2026-10-07 | S1b: reconversión `--force` de los 522 puntos | **522/522 md5 idénticos** (determinismo), `status=ok` en las 522 filas |
+| 2026-10-07 | S1b: columnas de condiciones en el manifest | 378 con secuencia decodificada, **144 vacías** (L, O, 6 sweeps, `p10000a0`), ninguna adivinada |
+| 2026-10-07 | S1b: test que fija conversor vs extractor | 26 passed en el archivo de referencia |
 
 ## Registro de commits
 
@@ -212,4 +218,5 @@ S2 la justifique.
 | `c99e09e` | S3 — muestreo y exponente de Re renderizables |
 | `fd6ecdf` | Catálogo de las 8 secuencias + selección de candidata |
 | `dfdb9d5` | Borrado del downloader + registro del método de descarga |
-| _(S1)_ | Extractor, tablas derivadas, PROVENANCE e inventario |
+| `494568b` | S1 — extractor, tablas derivadas, PROVENANCE e inventario |
+| _(S1b)_ | Decodificador de condiciones en el conversor + manifest regenerado |

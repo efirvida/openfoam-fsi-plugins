@@ -24,13 +24,22 @@ REFERENCE_DIR = PACKAGE / "data" / "experiment" / "uae6-archive"
 ARCHIVE_DIR = TURBINESFOAM / "articles" / "uae6"
 
 EXTRACTOR_PATH = PACKAGE / "scripts" / "extractUAE6Reference.py"
-_SPEC = importlib.util.spec_from_file_location("extract_uae6_reference", EXTRACTOR_PATH)
-assert _SPEC is not None and _SPEC.loader is not None
-extract = importlib.util.module_from_spec(_SPEC)
-# `@dataclass` resolves `cls.__module__` through `sys.modules` while the module
-# body runs, so it must be registered before `exec_module`.
-sys.modules[_SPEC.name] = extract
-_SPEC.loader.exec_module(extract)
+CONVERTER_PATH = ARCHIVE_DIR / "eng2parquet.py"
+
+
+def _load_module(path: Path, name: str):
+    """Load a script by path, registering it for `@dataclass` to resolve."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    # `@dataclass` resolves `cls.__module__` through `sys.modules` while the
+    # module body runs, so it must be registered before `exec_module`.
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+extract = _load_module(EXTRACTOR_PATH, "extract_uae6_reference")
 
 PERFORMANCE_COLUMNS = [
     "file_name", "sequence", "wind_speed_m_s", "yaw_token", "yaw_deg",
@@ -149,6 +158,43 @@ def test_reference_reproduces_the_workbook_rows():
             assert float(derived_span[key][column]) == pytest.approx(
                 float(workbook_row[column]), abs=1e-4
             ), column
+
+
+@pytest.mark.skipif(
+    not CONVERTER_PATH.is_file(), reason="UAE6 archive tool not present"
+)
+@pytest.mark.parametrize(
+    "stem",
+    [
+        "uae6.z18.00.s0501350", "uae6.z18.00.s0500050",
+        "uae6.z18.00.s0700000", "uae6.z18.00.s2500001",
+        "uae6.z07.00.h05m0050", "uae6.z07.00.h20m0000",
+        "uae6.z07.00.h05m0001",
+        "uae6.z18.00.s07ysu00", "uae6.z15.00.p10000a0",
+        "uae6.z11.00.l2000rd0", "uae6.z14.00.o30001",
+    ],
+)
+def test_manifest_decoder_agrees_with_the_extractor(stem):
+    """The converter's decoder and the extractor's must not drift apart.
+
+    `eng2parquet.py` writes the decoded conditions into `manifest.csv`; the
+    extractor is the authoritative decode because it also asserts every yaw
+    against the measured `YAW` channel. Two implementations of one grammar are a
+    drift risk, so this pins them to agree on every documented case, including
+    the ones that must decode to nothing.
+    """
+    converter = _load_module(CONVERTER_PATH, "eng2parquet")
+    decoded = converter.decode_stem(stem)
+    parsed = extract.parse_stem(stem)
+    if parsed is None:
+        assert decoded == {
+            "sequence": "", "speed_mps": "", "yaw_deg": "", "repetition": "",
+        }, stem
+        return
+    assert decoded["sequence"] == parsed.sequence.upper(), stem
+    assert decoded["speed_mps"] == parsed.speed, stem
+    assert decoded["yaw_deg"] == parsed.yaw_deg, stem
+    assert decoded["repetition"] == parsed.repetition, stem
 
 
 @pytest.mark.skipif(not ARCHIVE_DIR.is_dir(), reason="UAE6 archive not present")
