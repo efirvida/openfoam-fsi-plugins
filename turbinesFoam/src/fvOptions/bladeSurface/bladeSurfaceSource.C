@@ -144,9 +144,11 @@ void Foam::fv::bladeSurfaceSource::writeStationCsv()
 void Foam::fv::bladeSurfaceSource::writeNodeCsv()
 {
     // Body-frame positions/normals and SI on-blade forces (the contract)
-    const List<point>& X = sampler_.positions();
+    // The moment() path uses the GLOBAL node data: dump the same quantities, or
+    // the node CSV cannot be compared against the element CSVs (which are global).
+    const List<point>& X = sampler_.positionsGlobal();
     const List<vector>& n = sampler_.normals();
-    const List<vector>& F = sampler_.forces();
+    const List<vector>& F = sampler_.nodeForces_;
     const List<scalar>& A = sampler_.areas();
     const List<scalar>& s = sampler_.station();
     const List<scalar>& c = sampler_.chordFraction();
