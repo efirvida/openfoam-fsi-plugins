@@ -969,13 +969,15 @@ def test_element_data_convention(cfg):
     assert blade[0][1] == pytest.approx(0.5083)
     assert blade[-1][1] == pytest.approx(5.029)
     for station, row in zip(
-        [(0.5083, 0.0), (1.0085, 6.7), (5.029, -1.815)], (blade[0], blade[3], blade[-1])
+        [(0.5083, 0.0), (1.0085, 6.7), (5.029, -1.815)],
+        (blade[0], blade[3], blade[-1]),
+        strict=True,
     ):
         radius, twist = station
         assert row[1] == pytest.approx(radius)
         assert row[5] == pytest.approx(-(twist + 3.0))
     hub = hub_element_rows()
-    assert HUB_DIAMETER == pytest.approx(1.0166)
+    assert pytest.approx(1.0166) == HUB_DIAMETER
     assert hub[0][1] == pytest.approx(0.5083)
     assert hub[1][1] == pytest.approx(-0.5083)
 

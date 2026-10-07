@@ -195,4 +195,4 @@ merge; la matriz de augmentación antes de que S2 la justifique.
 | Commit | Tarea |
 | --- | --- |
 | `9a4c932` | S0 — issue #8 + doc de feature |
-| _(S3)_ | S3 — muestreo y exponente de Re renderizables |
+| `c99e09e` | S3 — muestreo y exponente de Re renderizables |
