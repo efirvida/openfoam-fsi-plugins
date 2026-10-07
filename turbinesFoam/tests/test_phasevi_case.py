@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -980,6 +981,92 @@ def test_element_data_convention(cfg):
     assert pytest.approx(1.0166) == HUB_DIAMETER
     assert hub[0][1] == pytest.approx(0.5083)
     assert hub[1][1] == pytest.approx(-0.5083)
+
+
+def _scalar(text: str, key: str) -> float:
+    """Parse a rendered OpenFOAM scalar, e.g. `tipSpeedRatio 5.408;`."""
+    match = re.search(rf"\b{key}\s+([-+0-9.eE]+)\s*;", text)
+    assert match is not None, f"{key} not found"
+    return float(match.group(1))
+
+
+def _vector(text: str, key: str) -> tuple[float, float, float]:
+    """Parse a rendered OpenFOAM vector, e.g. `axis (-1 0 0);`."""
+    match = re.search(rf"\b{key}\s+\(([^)]*)\)", text)
+    assert match is not None, f"{key} not found"
+    values = tuple(float(value) for value in match.group(1).split())
+    assert len(values) == 3, f"{key} is not a 3-vector: {values}"
+    return values
+
+
+def test_rotor_orientation_chain_is_pinned(cfg):
+    """Pin the pair that turns the domain orientation into a rotation sense.
+
+    `axialFlowTurbineALSource` builds the azimuthal direction as
+    `axis ^ verticalDirection` (`axialFlowTurbineALSource.C:67`), puts the blade
+    along `verticalDirection` at azimuth 0 and gives it the tangential velocity
+    `azimuthalDirection * omega * r` (`:179`). Nothing else checks that pair
+    against the inflow, so swapping `vertical_direction` mirrors the whole rotor
+    and every load with it, **silently**: a mirrored rotor still extracts
+    positive power and still produces a plausible spanwise shape, so neither the
+    sign gate nor the band check would notice. This is the failure that already
+    cost the IEA 15 MW case a diagnosis, and the reason its generator carries a
+    `flow_axis` plus a `_role_to_physical` rotation.
+    """
+    rendered = (PACKAGE / "case" / "system" / "fvOptions.ALM").read_text(
+        encoding="utf-8"
+    )
+    axis = _vector(rendered, "axis")
+    vertical = _vector(rendered, "verticalDirection")
+    inflow = _vector(rendered, "freeStreamVelocity")
+
+    # The committed artifact must carry exactly the configured orientation, so
+    # the config stays the single source and the render cannot drift from it.
+    assert axis == pytest.approx(tuple(cfg["turbine"]["axis"]), abs=0.0)
+    assert vertical == pytest.approx(
+        tuple(cfg["turbine"]["vertical_direction"]), abs=0.0
+    )
+    assert sum(c * c for c in axis) ** 0.5 == pytest.approx(1.0, abs=1e-12)
+    assert sum(c * c for c in vertical) ** 0.5 == pytest.approx(1.0, abs=1e-12)
+    assert sum(a * b for a, b in zip(axis, vertical, strict=True)) == pytest.approx(
+        0.0, abs=1e-9
+    )
+
+    azimuthal = (
+        axis[1] * vertical[2] - axis[2] * vertical[1],
+        axis[2] * vertical[0] - axis[0] * vertical[2],
+        axis[0] * vertical[1] - axis[1] * vertical[0],
+    )
+    # Deliberate value. Flipping it reverses the blade's tangential velocity,
+    # hence the sign of every section's angle of attack: the rotor mirrors.
+    assert azimuthal == pytest.approx((0.0, 1.0, 0.0), abs=1e-12)
+    # Upwind: the flow arrives against the axis, not along it.
+    assert sum(a * b for a, b in zip(axis, inflow, strict=True)) < 0.0
+    # Blade 2 is blade 1 rotated by half a turn.
+    assert "azimuthalOffset 180;" in block(rendered, "blade2")
+
+    # AFTAL places azimuth 0 on `verticalDirection`, so every blade-1 element sits
+    # at azimuth 0 and reaches its span position through its own radius.
+    blade = blade_element_rows(cfg)
+    assert {float(row[2]) for row in blade} == {0.0}
+    assert blade[0][1] < blade[-1][1]
+
+    # Kinematic invariant, computed from the rendered TSR: tan(phi) = U/(omega r).
+    # The inflow angle must fall from root to tip, and both ends must sit in
+    # plausible bands. A reversed or rescaled TSR, or a radius in the wrong unit,
+    # breaks the bands without breaking any sign check, so the magnitude is
+    # pinned here and not only the sense.
+    speed = float(inflow[0])
+    tsr = _scalar(rendered, "tipSpeedRatio")
+    assert tsr > 0.0
+    omega = tsr * speed / float(cfg["turbine"]["radius"])
+    assert omega > 0.0
+    phis = [
+        math.degrees(math.atan(speed / (omega * float(row[1])))) for row in blade
+    ]
+    assert phis == sorted(phis, reverse=True)
+    assert 5.0 < phis[-1] < 20.0
+    assert 40.0 < phis[0] < 80.0
 
 
 def test_stage_matrix(cfg):
