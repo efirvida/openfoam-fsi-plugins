@@ -77,6 +77,8 @@ tip_effects=""
 tip_correction=""
 div_phi_u=""
 polar=""
+refine_level=0
+delta_t=""
 run_label=""
 stage0=0
 restart=0
@@ -99,6 +101,8 @@ while [ $# -gt 0 ]; do
         --tip-correction) tip_correction="$2"; shift ;;
         --div-phi-u) div_phi_u="$2"; shift ;;
         --polar) polar="$2"; shift ;;
+        --refine-level) refine_level="$2"; shift ;;
+        --delta-t) delta_t="$2"; shift ;;
         --run-label) run_label="$2"; shift ;;
         --stage0) stage0=1 ;;
         --restart) restart=1 ;;
@@ -199,6 +203,20 @@ if [ -n "$div_phi_u" ]; then
         *) echo "ERROR: --div-phi-u must be a Gauss-linear scheme (e.g. 'bounded Gauss linear')" >&2; exit 2 ;;
     esac
 fi
+case "$refine_level" in
+    ''|*[!0-9]*) echo "ERROR: --refine-level takes a non-negative integer" >&2; exit 2 ;;
+esac
+if [ -n "$delta_t" ]; then
+    # The convergence ladder fixes the step at the finest level's requirement, so
+    # it must stay positive and finite.
+    case "$delta_t" in
+        *[!0-9.eE+-]*) echo "ERROR: --delta-t must be a positive number" >&2; exit 2 ;;
+    esac
+    if ! awk -v value="$delta_t" 'BEGIN { exit !(value > 0) }'; then
+        echo "ERROR: --delta-t must be a positive number" >&2
+        exit 2
+    fi
+fi
 if [ -n "$polar" ]; then
     # Reynolds-sensitivity ablation: a bare committed filename in data/polars/,
     # never a path (it is rendered into the fvOptions #include).
@@ -212,8 +230,7 @@ if [ -n "$polar" ]; then
     fi
 fi
 if [ -n "$run_label" ]; then
-    # A path-safe token: letters, digits, dot, underscore, hyphen; no leading
-    # dot/hyphen, so the appended `-<label>` cannot escape the runs/ directory.
+    # A path-safe token: letters, digits, dot, underscore, hyphen; no leading    # dot/hyphen, so the appended `-<label>` cannot escape the runs/ directory.
     case "$run_label" in
         *[!A-Za-z0-9._-]*|.*|-*)
             echo "ERROR: --run-label must match [A-Za-z0-9._-]+ and not start with '.' or '-'" >&2
@@ -284,13 +301,20 @@ fi
 if [ "$stage0" -eq 1 ]; then
     run_id="$run_id-s0"
 fi
+if [ "$refine_level" -gt 0 ]; then
+    # Two levels must not share a run directory; level 0 keeps the historical id.
+    run_id="$run_id-r$refine_level"
+fi
 if [ -n "$run_label" ]; then
     run_id="$run_id-$run_label"
 fi
 run_dir="$root/runs/$run_id"
 
 echo "Preparing $run_id in $run_dir"
-render_args=(--mesh "$mesh" --speed "$speed" --domain "$domain" --sequence "$sequence" --case-dir "$run_dir" --solver "$solver" --ranks "$ranks")
+render_args=(--mesh "$mesh" --speed "$speed" --domain "$domain" --sequence "$sequence" --case-dir "$run_dir" --solver "$solver" --ranks "$ranks" --refine-level "$refine_level")
+if [ -n "$delta_t" ]; then
+    render_args+=(--delta-t "$delta_t")
+fi
 if [ -n "$nchordwise" ]; then
     render_args+=(--n-chordwise "$nchordwise")
 fi
@@ -365,16 +389,21 @@ if [ "$model" = "asm-mesh" ]; then
 fi
 
 mesh_dir="$root/runs/mesh-$mesh"
+if [ "$refine_level" -gt 0 ]; then
+    # Level 0 keeps the historical name; above it the level is appended so two
+    # levels can never share a directory and borrow each other's mesh.
+    mesh_dir="$mesh_dir-r$refine_level"
+fi
 if [ "$domain" = "squat" ]; then
     mesh_dir="$mesh_dir-squat"
 fi
 if [ ! -d "$mesh_dir/constant/polyMesh" ]; then
-    echo "Shared $mesh mesh not found; generating it"
-    "$here/mesh.sh" "$mesh" --domain "$domain"
+    echo "Shared $mesh mesh at refinement level $refine_level not found; generating it"
+    "$here/mesh.sh" "$mesh" --domain "$domain" --refine-level "$refine_level"
 fi
 rm -rf "$run_dir/constant/polyMesh"
 cp -al "$mesh_dir/constant/polyMesh" "$run_dir/constant/polyMesh"
-echo "Linked shared $mesh mesh from $mesh_dir"
+echo "Linked shared $mesh mesh (refinement level $refine_level) from $mesh_dir"
 
 python3 - "$run_dir" "$root" "$model" "$speed_token" "$mesh" "$domain" "$sequence" \
     "$stage0" "$solver" "$nchordwise" "$ranks" "$staged_stl_sha256" "$run_label" <<'PY'
@@ -510,6 +539,12 @@ PY
     fi
 else
     suggestion="$0 -m $model -u $speed_token -mesh $mesh --sequence $sequence --solver $solver --ranks $ranks"
+    if [ "$refine_level" -gt 0 ]; then
+        suggestion="$suggestion --refine-level $refine_level"
+    fi
+    if [ -n "$delta_t" ]; then
+        suggestion="$suggestion --delta-t $delta_t"
+    fi
     if [ -n "$nchordwise" ]; then
         suggestion="$suggestion --nchordwise $nchordwise"
     fi

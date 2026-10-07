@@ -2,12 +2,18 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Generate and validate one Phase VI mesh.
 #
-# Usage: mesh.sh <coarse|fine|ultra> [--domain long|squat] [--speed 7] [--dir DIR]
+# Usage: mesh.sh <coarse|fine|ultra> [--domain long|squat] [--speed 7]
+#                [--refine-level N] [--dir DIR]
 #
-# The case skeleton is rendered into runs/mesh-<mesh>[-<domain>]/ and meshed
-# with blockMesh + topoSet + checkMesh. The checkMesh log is validated against
-# the configured cell-count band, the 100 % hexahedral requirement and the
-# Cartesian non-orthogonality tolerance.
+# The case skeleton is rendered into runs/mesh-<mesh>[-r<N>][-<domain>]/, where
+# the level suffix appears above 0, and meshed with blockMesh, snappyHexMesh
+# (level > 0 only), topoSet and checkMesh. The directory name carries the
+# refinement level on purpose: without it a level-3 run would find the level-0
+# mesh, checkMesh would report "Mesh OK" because it is a valid mesh, and the run
+# would silently use the wrong one.
+#
+# The order matters: snappyHexMesh rewrites polyMesh, so topoSet runs after it or
+# the cellSet it created would be lost.
 #
 # Exit codes:
 #   0  mesh generated and accepted
@@ -26,11 +32,13 @@ mesh=""
 domain=long
 speed=7
 dir=""
+refine_level=0
 while [ $# -gt 0 ]; do
     case "$1" in
         coarse|fine|ultra) mesh="$1" ;;
         --domain) domain="$2"; shift ;;
         --speed) speed="$2"; shift ;;
+        --refine-level) refine_level="$2"; shift ;;
         --dir) dir="$2"; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "ERROR: unsupported argument: $1" >&2; usage >&2; exit 2 ;;
@@ -47,40 +55,54 @@ case "$domain" in
     long|squat) ;;
     *) echo "ERROR: unsupported domain: $domain" >&2; exit 2 ;;
 esac
+case "$refine_level" in
+    ''|*[!0-9]*) echo "ERROR: --refine-level takes a non-negative integer" >&2; exit 2 ;;
+esac
 
 if [ -z "$dir" ]; then
+    # Level 0 keeps the historical name; above it the level is appended so two
+    # levels can never share a directory and borrow each other's mesh.
     dir="$root/runs/mesh-$mesh"
+    if [ "$refine_level" -gt 0 ]; then
+        dir="$dir-r$refine_level"
+    fi
     if [ "$domain" = "squat" ]; then
         dir="$dir-squat"
     fi
 fi
 
-echo "Rendering $mesh case ($domain domain) into $dir"
+echo "Rendering $mesh case ($domain domain, refinement level $refine_level) into $dir"
 python3 "$root/tools/generate_case.py" \
-    --mesh "$mesh" --speed "$speed" --domain "$domain" --case-dir "$dir"
+    --mesh "$mesh" --speed "$speed" --domain "$domain" \
+    --refine-level "$refine_level" --case-dir "$dir"
 
 cd "$dir"
 
-# Re-use an existing mesh (blockMesh is serial and D/48 takes minutes); the
-# checkMesh validation below still runs on every invocation. topoSet is
-# re-run whenever its dictionary is newer than the last topoSet log: the
-# cellSet is part of the case contract (`selectionMode cellSet` in fvOptions)
-# and a mesh built from an older topoSetDict silently lacks the current set.
+built=0
 if [ -d constant/polyMesh ] && grep -q "Mesh OK" log.checkMesh 2>/dev/null; then
     echo "Existing mesh found in $dir; skipping blockMesh and re-validating"
-    if [ ! -f log.topoSet ] || [ system/topoSetDict -nt log.topoSet ]; then
-        echo "topoSetDict changed since the last topoSet run; refreshing the cellSet"
-        if ! topoSet > log.topoSet 2>&1; then
-            cat log.topoSet >&2
-            echo "ERROR: topoSet failed ($dir)" >&2
-            exit 3
-        fi
-    fi
 else
+    built=1
     if ! blockMesh > log.blockMesh 2>&1; then
         cat log.blockMesh >&2
         echo "ERROR: blockMesh failed ($dir)" >&2
         exit 3
+    fi
+    if [ "$refine_level" -gt 0 ]; then
+        echo "Refining the rotor-disk cylinder at level $refine_level"
+        if ! snappyHexMesh -overwrite > log.snappyHexMesh 2>&1; then
+            tail -40 log.snappyHexMesh >&2
+            echo "ERROR: snappyHexMesh failed ($dir)" >&2
+            exit 3
+        fi
+    fi
+fi
+# topoSet runs after snappyHexMesh: `-overwrite` rewrites polyMesh, so a cellSet
+# created before it would be gone and fvOptions' `selectionMode cellSet` would
+# silently select nothing.
+if [ "$built" -eq 1 ] || [ ! -f log.topoSet ] || [ system/topoSetDict -nt log.topoSet ]; then
+    if [ "$built" -eq 0 ]; then
+        echo "topoSetDict changed since the last topoSet run; refreshing the cellSet"
     fi
     if ! topoSet > log.topoSet 2>&1; then
         cat log.topoSet >&2
@@ -120,9 +142,21 @@ fi
 band=$(python3 "$root/tools/case_config.py" --target-cells "$mesh")
 low=${band% *}
 high=${band#* }
-if [ "$cells" -lt "$low" ] || [ "$cells" -gt "$high" ]; then
-    echo "ERROR: $cells cells is outside the configured band $low..$high" >&2
-    exit 3
+if [ "$refine_level" -gt 0 ]; then
+    # Refinement cannot shrink the mesh, so the lower bound is real. The upper
+    # bound stays open until the first build of each level reports its count,
+    # which is printed here for the record.
+    if [ "$cells" -lt "$low" ]; then
+        echo "ERROR: refined mesh has $cells cells, below the base band $low..$high" >&2
+        exit 3
+    fi
+    echo "Refined level $refine_level: $cells cells (base band $low..$high, upper"
+    echo "bound pending the first measured build of this level)"
+else
+    if [ "$cells" -lt "$low" ] || [ "$cells" -gt "$high" ]; then
+        echo "ERROR: $cells cells is outside the configured band $low..$high" >&2
+        exit 3
+    fi
 fi
 
 echo "Mesh accepted: $cells cells, $hexes hexahedra, max non-orthogonality $nonortho"
