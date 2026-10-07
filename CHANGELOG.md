@@ -2,6 +2,37 @@
 
 ## [Unreleased] — 2026-04-02
 
+### Documentation
+
+#### 1. State the repository purpose and split the documentation per plugin
+
+**Files:**
+- `README.md` (rewritten as a landing page)
+- `solidBodyDisplacementLaplacianZone/README.md` (new)
+- `dynamicOversetZoneDisplacementFvMesh/README.md` (new)
+- `fsiOmega/README.md` (new)
+- `precice-openfoam-adapter/README.md` (rewritten as a fork README)
+- `AGENTS.md`, `turbinesFoam/README.md` (stale repository name)
+
+**Problem:** The repository never stated what it exists for. It is the CFD side of
+AeroElast and is independent of it because the coupling boundary is preCICE, yet neither
+the README nor the repository name mentioned any of it. It also stands in for four stock
+or upstream components — `solidBodyMotionFvMesh` with a `dynamicMotionSolverListFvMesh`
+multibody list, `dynamicOversetFvMesh`, a stock `Function1<scalar>`, and the upstream
+preCICE adapter and turbinesFoam — with no stated justification. Three of the five plugins
+had no README at all, and the largest component's README was upstream's own, describing a
+project maintained elsewhere.
+
+**Fix:** `README.md` is now a landing page: the purpose and the relationship to AeroElast,
+the preCICE independence, a table of the five pieces, a "why these plugins and not the
+alternatives" section that states only verifiable capability differences and leaves an
+explicit placeholder for the author's rationale, a quick start and a documentation map.
+The motion model, the AMI protection reference, the overset configuration and the
+`preciceOmega` contract moved into one README per plugin. The adapter README is now a fork
+README: fork notice, the FSI-only divergence, the build environment and the upstream
+documentation pointers, keeping the upstream citation and disclaimer. No source file, case
+dictionary or plugin name changed, and no physics was modified.
+
 ### New Features
 
 #### 1. Add `boundaryDecay` motionDiffusivity manipulator for AMI meshes

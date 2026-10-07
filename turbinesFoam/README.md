@@ -32,13 +32,13 @@ Be sure to check out the
 
 ```sh
 cd $WM_PROJECT_USER_DIR
-git clone https://github.com/efirvida/of-plugins.git
-cd of-plugins/turbinesFoam
+git clone https://github.com/efirvida/openfoam-fsi-plugins.git
+cd openfoam-fsi-plugins/turbinesFoam
 ./Allwmake
 ```
 
 or, from the repository root, `./Allwmake` builds this plugin together with
-the other of-plugins libraries.
+the other plugins of [openfoam-fsi-plugins](https://github.com/efirvida/openfoam-fsi-plugins).
 
 ## Usage
 
