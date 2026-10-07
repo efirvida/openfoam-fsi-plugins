@@ -1,0 +1,104 @@
+name: Refactor plan
+description: >-
+  Propose a behaviour-preserving refactor of a plugin, with its
+  code findings and migration plan.
+title: "refactor: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for a refactor whose contract is **same behaviour,
+        different structure**. If behaviour is meant to change, open the
+        matching bug or feature issue instead and reference it here.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: >-
+        What is being refactored, why, and which branch or path holds
+        the target code.
+      placeholder: >-
+        Which plugin, which classes, which responsibility is
+        currently misplaced.
+    validations:
+      required: true
+  - type: textarea
+    id: findings
+    attributes:
+      label: Code findings
+      description: >-
+        The evidence, one item per finding, with `path:line` references
+        and the observation that makes it a problem. Do not summarise
+        the code from memory.
+    validations:
+      required: true
+  - type: textarea
+    id: plan
+    attributes:
+      label: Refactor plan
+      description: >-
+        Ordered phases. Each phase needs its own check: what is
+        verified, and what would make it fail.
+    validations:
+      required: true
+  - type: textarea
+    id: frozen
+    attributes:
+      label: Frozen behaviour
+      description: >-
+        What must not change: formulas, coefficients, kernels, partition
+        rules, operation order. This is the list a reviewer diffs against.
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: >-
+        Plugins and responsibilities explicitly excluded, with the reason
+        each is excluded.
+    validations:
+      required: true
+  - type: dropdown
+    id: plugin
+    attributes:
+      label: Primary plugin
+      description: >-
+        The plugin this refactor changes. The other plugins listed stay
+        unmodified.
+      options:
+        - turbinesFoam
+        - precice-openfoam-adapter
+        - fsiOmega
+        - solidBodyDisplacementLaplacianZone
+        - dynamicOversetZoneDisplacementFvMesh
+    validations:
+      required: true
+  - type: textarea
+    id: decisions
+    attributes:
+      label: Open decisions
+      description: >-
+        Questions that need a human answer before the first phase starts.
+    validations:
+      required: true
+  - type: checkboxes
+    id: guarantees
+    attributes:
+      label: Guarantees
+      options:
+        - label: >-
+            The refactor preserves behaviour. No physics formula,
+            coefficient, weighting kernel, partition rule, or operation
+            order changes.
+          required: true
+        - label: >-
+            Every phase is independently verifiable against a captured
+            baseline.
+          required: true
+        - label: >-
+            Plugins outside the primary plugin, including fsiOmega,
+            remain unmodified.
+          required: true
