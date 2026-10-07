@@ -207,4 +207,4 @@ S2 la justifique.
 | --- | --- |
 | `9a4c932` | S0 — issue #8 + doc de feature |
 | `c99e09e` | S3 — muestreo y exponente de Re renderizables |
-| _(catálogo)_ | Catálogo de las 8 secuencias + selección de candidata |
+| `fd6ecdf` | Catálogo de las 8 secuencias + selección de candidata |

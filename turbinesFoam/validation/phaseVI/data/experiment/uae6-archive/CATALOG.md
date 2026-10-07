@@ -13,6 +13,7 @@ report, and which of them the ALM validation should use.
 | Channel table | `turbinesFoam/articles/uae6/channels.csv` — 285 channels, same layout in all 522 files |
 | Definition | NREL/TP-500-29955, local copy `turbinesFoam/articles/29955.pdf`, sha256 `822ee980e97780599ad4ec1dc8b4cc8ad41131b0cbbdffa19999d571f6ce4958` |
 | Format | 285 × float32 + 1 × uint8 error byte per frame, little endian; 1.92 ms per frame |
+| Fetch method | A2E/WDH REST client — a `downloader-<hash>` binary (ELF x86-64, statically linked, 7.3 MB) calling `https://70d76sxu18.execute-api.us-west-2.amazonaws.com/prod`. **The tool was deleted on 2026-10-07 at the user's request**, so it is recorded here instead: the archive is public at WDH, and what this repository relies on is the per-file inventory check against the report tables above, not the fetch tool. |
 
 `/articles/` is gitignored, so **none of the archive is versioned**. This
 catalog and the derived numeric tables are what the repository keeps; the same
