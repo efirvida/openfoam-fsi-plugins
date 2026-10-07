@@ -178,6 +178,50 @@ CCBlade, con `cp` de `postProcessing/turbines/0/turbine.csv` (torque = cp × 43,
 Flags equivalentes: `--velocity-sample-radius 3.3 --n-velocity-samples 16
 --end-effects on`.
 
+### Resolución: el eje de malla del ALM (medido, 2026-10-07)
+
+La campaña `iea15mw-alm3` (job `11610017`) corrió sus cuatro fases y terminó
+limpia. Resultados (media de la última revolución completa, criterio de deriva
+<0,2 %/rev cumplido en las cuatro):
+
+| fase | config | malla | celdas | pasos/rev | cp | deriva/rev |
+| --- | --- | --- | --- | --- | --- | --- |
+| P1 | validada, 20 rev | coarse | 2.363.760 | 106 | **0,5591** | −0,057 % |
+| P2 | TSR 7,5 (6,33 rpm), 12 rev | coarse | 2.363.760 | 106 | 0,4889 | −0,086 % |
+| P3 | TSR 10,5 (8,86 rpm), 12 rev | coarse | 2.363.760 | 98 | 0,6204 | +0,037 % |
+| P4 | validada, 12 rev | medium | 6.508.528 | 160 | 0,5490 | −0,239 % |
+
+**P1 no es el 0,5366 del registro, y la diferencia es la malla.** El 0,5366 de
+`iea15mw-tiploss-glauert` está medido en la malla **castellated** (786 pasos/rev,
+`deltaT` ≈ 0,0094 s); P1 corrió la **coarse sin refinar** (106 pasos/rev,
+`deltaT` 0,075 s). El `deltaT` no es libre: `generate_case.delta_t()` lo ata a la
+celda más fina que ve el rotor (`0,95·celda/velocidad de punta`, redondeado a 3
+cifras — su docstring dice *"rounded to 3 significant figures so the coarse case
+keeps deltaT 0.075"*). O sea: **refinar la malla y refinar el paso de tiempo son
+la misma palanca**, y el ALM tiene ~4 % de sensibilidad a ella.
+
+La propia campaña lo confirma con su eje de malla, monótono:
+
+| malla | pasos/rev | cp | vs la castellated |
+| --- | --- | --- | --- |
+| coarse (2,36 M) | 106 | 0,5591 | **+4,1 %** |
+| medium (6,51 M) | 160 | 0,5490 | +2,2 % |
+| castellated (11,6 M) | 786 | 0,5370 | — |
+
+**Consecuencias que hay que respetar al citar:**
+
+- El 0,559 de P1 es la asíntota de la malla **coarse**, no la de la configuración
+  validada: no se puede citar como "el ALM validado" contra la referencia (0,5312),
+  porque a esa resolución el ALM queda +5,3 % en vez del +1,0 % que sí cumple en la
+  castellated.
+- Los tres valores son correctos **a su propia resolución**: la deriva por
+  revolución los acredita como convergidos, pero converger en la coarse no es
+  converger al número de la validación.
+- Cuando se compare el ASM/ASM-mesh contra el ALM (issue #9), el trío tiene que
+  correr en la **castellated** (`--snappy on` para los tres, como hace
+  `asmcmp.slurm`): es la malla donde vive el 0,5366, y la sensibilidad de malla del
+  ALM (+4 %) es del mismo orden que el hueco que se está midiendo.
+
 ### Dónde está el residuo, por bandas
 
 | banda r/R | baseline c_n | baseline c_t | **ganadora c_n** | **ganadora c_t** | % torque (ganadora) |
