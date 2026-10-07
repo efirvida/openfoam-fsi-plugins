@@ -40,7 +40,75 @@ Que `cp`, `ct` y `cd` tengan **el mismo offset** es la firma de una diferencia d
   el fix el `cp` dejó de divergir.
 - **La contabilidad del reporte**: `moment()` y los CSV salen de `nodeForces_`.
 
-## Hipótesis vivas, en orden de sospecha
+## Es formulación, no implementación (medido, sin corridas nuevas)
+
+Los tríos `asmcmp` ya corrieron los modelos sobre la **misma malla**, así que el
+par `alm`/`asm` —sin superficie— aísla el camino de elementos:
+
+| batch (misma malla, mismos polares) | rev 1 | rev 10 | rev 20 |
+| --- | --- | --- | --- |
+| `_archive/2026-10-07-historicas` asm/alm | 0,871 | 0,899 | **0,903** |
+| `_archive/asmcmp-2026-10-02-...` asm/alm | 0,913 | 0,932 | — |
+
+`cp` y `ct` se mueven **juntos** en las dos mediciones. El ASM **sin
+`surfaceGeometry`** ya da 0,87-0,93 del ALM durante 20 revoluciones: el depósito de
+superficie queda **excluido** como origen del offset. Y en ese par las únicas
+diferencias son las dos que el modelo de superficie del paper introduce en el
+elemento — el **muestreo promediado en cuerda** (5 puntos, centrados en el 50 %,
+contra el punto único del `chordMount`) y la **proyección en 5 franjas** con
+`force/nChordwise` cada una —, así que por construcción el offset sale de ahí.
+
+Del lado del depósito, los invariantes están exactos y son tests (el campo recibe
+la fuerza reportada a cualquier acimut, serial y paralelo; partición de unidad
+exacta; momento de nodos = de elementos al 0,2 %; la cadena de CSV cierra), y el
+ASM+mesh arreglado cae en la **misma banda** que el ASM puro. Un bug de
+implementación se manifiesta como un invariante roto: no hay ninguno.
+
+Mecanismo, a rev 20 sobre la misma malla: **Δα medio −0,325°** (hasta −0,65° en
+0,4-0,6 r/R, ≈0 en la punta) con `|Vrel|` casi intacto (−0,1 %). La carga amplifica
+el α: ~30 % por grado.
+
+## "No es un bug" no es "está bien"
+
+Contra las referencias del repo (OLAF estela libre **0,5312**; un ALM
+independiente 0,527; CCBlade/BEM 0,4910), el ALM validado da 0,5366 (**+1,0 %**).
+Un offset de −7…−13 % dejaría al ASM en 0,47-0,50, o sea **−6 % a −11 % por debajo
+de la estela libre**. Salvedad que hay que respetar: los dos ALM comparadores de
+arriba **no son el ALM validado** (terminan en 0,70-0,77 contra 0,5366), así que
+proyectar el ratio sobre 0,5366 es extrapolación, no medición.
+
+## Estado de cada mecanismo
+
+1. **El muestreo promediado en cuerda + la proyección en franjas**: **confirmado
+   como el origen** del offset de nivel (el ASM sin superficie lo muestra y en ese
+   par sólo difieren esas dos cosas).
+2. **La malla**: no explica el nivel (el offset aparece en pares que comparten
+   malla). Queda descartarla también en la configuración validada.
+3. **El momento de cabeceo**: descartado por orden de magnitud. Techo generoso:
+   `0,5·c²·span·Cm·|Vrel|²·sin(precono)` ≈ 1,8e3 N·m por elemento × 147 × 0,07 ≈
+   2e4 N·m, contra un torque de referencia de 2,23e7 N·m → **≈0,1 %**.
+4. **El ancho de deposición**: descartado como origen del offset (el ASM sin
+   superficie usa el mismo ε del ALM y muestra el mismo offset; el ASM+mesh
+   arreglado cae en la misma banda). Sigue siendo una perilla legítima de
+   calibración, no la causa.
+
+## El chequeo que lo cierra
+
+El trío en la **configuración validada** sobre **una sola malla** (`alm`/`asm`/
+`asm-mesh` con `--snappy on` para los tres, polares corregidos, end effects como
+el run validado), 0,2 rev, contra 0,5312:
+
+- si el ASM conserva su −10 % contra el **ALM validado**, es un sesgo de
+  formulación a calibrar, con las perillas ya expuestas (`--n-chordwise` hoy 5,
+  `--velocity-sample-radius` hoy 0 o sea muestreo puntual crudo en los dos
+  modelos, y el ancho de deposición);
+- si el gap se cierra, el −10 % era artefacto de configuración (mallas y ajustes
+  distintos) y no hay nada que calibrar.
+
+Es el diseño de `scripts/slurm/asmcmp.slurm`; con 0,2 rev por modelo alcanza para
+decidir.
+
+## Hipótesis originales (superadas por lo medido arriba)
 
 1. **La malla.** El ASM+mesh corre sobre la superficie refinada por snappy; el ALM
    del comparador corre sobre otra malla. Es el confound clásico de la campaña:
