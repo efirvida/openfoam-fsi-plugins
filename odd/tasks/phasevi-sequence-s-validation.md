@@ -229,6 +229,54 @@ así mezcla dos cosas distintas.
 2. `meshFactor = 1` en todas: ε se achica con la malla; la tendencia mide malla
    **y** ancho de proyección a la vez.
 
+**Decidido (2026-10-07): `meshFactor = 2^level`.** Es lo físicamente correcto
+(ε es un parámetro del **modelo**, no de la discretización, y el ancho de
+proyección no debe depender de la malla) y **no cuesta nada**: ε no entra en el
+conteo de celdas. La opción barata y la correcta coinciden.
+
+#### Verificación de orientación (pedido del usuario, 2026-10-07)
+
+Motivo: en IEA15MW esto **ya falló** una vez, tanto que ahí existe una maquinaria
+entera de `flow_axis` + `_role_to_physical` con una rotación `R_z(+90°)`
+justificada sólo por preservar el handedness de los bloques. Verificado en Phase
+VI por aritmética exacta y contra la medición, no por prosa:
+
+- `axis [-1,0,0]` × `verticalDirection [0,0,1]` = `azimuthalDirection` **[+y]**
+  (`axialFlowTurbineALSource.C:67`), así que a azimuth 0 la pala apunta **+z** y
+  **se mueve en +y** (`:179`).
+- `freeStreamVelocity (+U,0,0)`: el viento llega desde **−x** y el eje apunta
+  hacia el viento → rotor **upwind**, consistente con el ensayo.
+- Empíricamente, en la corrida ALM U7-H ya existente (`results/U7-H/`):
+  `sign_gate` **pasa** con `c_ref_n`, `c_ref_t`, `cp` y `cd` **positivos** en las
+  cinco estaciones, y la **forma** spanwise de `c_n` reproduce la del ensayo —
+  sube de 0,51 en 30 % a 0,84 en 63 % y baja a 0,42 en 95 %, contra 0,81 / 0,87 /
+  0,52 medidos. Un giro espejado o un twist/pitch con el signo cambiado no
+  reproducen esa forma.
+
+**Conclusión: el modo de falla de IEA15MW (handedness / `flow_axis`) NO está
+presente en Phase VI.** Pero la verificación destapó el problema real:
+
+| r/R | `c_ref_n` sim | `c_n` medido | Δ | `c_ref_t` sim | `c_t` medido | Δ |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0,30 | 0,5066 | 0,8139 | **−37,8 %** | 0,2319 | 0,0973 | **+138 %** |
+| 0,47 | 0,8081 | 0,9204 | −12,2 % | 0,2489 | 0,1184 | +110 % |
+| 0,63 | 0,8398 | 0,8668 | −3,1 % | 0,1989 | 0,0956 | +108 % |
+| 0,80 | 0,7420 | 0,7673 | −3,3 % | 0,1189 | 0,0730 | +63 % |
+| 0,95 | 0,4225 | 0,5175 | −18,4 % | 0,0437 | 0,0407 | +7 % |
+
+El `c_n` normal está bien en la mitad exterior y flojo en la raíz (la deficiencia
+que ya siguen `phasevi-endeffect-diagnostic.md` y `phasevi-tip-correction-*`),
+pero el `c_ref_t` **tangencial está ≈2× el medido en las cinco estaciones**. El
+comparador ya lo anota como *"definitional mismatch"* y **no lo arregla**
+(`comparePhaseVI.py:spanwise_profile` toma el `ct` del elemento referido al chord
+en su propio marco). Un factor sistemático de 2× huele a **longitud o marco de
+referencia en la definición del coeficiente**, no a física — y está en el mismo
+marco que el criterio de aceptación spanwise, así que hay que resolverlo antes de
+usarlo como criterio.
+
+- [ ] **Diagnosticar el 2× del `c_ref_t`** antes de congelar el criterio spanwise: comparar la definición experimental de `CT` (base de normalización) contra la del `ct` del elemento, estación por estación, y fijar cuál es la correcta.
+- [ ] **Test de contrato de orientación**: el producto cruz `axis × verticalDirection`, la dirección azimutal resultante y la dirección de cuerda del elemento 0 contra la geometría commiteada. Hoy la cadena está bien pero **nada la fija**: un cambio en `vertical_direction` la invierte en silencio.
+
 **Criterio de convergencia** (a fijar **antes** de correr):
 
 - las **tres diferencias de grilla** de `cp` (0→1, 1→2, 2→3) deben **decrecer de
