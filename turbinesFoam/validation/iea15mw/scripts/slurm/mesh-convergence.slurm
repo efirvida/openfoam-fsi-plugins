@@ -45,8 +45,10 @@
 #   A resubmitted phase must keep its rank count: a decomposed case cannot be
 #   reused with a different decomposition.
 #SBATCH -p sequana_cpu
+# ONLY --ntasks: a task-per-node constraint makes the scheduler wait for nodes
+# with exactly that many free CPUs, which is the shape a saturated cluster does
+# not have. Asking for tasks alone lets Slurm pack the job into the holes.
 #SBATCH --ntasks=112
-#SBATCH --ntasks-per-node=24
 #SBATCH -J iea15mw-mconv
 #SBATCH --time=48:00:00
 #SBATCH --no-requeue

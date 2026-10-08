@@ -42,18 +42,24 @@
 #
 # The whole allocation is 240 tasks because the largest point needs it; the small
 # points simply use part of it.
-# HALF-NODE tasks on purpose. A whole-node ask (48 tasks at the default 8 GB per
-# CPU) is not even placeable -- the nodes are CfgTRES=cpu=48,mem=375G while
-# DefMemPerCPU=8000, so 48 tasks want 384 GB and Slurm answers "Requested node
-# configuration is not available" -- and on the development queue an 8-node
-# whole-node ask was refused while the same job at 24 tasks per node is accepted.
-# Half-node placement costs some co-tenancy in the timings, but the co-tenancy is
-# common to every point, so the SHAPE of the scaling curve survives; the absolute
-# seconds do not (that is what the node model and the CPU count in the log are
-# for).
+# ONLY --ntasks: no --ntasks-per-node and no memory override, on purpose. A
+# task-per-node constraint makes the scheduler wait for nodes with exactly that
+# many free CPUs, which is the shape that does NOT exist on a saturated cluster
+# (the fragments are 5-23 free CPUs per node: those 131 queued jobs asking 24 CPUs
+# each backfill into them first). Asking for tasks alone lets Slurm pack the job
+# into whatever holes exist. It is also what the runner assumes: it explicitly
+# refuses to force `--map-by ppr:N:node` because an uneven allocation then aborts
+# with "not enough slots available".
+#
+# The cost is honest: the allocation may be co-tenanted and spread over more nodes
+# than the points need, which adds noise to the ABSOLUTE seconds. The co-tenancy
+# is common to every point, so the SHAPE of the curve survives, and the node list
+# is logged with each slice so the placement is not invisible. A whole-node repeat
+# is the follow-up if the absolute numbers matter (note for that: the nodes are
+# CfgTRES=cpu=48,mem=375G against DefMemPerCPU=8000, so 48 tasks at the default
+# memory want 384 GB and need --mem-per-cpu below 7.8G).
 #SBATCH -p sequana_cpu
 #SBATCH --ntasks=192
-#SBATCH --ntasks-per-node=24
 #SBATCH --time=00:20:00
 #SBATCH --requeue
 #SBATCH -J iea15mw-scale
