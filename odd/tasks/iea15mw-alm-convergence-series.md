@@ -200,3 +200,50 @@ Costo: K × ~4 min por punto (0,1 rev); con K=10 son ~40 min de cola, así que
 postergarlo no cuesta nada. **No ejecutar hasta la fase publicable.** Los resultados
 viven en `analysis/hpc-performance.md`, que se regenera con
 `tools/plot_hpc_performance.py`.
+
+## RESULTADO del tamiz (2026-10-08, `runs/iea15mw-screen-*`)
+
+Los tres puntos existen y son comparables entre sí: **mismo horizonte (4 revs),
+misma configuración validada, mismos 96 rangos** (`method simple`, `n (4 6 4)`).
+
+| malla | celda | cp rev1 | rev2 | rev3 | rev4 | deriva/rev |
+| --- | --- | --- | --- | --- | --- | --- |
+| medium D/48 | 4,98 m | 0,7391 | 0,6373 | 0,6031 | **0,5850** | −3,00 % |
+| fine D/64 | 3,75 m | 0,7312 | 0,6310 | 0,5973 | **0,5795** | −2,99 % |
+| snappy L2 | 1,87 m | 0,7216 | 0,6288 | 0,5955 | **0,5778** | −2,98 % |
+
+**Lo que dice el tamiz:**
+
+1. **El eje de malla es chico y converge rápido**: los escalones son **−0,95 %**
+   (4,98 → 3,75 m) y **−0,29 %** (3,75 → 1,87 m), decrecientes. Refinar de D/48 a
+   L2 (celda 2,7× más fina) mueve el `cp` **menos del 1,3 %**, y el remanente en L2
+   es ≲0,3 %.
+2. **El transitorio domina por un orden de magnitud**: la deriva es **−3,00 %/rev
+   en las tres mallas**, contra escalones de malla de ~1 %. Por eso el valor a 4
+   revs **no** se compara con la referencia convergida: 0,5778 es **+8,8 %** de
+   0,5312, mientras el ALM validado a 20 revs estaba a +1,0 %. El tamiz ordena
+   mallas; el número de producción sale de la corrida larga.
+3. Consecuencia práctica: **el punto L3 (26 h) probablemente no haga falta para la
+   pregunta de malla** (la tendencia ya está aplanada), y la comparación de modelos
+   del issue #9 se puede hacer en la malla barata (D/64 o L2) porque el sesgo de
+   malla es ≲1 %.
+
+**Corrección de un número mío.** El "+4,1 % entre coarse y castellated" que escribí
+en `iea15mw-references.md` salió de comparar puntos con **derivas distintas** (el
+medium a 12 revs derivaba −0,24 %/rev contra −0,06 % del coarse): estaba
+contaminado por el transitorio, que es exactamente el defecto que este tamiz
+corrige. A ventana común el efecto de malla es **≲1 %**, no 4 %. Los números
+viejos no deben citarse.
+
+**Dos problemas de datos que el tamiz dejó a la vista:**
+
+- `runs/iea15mw-alm-20rev` (el coarse de 20 revs, la referencia de la banda y el
+  origen del "cp 0,5591" y del 0,5366 castellated) **fue borrado del disco** por
+  una limpieza: no está en `runs/` ni en `_archive/`. Sus valores sobreviven sólo
+  en el registro. Para completar una serie de cuatro puntos hay que **volver a
+  correr el coarse a 4 revs**, que es barato (~3 min a 96 rangos).
+- El job `11611009` re-corrió el tamiz sobre casos que **ya estaban en su
+  `endTime`**: el solver no avanza, el guard del runner lo reporta como
+  `FALLO ... without advancing` y el job sale con error. No es un crash, pero el
+  exit status miente. Si se reenvía, hay que borrar el `processor*/` o dejar
+  `latest=0` para que el run sea real.
