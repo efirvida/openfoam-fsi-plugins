@@ -55,8 +55,29 @@ y M5 el chequeo temporal.
 
 ## Alcance: dos etapas, la segunda condicionada
 
-**Etapa 1 (en marcha) — el eje espacial, cuatro puntos.** M1, M2 y M3 **en serie
-en una sola tarea**, a 112 rangos y 20 revoluciones cada una, más el punto coarse
+**Etapa 1 — el eje espacial, TAMIZ a 4 revoluciones.** Decisión del usuario
+(2026-10-07): para *decidir qué malla* no hace falta buscar la convergencia
+temporal completa. El objetivo es medir **cuánto cambia el comportamiento del rotor
+con la malla**, no validar; una vez que la curva diga dónde el resultado deja de
+moverse, **ese** es el número de producción y se corre a horizonte largo. Con 4
+revs cada punto cuesta ~5× menos que a 20 y entra en cualquier ventana de cola.
+
+Caveats que van con el tamiz, porque el transitorio no es chico a los 4 revs:
+
+1. **El horizonte tiene que ser común** a todas las mallas (4 revs exactas), y hay
+   que extraer la *misma* ventana de los runs que ya existen (el coarse está a 20
+   rev) para que la comparación sea manzana con manzana.
+2. **Reportar la deriva por revolución junto al valor**: a los 4 revs el coarse
+   deriva del orden del % por vuelta contra pasos de malla del ~2 %, o sea **la
+   señal y el ruido son del mismo orden**. El espaciado entre mallas a 4 revs puede
+   estar contaminado por el transitorio, así que el tamiz decide *candidatas*, no
+   cierra el número.
+3. **El número de producción sale de una corrida larga de la malla elegida** (no de
+   esta serie), que es exactamente el plan.
+
+M1, M2 y M3 en serie en una sola tarea, con la configuración de particionado que
+salga de los estudios de escalado y de métodos (en curso), a **4 revoluciones** cada
+una, más el punto coarse
 que ya existe (`runs/iea15mw-alm-20rev`, misma configuración). Con cuatro puntos
 se puede ajustar **un** orden `p` y ver si las cargas se asientan dentro de la
 banda de referencia en vez de deambular.
