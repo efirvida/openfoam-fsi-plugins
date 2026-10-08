@@ -6,11 +6,12 @@
 #   sbatch scripts/slurm/mesh-ladder.slurm
 #
 # One job, two array tasks, two levels each: task 0 builds levels 0 and 1, task 1
-# builds levels 2 and 3. Meshing is serial (blockMesh and snappyHexMesh are both
-# single-threaded), so two tasks is the whole available speedup, and a single
-# sbatch keeps the submit footprint small on purpose. `sequana_cpu` allows
-# MaxSubmitJobs 24 / MaxJobs 4, and concurrent IEA 15 MW work uses some of it, so
-# this leaves slots free for short tests.
+# builds levels 2 and 3. The array is what buys wall time, because it runs on two
+# nodes at once.
+#
+# `sequana_cpu` allows MaxSubmitJobs 24 / MaxJobs 4, and concurrent IEA 15 MW work
+# uses some of it, so a single sbatch with two tasks leaves slots free for short
+# tests.
 #
 # The development queue cannot be used: `sequana_cpu_dev` allows exactly one
 # submitted job, which an array with more than one task exceeds.
@@ -27,13 +28,13 @@
 #SBATCH --time=24:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-# Slurm applies a small default step memory limit when none is requested, and
-# snappyHexMesh is memory hungry: without this line the refined levels are killed
-# at ~8 GB (their `MaxRSS` is 7.96 GB and the step reports `oom_kill`, exit 125)
-# while the base blockMesh passes, because it needs far less. The nodes have
-# 384 GB, so 64 GB per task is ample for a 6.7 M-cell background refined to level
-# 3 and does not reserve a whole node.
-#SBATCH --mem=64G
+# Meshing is serial: blockMesh and snappyHexMesh are both single-threaded. The
+# tasks below are requested for MEMORY, not for parallelism. This cluster grants
+# `DefMemPerCPU=8000` MB per CPU and has no per-job `--mem` convention, so the task
+# count IS the memory request: 8 tasks is the 64 GB snappyHexMesh needs. With a
+# single task the step was killed at 7.96 GB (MaxRSS) with `oom_kill`, exit 125,
+# while the base blockMesh passed because it needs far less.
+#SBATCH --ntasks=8
 #SBATCH --array=0-1
 #SBATCH --output=runs/mesh-ladder-r%a.out
 #SBATCH --error=runs/mesh-ladder-r%a.err
@@ -78,6 +79,7 @@ echo "OpenFOAM ${WM_PROJECT_VERSION:-unknown} on $(hostname)"
 echo "blockMesh: $(command -v blockMesh || echo MISSING)"
 echo "snappyHexMesh: $(command -v snappyHexMesh || echo MISSING)"
 echo "step memory limit: $(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo unknown)"
+echo "tasks: $SLURM_NTASKS (requested for memory; meshing itself is serial)"
 echo "Building coarse meshes at refinement levels: $levels"
 
 status=0
