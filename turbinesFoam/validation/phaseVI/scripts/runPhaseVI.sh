@@ -7,7 +7,7 @@
 #                 [--domain long|squat] [-s H|S] [--solver urans|iddes]
 #                 [--div-phi-u "bounded Gauss linear"] [--polar FILE.dat]
 #                 [--nchordwise N] [--n-elements N] [--ranks N]
-#                 [--run-label WORD] [--stage0]
+#                 [--end-revs FLOAT] [--run-label WORD] [--stage0]
 #                 [--restart] [--rotational-augmentation on|off]
 #                 [--root-effects on|off] [--run] [--submit]
 #
@@ -79,6 +79,7 @@ div_phi_u=""
 polar=""
 refine_level=0
 delta_t=""
+end_revs=""
 run_label=""
 stage0=0
 restart=0
@@ -103,6 +104,7 @@ while [ $# -gt 0 ]; do
         --polar) polar="$2"; shift ;;
         --refine-level) refine_level="$2"; shift ;;
         --delta-t) delta_t="$2"; shift ;;
+        --end-revs) end_revs="$2"; shift ;;
         --run-label) run_label="$2"; shift ;;
         --stage0) stage0=1 ;;
         --restart) restart=1 ;;
@@ -217,6 +219,22 @@ if [ -n "$delta_t" ]; then
         exit 2
     fi
 fi
+if [ -n "$end_revs" ]; then
+    # The convergence ladder runs a few complete revolutions instead of the
+    # production twelve: the question is where the per-revolution behaviour stops
+    # changing, and the comparison reads that from the drift table.
+    case "$end_revs" in
+        *[!0-9.eE+-]*) echo "ERROR: --end-revs must be a positive number" >&2; exit 2 ;;
+    esac
+    if ! awk -v value="$end_revs" 'BEGIN { exit !(value > 0) }'; then
+        echo "ERROR: --end-revs must be a positive number" >&2
+        exit 2
+    fi
+    if [ "$stage0" -eq 1 ]; then
+        echo "ERROR: --end-revs and --stage0 both set the end time; pick one" >&2
+        exit 2
+    fi
+fi
 if [ -n "$polar" ]; then
     # Reynolds-sensitivity ablation: a bare committed filename in data/polars/,
     # never a path (it is rendered into the fvOptions #include).
@@ -240,9 +258,9 @@ if [ -n "$run_label" ]; then
 fi
 if [ "$submit" -eq 1 ] && { [ "$solver" = "iddes" ] || [ -n "$nchordwise" ] \
         || [ -n "$n_elements" ] || [ -n "$ranks_override" ] \
-        || [ -n "$run_label" ]; }; then
+        || [ -n "$end_revs" ] || [ -n "$run_label" ]; }; then
     echo "ERROR: --submit cannot carry --solver iddes, --nchordwise, --n-elements," >&2
-    echo "  --ranks or --run-label;" >&2
+    echo "  --ranks, --end-revs or --run-label;" >&2
     echo "  Stage 3 is submitted through its prepared arrays:" >&2
     echo "  scripts/slurm/stage3.slurm and scripts/slurm/stage3-d64.slurm." >&2
     exit 2
@@ -314,6 +332,9 @@ echo "Preparing $run_id in $run_dir"
 render_args=(--mesh "$mesh" --speed "$speed" --domain "$domain" --sequence "$sequence" --case-dir "$run_dir" --solver "$solver" --ranks "$ranks" --refine-level "$refine_level")
 if [ -n "$delta_t" ]; then
     render_args+=(--delta-t "$delta_t")
+fi
+if [ -n "$end_revs" ]; then
+    render_args+=(--end-revs "$end_revs")
 fi
 if [ -n "$nchordwise" ]; then
     render_args+=(--n-chordwise "$nchordwise")
