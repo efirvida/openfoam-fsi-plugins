@@ -64,3 +64,26 @@ así que el **ratio** entre métodos es limpio aunque los absolutos no.
   decidir.
 - El horizonte de las corridas es 0,1 rev por punto: mide costo por paso, no
   convergencia física.
+
+## Planteado para un análisis publicable: dispersión del suelto
+
+Hoy la penalidad de la colocación suelta es una comparación de DOS muestras
+(una asignación suelta contra una densa). Alcanza para decidir acá, no para
+publicar: no dice cuánto varía ni cuánto depende del planificador. Lo
+planteado es **K repeticiones idénticas del mismo punto en forma suelta**
+(por ejemplo 96 rangos, la rodilla), cada una en su run dir, mismo código y
+misma configuración, midiendo por repetición:
+
+- la mediana por paso y el wall (las mismas métricas de acá),
+- y la **colocación real**: cuántos nodos, cuántas tareas por nodo y el modelo
+  de CPU, que es lo que permite atribuir la dispersión a algo.
+
+Con eso salen la media ± desvío, el coeficiente de variación y una regresión
+del costo contra el número de nodos: la afirmación pasa de "cuesta 46 % más" a
+"cuesta tanto ± tanto, y depende tanto del planificador". También es lo que
+hace identificable la FORMA de la curva contra el ruido, que es el problema
+real: los puntos de pocos rangos ya salieron no monótonos por esto.
+
+Costo: K × ~4 min por punto (0,1 rev) -- con K=10, ~40 min de cola, así que
+postergarlo no cuesta nada. **Se deja planteado para la fase de análisis
+publicable, no se ejecuta ahora.**

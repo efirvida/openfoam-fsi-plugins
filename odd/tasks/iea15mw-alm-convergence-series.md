@@ -179,3 +179,24 @@ runner retoma de `latestTime`, con escritura cada 60°) y se reenvía sola con
 - No comparar el ASM/ASM-mesh contra el ALM en mallas distintas: el error de malla
   del propio ALM (+4 % medido entre coarse y castellated) es del mismo orden que
   el hueco que el issue #9 quiere medir.
+
+## Planteado (no ejecutar): dispersión del rendimiento suelto
+
+La penalidad de la colocación suelta está medida como **una comparación de dos
+muestras** (una asignación suelta contra una densa: +46 % a 96-112 rangos). Alcanza
+para decidir acá, pero no para publicar: no dice **cuánto varía** entre corridas
+idénticas ni cuánto depende del planificador — y esa variación es justamente lo que
+hizo **no monótonos** los puntos de pocos rangos (36 peor que 48 y que 24).
+
+Diseño planteado, para la fase de análisis publicable: **K repeticiones idénticas
+del mismo punto en forma suelta** (p. ej. 96 rangos = la rodilla), cada una en su run
+dir, mismo código y configuración, registrando por repetición la mediana por paso,
+el wall y la **colocación real** (nodos, tareas/nodo, modelo de CPU). Salidas: media
+± desvío, coeficiente de variación y una regresión del costo contra el número de
+nodos, para que la afirmación pase de "cuesta 46 % más" a "cuesta tanto ± tanto y
+depende tanto del planificador", y para separar la FORMA de la curva del ruido.
+
+Costo: K × ~4 min por punto (0,1 rev); con K=10 son ~40 min de cola, así que
+postergarlo no cuesta nada. **No ejecutar hasta la fase publicable.** Los resultados
+viven en `analysis/hpc-performance.md`, que se regenera con
+`tools/plot_hpc_performance.py`.
