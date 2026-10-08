@@ -12,8 +12,17 @@
 # the transient drift is order-% per revolution against ~2 % steps between meshes,
 # so signal and noise are the same size. This selects candidates, it does not close
 # the number -- and every value must be read next to its per-revolution drift, and
-# against the SAME 4-revolution window extracted from the 20-revolution coarse run
-# that is already on disk (runs/iea15mw-alm-20rev).
+# against the SAME 4-revolution window.
+#
+# The coarse point is produced HERE (m0), not extracted from a long run:
+# the 20-revolution coarse reference the record used to point at
+# (runs/iea15mw-alm-20rev) was deleted by a disk cleanup.
+#
+# A completed phase must not be resubmitted as is: its case already sits at
+# endTime, the solver cannot advance, and the runner reports
+# "FALLO ... without advancing" and exits non-zero. Either delete its
+# processor*/ and 0/ or select the phases that are actually missing with
+# TURBINE_SCREEN_PHASES.
 #
 # Configuration comes from the two studies that just ran:
 #   method simple    won at all three densities (-14 / -25 / -14 % per step, and
@@ -64,8 +73,15 @@ screen() {
     bash scripts/run_iea15mw_case.sh || echo "=== FALLO ${tag} (sigo con el proximo) ==="
 }
 
-screen m1-medium medium off
-screen m2-fine fine off
-screen m3-l2 coarse on 2
+SCREENS="${TURBINE_SCREEN_PHASES:-m0-coarse m1-medium m2-fine m3-l2}"
+for tag in $SCREENS; do
+    case "$tag" in
+        m0-coarse) screen m0-coarse coarse off ;;
+        m1-medium) screen m1-medium medium off ;;
+        m2-fine)   screen m2-fine fine off ;;
+        m3-l2)     screen m3-l2 coarse on 2 ;;
+        *) echo "ERROR: unknown screen '$tag' (m0-coarse m1-medium m2-fine m3-l2)" >&2; exit 2 ;;
+    esac
+done
 
 echo "=== tamiz terminado; resultados en runs/iea15mw-screen-* ==="
