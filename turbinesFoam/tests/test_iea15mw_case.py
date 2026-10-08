@@ -1337,6 +1337,68 @@ class TestDtFactor:
         assert "time-step factor" in capsys.readouterr().err
 
 
+class TestDecompMethod:
+    """The decomposition algorithm knob (``--decomp-method``, ``--decomp-n``).
+
+    ``scotch`` was hardcoded and was never a choice. For a STRUCTURED but graded
+    blockMesh the coordinate splitters (``simple``, ``hierarchical``) usually give
+    contiguous subdomains with less halo, while ``scotch`` optimises the graph's
+    cell balance and wins on irregular loads; the method has to be selectable to
+    be measurable. The default must stay byte-identical, or the committed cases
+    stop matching `--check`.
+    """
+
+    def test_default_is_scotch_and_renders_no_n(self, monkeypatch):
+        monkeypatch.delenv(generate_case.DECOMP_METHOD_ENV, raising=False)
+        monkeypatch.delenv(generate_case.DECOMP_N_ENV, raising=False)
+        assert generate_case.DEFAULT_DECOMP_METHOD == "scotch"
+        assert generate_case.DECOMP_METHOD_ENV == "TURBINE_DECOMP_METHOD"
+        assert generate_case.DECOMP_N_ENV == "TURBINE_DECOMP_N"
+        assert generate_case.resolve_decomp_method() == "scotch"
+        assert generate_case.resolve_decomp_n() is None
+        assert generate_case.render_decompose_par(144) == (
+            generate_case.foam_header("decomposeParDict")
+            + "numberOfSubdomains 144;\nmethod scotch;\n"
+        )
+
+    def test_method_and_n_render(self):
+        text = generate_case.render_decompose_par(128, "simple", "8 4 4")
+        assert "method simple;" in text
+        assert "n               (8 4 4);" in text
+        assert "method scotch;" not in text
+        # hierarchical takes no n: the render is exactly the two lines
+        assert generate_case.render_decompose_par(216, "hierarchical") == (
+            generate_case.foam_header("decomposeParDict")
+            + "numberOfSubdomains 216;\nmethod hierarchical;\n"
+        )
+
+    def test_n_must_multiply_to_the_rank_count(self):
+        with pytest.raises(ValueError):
+            generate_case.render_decompose_par(128, "simple", "8 8 8")
+        with pytest.raises(ValueError):
+            generate_case.render_decompose_par(128, "simple", "8 4")
+        with pytest.raises(ValueError):
+            generate_case.render_decompose_par(128, "simple", "8 4 0")
+
+    def test_cli_reaches_the_case_and_the_bridge_yields(self, tmp_path, monkeypatch):
+        monkeypatch.delenv(generate_case.DECOMP_METHOD_ENV, raising=False)
+        case_dir = tmp_path / "case"
+        assert (
+            generate_case.main(
+                ["--case-dir", str(case_dir), "--ranks", "128",
+                 "--decomp-method", "hierarchical"]
+            )
+            == 0
+        )
+        text = (case_dir / "system" / "decomposeParDict").read_text(encoding="utf-8")
+        assert "method hierarchical;" in text
+        monkeypatch.setenv(generate_case.DECOMP_METHOD_ENV, "metis")
+        assert generate_case.resolve_decomp_method() == "metis"
+        assert generate_case.resolve_decomp_method("simple") == "simple"
+        monkeypatch.setenv(generate_case.DECOMP_N_ENV, "8 4 4")
+        assert generate_case.resolve_decomp_n() == "8 4 4"
+
+
 class TestWriteNodePerf:
     """The opt-in per-node surface dump gate (``writeNodePerf``).
 

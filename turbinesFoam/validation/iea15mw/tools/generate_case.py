@@ -143,6 +143,18 @@ DEFAULT_DT_FACTOR = 1.0
 #: Environment bridge (see ``MESH_FACTOR_ENV``): the runner cannot be edited
 #: while live jobs execute it.
 DT_FACTOR_ENV = "TURBINE_DT_FACTOR"
+#: Decomposition algorithm. `scotch` was hardcoded for the whole campaign and was
+#: never a choice; for a STRUCTURED but graded blockMesh the coordinate splitters
+#: (`simple`, `hierarchical`) usually give contiguous subdomains with less halo,
+#: while `scotch` optimises the graph's cell balance and wins on irregular loads.
+#: Neither dominates, so it is selectable and measurable.
+DEFAULT_DECOMP_METHOD = "scotch"
+#: Environment bridge (see ``MESH_FACTOR_ENV``): the runner cannot be edited while
+#: live jobs execute it.
+DECOMP_METHOD_ENV = "TURBINE_DECOMP_METHOD"
+#: `n (x y z)` for the coordinate splitters, as three space or comma separated
+#: integers multiplying to the rank count; ignored by scotch and metis.
+DECOMP_N_ENV = "TURBINE_DECOMP_N"
 
 # --- Per-node surface dump (bladeSurfaceSource writeNodePerf) ----------------
 #: ``writeNodePerf`` in every rendered blade dictionary. The C++ gate already
@@ -988,12 +1000,32 @@ relaxationFactors
 """
 
 
-def render_decompose_par(ranks: int = NUMBER_OF_SUBDOMAINS) -> str:
+def render_decompose_par(
+    ranks: int = NUMBER_OF_SUBDOMAINS,
+    method: str = DEFAULT_DECOMP_METHOD,
+    n: str | None = None,
+) -> str:
     if int(ranks) < 1:
         raise ValueError("ranks must be a positive integer")
+    # `n (x y z)` is what the coordinate splitters (simple, hierarchical) cut
+    # along; scotch/metis ignore it, so it is only rendered when given.
+    nline = ""
+    if n is not None:
+        parts = [int(part) for part in str(n).replace(",", " ").split()]
+        if len(parts) != 3 or any(part < 1 for part in parts):
+            raise ValueError(
+                f"the decomposition n must be three positive integers, got '{n}'"
+            )
+        product = parts[0] * parts[1] * parts[2]
+        if product != int(ranks):
+            raise ValueError(
+                f"the decomposition n {(parts[0], parts[1], parts[2])} multiplies "
+                f"to {product} but numberOfSubdomains is {int(ranks)}"
+            )
+        nline = f"n               ({parts[0]} {parts[1]} {parts[2]});\n"
     return foam_header("decomposeParDict") + f"""numberOfSubdomains {int(ranks)};
-method scotch;
-"""
+method {method};
+{nline}"""
 
 
 def render_transport_properties() -> str:
@@ -1724,6 +1756,8 @@ def outputs(
     wake_azimuthal_step: float = DEFAULT_WAKE_AZIMUTHAL_STEP,
     tip_correction_epsilon: float = DEFAULT_TIP_CORRECTION_EPSILON,
     dt_factor: float = DEFAULT_DT_FACTOR,
+    decomp_method: str = DEFAULT_DECOMP_METHOD,
+    decomp_n: str | None = None,
 ) -> dict[Path, str]:
     domain = _as_domain(domain)
     case_dir = Path(case_dir)
@@ -1744,7 +1778,9 @@ def outputs(
             speed, rpm, domain, end_revs, start_from, write_interval_deg, dt_level,
             dt_factor=dt_factor,
         ),
-        system / "decomposeParDict": render_decompose_par(ranks),
+        system / "decomposeParDict": render_decompose_par(
+            ranks, decomp_method, decomp_n
+        ),
         system / "fvSchemes": render_fv_schemes(),
         system / "fvSolution": render_fv_solution(),
         system / "fvOptions.ALM": render_fv_options(
@@ -1889,6 +1925,28 @@ def resolve_dt_factor(cli_value: float | None = None) -> float:
         )
 
     return factor
+
+
+def resolve_decomp_method(cli_value: str | None = None) -> str:
+    """Resolve the rendered ``method``: flag, then ``TURBINE_DECOMP_METHOD``,
+    then ``scotch``."""
+    if cli_value is not None and str(cli_value).strip():
+        return str(cli_value).strip()
+    env_value = os.environ.get(DECOMP_METHOD_ENV)
+    if env_value is not None and env_value.strip():
+        return env_value.strip()
+    return DEFAULT_DECOMP_METHOD
+
+
+def resolve_decomp_n(cli_value: str | None = None) -> str | None:
+    """Resolve the rendered ``n (x y z)``: flag, then ``TURBINE_DECOMP_N``, else
+    ``None`` (no line, which is what scotch and metis want)."""
+    if cli_value is not None and str(cli_value).strip():
+        return str(cli_value).strip()
+    env_value = os.environ.get(DECOMP_N_ENV)
+    if env_value is not None and env_value.strip():
+        return env_value.strip()
+    return None
 
 
 def resolve_mesh_factor(cli_value: float | None = None) -> float:
@@ -2347,6 +2405,26 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--decomp-method",
+        default=None,
+        help=(
+            "decomposePar method (effective default "
+            f"{DEFAULT_DECOMP_METHOD}); scotch/metis optimise the graph's cell "
+            "balance, simple/hierarchical cut the structured mesh by coordinates. "
+            f"Explicit flag beats {DECOMP_METHOD_ENV}, which beats "
+            f"{DEFAULT_DECOMP_METHOD}"
+        ),
+    )
+    parser.add_argument(
+        "--decomp-n",
+        default=None,
+        help=(
+            "n (x y z) for simple/hierarchical as three integers multiplying to "
+            "the rank count, e.g. '8 4 4' for 128; ignored by scotch/metis. "
+            f"Explicit flag beats {DECOMP_N_ENV}"
+        ),
+    )
+    parser.add_argument(
         "--dt-factor",
         type=float,
         default=None,
@@ -2477,6 +2555,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         mesh_factor = resolve_mesh_factor(args.mesh_factor)
         dt_factor = resolve_dt_factor(args.dt_factor)
+        decomp_method = resolve_decomp_method(args.decomp_method)
+        decomp_n = resolve_decomp_n(args.decomp_n)
         write_node_perf = resolve_write_node_perf(args.write_node_perf)
         velocity_sample_radius = resolve_velocity_sample_radius(
             args.velocity_sample_radius
@@ -2566,6 +2646,8 @@ def main(argv: list[str] | None = None) -> int:
             wake_azimuthal_step=wake_azimuthal_step,
             tip_correction_epsilon=tip_correction_epsilon,
             dt_factor=dt_factor,
+            decomp_method=decomp_method,
+            decomp_n=decomp_n,
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)
