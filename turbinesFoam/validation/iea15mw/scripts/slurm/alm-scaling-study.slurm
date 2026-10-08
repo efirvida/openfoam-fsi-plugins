@@ -15,7 +15,7 @@
 # around the job. Each point gets its own run dir because the decomposition cannot
 # be shared across rank counts.
 #
-# NINE points, so the trend has a knee and not just two ends (cells/rank for the
+# EIGHT points, so the trend has a knee and not just two ends (cells/rank for the
 # 6 508 528-cell case):
 #
 #   ranks   cells/rank   ranks   cells/rank
@@ -23,7 +23,6 @@
 #    24      271 188      96       67 797
 #    36      180 792     144       45 198
 #    48      135 594     192       33 899
-#                         240       27 119
 #
 # THIS SCRIPT IS THE PROJECT'S SIZING REFERENCE. Its output
 # (`runs/iea15mw-scale-summary.csv`) is what a future run should read to choose
@@ -43,16 +42,18 @@
 #
 # The whole allocation is 240 tasks because the largest point needs it; the small
 # points simply use part of it.
-# A full-node point needs `--mem-per-cpu` BELOW the partition default: the nodes
-# are CfgTRES=cpu=48,mem=375G while DefMemPerCPU=8000, so 48 tasks at the default
-# ask for 384 GB and no node can satisfy it (slurm answers "Requested node
-# configuration is not available"). 4 GB per task is still ~20x what a
-# 135k-cells-per-rank run needs, and it keeps the sweep on WHOLE nodes, without
-# the co-tenancy of half-node placement.
-#SBATCH -p sequana_cpu_dev
-#SBATCH --ntasks=240
-#SBATCH --ntasks-per-node=48
-#SBATCH --mem-per-cpu=4G
+# HALF-NODE tasks on purpose. A whole-node ask (48 tasks at the default 8 GB per
+# CPU) is not even placeable -- the nodes are CfgTRES=cpu=48,mem=375G while
+# DefMemPerCPU=8000, so 48 tasks want 384 GB and Slurm answers "Requested node
+# configuration is not available" -- and on the development queue an 8-node
+# whole-node ask was refused while the same job at 24 tasks per node is accepted.
+# Half-node placement costs some co-tenancy in the timings, but the co-tenancy is
+# common to every point, so the SHAPE of the scaling curve survives; the absolute
+# seconds do not (that is what the node model and the CPU count in the log are
+# for).
+#SBATCH -p sequana_cpu
+#SBATCH --ntasks=192
+#SBATCH --ntasks-per-node=24
 #SBATCH --time=00:20:00
 #SBATCH --requeue
 #SBATCH -J iea15mw-scale
@@ -62,7 +63,7 @@
 set -u
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
-PHASES="${TURBINE_SCALE_RANKS:-240 192 144 96 72 48 36 24 12}"
+PHASES="${TURBINE_SCALE_RANKS:-192 144 96 72 48 36 24 12}"
 CELLS="${TURBINE_SCALE_CELLS:-6508528}"
 SUMMARY="runs/iea15mw-scale-summary.csv"
 PYTHON="${PYTHON:-/scratch/leahk/eduardo.donestevez/venv/bin/python}"
