@@ -103,6 +103,17 @@ mesh:
     disk_radius_m: 7.106  # rotorRadius + 2.077 m sampling radius
     disk_half_thickness_m: 2.5    # at least the sampling radius
     max_level: 3
+    # Measured cell counts of each built level (job 11610289, 2026-10-07). The
+    # castellation count cannot be predicted from the base mesh, so it is
+    # recorded, and the accepted band is that count within `cell_tolerance`: a
+    # level that silently changed size is then rejected. Only the coarse base
+    # mesh is measured, because the ladder refines that one.
+    cell_tolerance: 0.02
+    measured_cells:
+      0: 6674304
+      1: 6832896
+      2: 8137584
+      3: 18454156
   breaks_D:
     x: [-5.0, -0.5, 8.0, 15.0]
     y: [-4.0, -1.5, 1.5, 4.0]

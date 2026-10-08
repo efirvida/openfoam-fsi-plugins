@@ -154,24 +154,12 @@ if ! awk -v value="$nonortho" 'BEGIN { exit !(value <= 1e-10) }'; then
     exit 3
 fi
 
-band=$(python3 "$root/tools/case_config.py" --target-cells "$mesh")
+band=$(python3 "$root/tools/case_config.py" --target-cells "$mesh" --refine-level "$refine_level")
 low=${band% *}
 high=${band#* }
-if [ "$refine_level" -gt 0 ]; then
-    # Refinement cannot shrink the mesh, so the lower bound is real. The upper
-    # bound stays open until the first build of each level reports its count,
-    # which is printed here for the record.
-    if [ "$cells" -lt "$low" ]; then
-        echo "ERROR: refined mesh has $cells cells, below the base band $low..$high" >&2
-        exit 3
-    fi
-    echo "Refined level $refine_level: $cells cells (base band $low..$high, upper"
-    echo "bound pending the first measured build of this level)"
-else
-    if [ "$cells" -lt "$low" ] || [ "$cells" -gt "$high" ]; then
-        echo "ERROR: $cells cells is outside the configured band $low..$high" >&2
-        exit 3
-    fi
+if [ "$cells" -lt "$low" ] || [ "$cells" -gt "$high" ]; then
+    echo "ERROR: $cells cells is outside the band $low..$high for $mesh at refinement level $refine_level" >&2
+    exit 3
 fi
 
 echo "Mesh accepted: $cells cells, $hexes hexahedra, max non-orthogonality $nonortho"

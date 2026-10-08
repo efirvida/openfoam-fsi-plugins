@@ -541,6 +541,42 @@ def turbine_origin(cfg: dict[str, Any]) -> tuple[float, float, float]:
     )
 
 
+def target_cells(cfg: dict[str, Any], mesh: str, level: int = 0) -> tuple[int, int]:
+    """Accepted cell-count band for a (`mesh`, refinement `level`).
+
+    Level 0 is the configured band of the base `blockMesh`. Above it the refined
+    count cannot be predicted from the base mesh, so each level's count is a
+    recorded measurement and the band is that count within `cell_tolerance`.
+    `mesh.sh` rejects a mesh outside the band, which is what catches a level that
+    silently changed size.
+    """
+    if level == 0:
+        configured = _resolution(cfg, mesh)["target_cells"]
+        return int(configured[0]), int(configured[1])
+    refinement = cfg["mesh"]["refinement"]
+    if mesh != "coarse":
+        raise ValueError(
+            "refinement levels are measured for the coarse base mesh only, not "
+            f"{mesh!r}"
+        )
+    if level > int(refinement["max_level"]):
+        raise ValueError(
+            f"refine level {level} exceeds the configured maximum "
+            f"{refinement['max_level']}"
+        )
+    measured = refinement["measured_cells"].get(level)
+    if measured is None:
+        raise ValueError(
+            f"no measured cell count for refinement level {level}; build it once "
+            "and record the count before enforcing a band"
+        )
+    tolerance = float(refinement["cell_tolerance"])
+    return (
+        int(round(float(measured) * (1.0 - tolerance))),
+        int(round(float(measured) * (1.0 + tolerance))),
+    )
+
+
 def foam_header(object_name: str, klass: str = "dictionary") -> str:
     return f"""/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
@@ -594,6 +630,14 @@ def _main(argv: list[str] | None = None) -> int:
         help="print the accepted cell-count band of a mesh as 'LOW HIGH'",
     )
     parser.add_argument(
+        "--refine-level",
+        type=int,
+        default=0,
+        metavar="N",
+        help="refinement level whose band --target-cells prints (default 0, the "
+             "base blockMesh)",
+    )
+    parser.add_argument(
         "--stage",
         metavar="NAME",
         help="print one stage of the staged run plan as JSON",
@@ -617,8 +661,7 @@ def _main(argv: list[str] | None = None) -> int:
             values = kinematics(cfg, speed, mesh, sequence, args.solver)
             print(json.dumps({"model": model, **values}, indent=2, sort_keys=True))
         elif args.target_cells:
-            resolution = _resolution(cfg, args.target_cells)
-            low, high = (int(value) for value in resolution["target_cells"])
+            low, high = target_cells(cfg, args.target_cells, args.refine_level)
             print(f"{low} {high}")
         elif args.stage:
             stage = stages(cfg).get(args.stage)
