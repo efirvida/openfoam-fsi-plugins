@@ -35,7 +35,12 @@
 # already in the CSV, so a requeued job continues where the previous slice stopped.
 #SBATCH -p sequana_cpu
 #SBATCH --ntasks=324
-#SBATCH --time=00:20:00
+# The 20-minute cap belonged to the development queue and is gone: the runs stay
+# on sequana_cpu, whose limit is the association's (4 days), so they finish in one
+# allocation instead of slicing and waiting for a requeue between slices. --requeue
+# and the safety requeue at <240 s stay only so a slow slice cannot be killed
+# mid-point; in a four-hour allocation they should never fire.
+#SBATCH --time=04:00:00
 #SBATCH --requeue
 #SBATCH -J iea15mw-decomp
 #SBATCH -e %j.err
@@ -45,10 +50,14 @@ set -u
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
 # method ranks n
+# GROUPED BY DENSITY, not by method: the allocation (and therefore the placement)
+# changes between slices, so a density's three methods must be measured inside the
+# same slice or their ratio carries the placement difference instead of the method
+# difference. With a four-hour limit they all fit in one allocation anyway.
 PAIRS="${TURBINE_DECOMP_PAIRS:-\
-scotch 128 - | scotch 216 - | scotch 324 - | \
-hierarchical 128 - | hierarchical 216 - | hierarchical 324 - | \
-simple 128 4x8x4 | simple 216 6x9x4 | simple 324 6x9x6}"
+scotch 128 - | simple 128 4x8x4 | hierarchical 128 - | \
+scotch 216 - | simple 216 6x9x4 | hierarchical 216 - | \
+scotch 324 - | simple 324 6x9x6 | hierarchical 324 -}"
 SUMMARY="runs/iea15mw-decomp-summary.csv"
 TEMPLATE="runs/iea15mw-decomp-mesh"
 PYTHON="${PYTHON:-/scratch/leahk/eduardo.donestevez/venv/bin/python}"

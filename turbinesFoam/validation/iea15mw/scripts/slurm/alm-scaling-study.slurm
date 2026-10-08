@@ -78,7 +78,12 @@
 # memory want 384 GB and need --mem-per-cpu below 7.8G).
 #SBATCH -p sequana_cpu
 #SBATCH --ntasks=192
-#SBATCH --time=00:20:00
+# The 20-minute cap belonged to the development queue and is gone: the runs stay
+# on sequana_cpu, whose limit is the association's (4 days), so they finish in one
+# allocation instead of slicing and waiting for a requeue between slices. --requeue
+# and the safety requeue at <240 s stay only so a slow slice cannot be killed
+# mid-point; in a four-hour allocation they should never fire.
+#SBATCH --time=04:00:00
 #SBATCH --requeue
 #SBATCH -J iea15mw-scale
 #SBATCH -e %j.err
