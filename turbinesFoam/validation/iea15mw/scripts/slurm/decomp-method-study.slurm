@@ -12,8 +12,10 @@
 #    216      30 132      6 9 4
 #    324      20 088      6 9 6
 #
-# Methods: scotch (graph cell balance), hierarchical (recursive coordinate split,
-# no n) and simple (coordinate cut along n). `n` is validated to multiply to the
+# Methods: scotch (graph cell balance) and the two coordinate splitters simple and
+# hierarchical, BOTH of which require the initial n (x y z) -- passing no n to
+# hierarchical is a decomposePar failure, which is why the first pass has no
+# hierarchical rows. `n` is validated to multiply to the
 # rank count by the generator, so a typo is a generation error and not a silently
 # bad decomposition.
 #
@@ -55,9 +57,9 @@ cd "${SLURM_SUBMIT_DIR:-$PWD}"
 # same slice or their ratio carries the placement difference instead of the method
 # difference. With a four-hour limit they all fit in one allocation anyway.
 PAIRS="${TURBINE_DECOMP_PAIRS:-\
-scotch 128 - | simple 128 4x8x4 | hierarchical 128 - | \
-scotch 216 - | simple 216 6x9x4 | hierarchical 216 - | \
-scotch 324 - | simple 324 6x9x6 | hierarchical 324 -}"
+scotch 128 - | simple 128 4x8x4 | hierarchical 128 4x8x4 | \
+scotch 216 - | simple 216 6x9x4 | hierarchical 216 6x9x4 | \
+scotch 324 - | simple 324 6x9x6 | hierarchical 324 6x9x6}"
 SUMMARY="runs/iea15mw-decomp-summary.csv"
 TEMPLATE="runs/iea15mw-decomp-mesh"
 PYTHON="${PYTHON:-/scratch/leahk/eduardo.donestevez/venv/bin/python}"
