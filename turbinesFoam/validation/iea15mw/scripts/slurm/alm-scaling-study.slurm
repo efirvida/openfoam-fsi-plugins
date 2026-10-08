@@ -117,8 +117,19 @@ export TURBINE_END_EFFECTS=on
 export TURBINE_UPSTREAM=3 TURBINE_DOWNSTREAM=7 TURBINE_LATERAL=3
 export TURBINE_MESH=medium
 export TURBINE_TOTAL_REVS=0.1
-# One write per point keeps the disk tiny; the study measures the solver.
-export TURBINE_WRITE_DEG=90
+# MUST be smaller than the point's span: the runner verifies that the solver
+# advanced by reading the WRITTEN time directories, so a write interval longer
+# than the run looks exactly like a solver that never started (it happened: 90
+# degrees = 1.995 s against a 0.798 s point, every point "failed" while the solver
+# had actually run its 16 steps). 30 degrees -> one write at 0.665 s, inside the
+# point.
+export TURBINE_WRITE_DEG=30
+
+# Reuse the mesh across points: blockMesh on 6.5M cells costs minutes per point
+# and the MESH does not depend on the rank count, only the decomposition does. The
+# runner skips blockMesh when constant/polyMesh exists, so the first point's mesh
+# is kept as a template and the rest symlink to it.
+TEMPLATE="runs/iea15mw-scale${TAG}-mesh"
 
 for ranks in $PHASES; do
     if grep -q "^${ranks}," "$SUMMARY" 2>/dev/null; then
@@ -132,6 +143,15 @@ for ranks in $PHASES; do
     fi
     export TURBINE_RANKS="$ranks"
     export TURBINE_RUN_DIR="runs/iea15mw-scale${TAG}-${ranks}"
+    if [ -d "$TEMPLATE/constant/polyMesh" ]; then
+        if [ ! -e "${TURBINE_RUN_DIR}/constant/polyMesh" ]; then
+            mkdir -p "${TURBINE_RUN_DIR}/constant"
+            ln -s "$(cd "$TEMPLATE/constant" && pwd)/polyMesh" \
+                  "${TURBINE_RUN_DIR}/constant/polyMesh" 2>/dev/null \
+                || cp -r "$TEMPLATE/constant/polyMesh" "${TURBINE_RUN_DIR}/constant/" || true
+            echo "    (malla reusada del template)"
+        fi
+    fi
     echo "=== punto: ${ranks} rangos ($(( CELLS / ranks )) celdas/rank) ($(date '+%H:%M:%S')) ==="
     start=$(date +%s)
     if ! bash scripts/run_iea15mw_case.sh; then
@@ -139,6 +159,12 @@ for ranks in $PHASES; do
         continue
     fi
     wall=$(( $(date +%s) - start ))
+    # First point to finish builds the template for the rest.
+    if [ ! -d "$TEMPLATE/constant/polyMesh" ] && [ -d "${TURBINE_RUN_DIR}/constant/polyMesh" ]; then
+        mkdir -p "$TEMPLATE/constant"
+        cp -r "${TURBINE_RUN_DIR}/constant/polyMesh" "$TEMPLATE/constant/" || true
+        echo "    (malla guardada como template)"
+    fi
     "$PYTHON" - "$ranks" "$CELLS" "$wall" "$SUMMARY" "runs/iea15mw-scale-${ranks}/log.pimpleFoam" <<'PY'
 import statistics, sys
 
