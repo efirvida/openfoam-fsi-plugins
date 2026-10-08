@@ -27,6 +27,13 @@
 #SBATCH --time=24:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
+# Slurm applies a small default step memory limit when none is requested, and
+# snappyHexMesh is memory hungry: without this line the refined levels are killed
+# at ~8 GB (their `MaxRSS` is 7.96 GB and the step reports `oom_kill`, exit 125)
+# while the base blockMesh passes, because it needs far less. The nodes have
+# 384 GB, so 64 GB per task is ample for a 6.7 M-cell background refined to level
+# 3 and does not reserve a whole node.
+#SBATCH --mem=64G
 #SBATCH --array=0-1
 #SBATCH --output=runs/mesh-ladder-r%a.out
 #SBATCH --error=runs/mesh-ladder-r%a.err
@@ -70,6 +77,7 @@ esac
 echo "OpenFOAM ${WM_PROJECT_VERSION:-unknown} on $(hostname)"
 echo "blockMesh: $(command -v blockMesh || echo MISSING)"
 echo "snappyHexMesh: $(command -v snappyHexMesh || echo MISSING)"
+echo "step memory limit: $(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo unknown)"
 echo "Building coarse meshes at refinement levels: $levels"
 
 status=0
