@@ -24,6 +24,24 @@
 #    36      180 792     144       45 198
 #    48      135 594     192       33 899
 #
+# RUN IT TWICE -- the two curves answer different questions, and their difference
+# is the placement penalty:
+#
+#   loose   sbatch scripts/slurm/alm-scaling-study.slurm
+#           only --ntasks, so the scheduler packs it into any hole: it starts
+#           immediately and measures what the queue actually DELIVERS.
+#   dense   TURBINE_SCALE_TAG=-dense sbatch --ntasks-per-node=48 --mem-per-cpu=4G \
+#             scripts/slurm/alm-scaling-study.slurm
+#           a controlled density, four nodes for 192 tasks instead of the
+#           twenty-odd of the loose run: the placement-controlled curve. It may
+#           wait (that is what a placement constraint costs) and the memory needs
+#           the override because the nodes are CfgTRES=cpu=48,mem=375G against
+#           DefMemPerCPU=8000, i.e. 48 tasks at the default would ask for 384 GB.
+#
+# TURBINE_SCALE_TAG keeps the two apart: run dirs `runs/iea15mw-scale<TAG>-<ranks>`
+# and summary `runs/iea15mw-scale-summary<TAG>.csv`. Without it the second run
+# would find the first run's CSV and skip every point.
+#
 # THIS SCRIPT IS THE PROJECT'S SIZING REFERENCE. Its output
 # (`runs/iea15mw-scale-summary.csv`) is what a future run should read to choose
 # ranks, instead of inheriting a number from an earlier campaign; the results are
@@ -71,7 +89,8 @@ cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
 PHASES="${TURBINE_SCALE_RANKS:-192 144 96 72 48 36 24 12}"
 CELLS="${TURBINE_SCALE_CELLS:-6508528}"
-SUMMARY="runs/iea15mw-scale-summary.csv"
+TAG="${TURBINE_SCALE_TAG:-}"
+SUMMARY="runs/iea15mw-scale-summary${TAG}.csv"
 PYTHON="${PYTHON:-/scratch/leahk/eduardo.donestevez/venv/bin/python}"
 
 # --- which CPU are we actually measuring on --------------------------------
@@ -112,7 +131,7 @@ for ranks in $PHASES; do
         exit 0
     fi
     export TURBINE_RANKS="$ranks"
-    export TURBINE_RUN_DIR="runs/iea15mw-scale-${ranks}"
+    export TURBINE_RUN_DIR="runs/iea15mw-scale${TAG}-${ranks}"
     echo "=== punto: ${ranks} rangos ($(( CELLS / ranks )) celdas/rank) ($(date '+%H:%M:%S')) ==="
     start=$(date +%s)
     if ! bash scripts/run_iea15mw_case.sh; then
