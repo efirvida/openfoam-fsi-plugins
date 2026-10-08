@@ -2,6 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # IEA 15 MW — ALM convergence series, STAGE 1: the mesh axis.
 #
+# RUN THE SCREEN FIRST. scripts/slurm/mesh-screening.slurm is the cheap
+# 4-revolution screen (96 ranks with the decomposition the method/scaling study
+# measured) that picks which meshes are worth this much queue; this script is the
+# long-horizon series that confirms them and costs ~5x more per point. It was
+# already submitted once by mistake while the screen was the intended next step,
+# which is why the cross-reference lives here.
+#
 # Why a series and not "one more mesh": generate_case.delta_t() derives deltaT
 # from the finest cell the rotor sees (0.95*cell/tip_speed), so a series of
 # meshes at their own derived steps moves BOTH axes at once. The three points on
