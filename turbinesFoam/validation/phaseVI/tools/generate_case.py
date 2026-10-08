@@ -355,6 +355,33 @@ relaxationFactors
 """
 
 
+def _simple_factors(nproc: int, extents: tuple[float, ...]) -> tuple[int, int, int]:
+    """Split `nproc` along x/y/z so the subdomains stay as compact as possible.
+
+    `simple` cuts the domain into `n` equal parts per axis, so the three factors
+    must multiply to `nproc`, and a split that ignores the domain's shape produces
+    slabs (86 = 2*43 forces 43 slices along x). The winner minimises the ratio of
+    the longest to the shortest subdomain edge. `(nproc, 1, 1)` is always
+    available, so a prime rank count is handled rather than rejected.
+    """
+    best: tuple[float, tuple[int, int, int]] | None = None
+    for nx in range(1, nproc + 1):
+        if nproc % nx:
+            continue
+        rest = nproc // nx
+        for ny in range(1, rest + 1):
+            if rest % ny:
+                continue
+            nz = rest // ny
+            edges = [float(extents[0]) / nx, float(extents[1]) / ny,
+                     float(extents[2]) / nz]
+            score = max(edges) / min(edges)
+            if best is None or score < best[0]:
+                best = (score, (nx, ny, nz))
+    assert best is not None
+    return best[1]
+
+
 def render_decompose_par(cfg: dict[str, Any], ranks: int | None = None) -> str:
     nproc = int(ranks) if ranks is not None else int(
         cfg["decomposition"]["number_of_subdomains"]
@@ -365,9 +392,30 @@ def render_decompose_par(cfg: dict[str, Any], ranks: int | None = None) -> str:
     # it for an experiment that wants the graph partitioner, which is how the IEA
     # 15 MW package exposes the same choice.
     method = cfg["decomposition"].get("method", "simple")
-    return foam_header("decomposeParDict") + f"""numberOfSubdomains {nproc};
+    # `simple` reads its factors from `simpleCoeffs`; a bare `n` at the top level of
+    # decomposeParDict is ignored and the split then contradicts
+    # numberOfSubdomains, which is how a run failed at `decomposePar`.
+    coeffs = ""
+    if method == "simple":
+        breaks = cfg["mesh"]["breaks_D"]
+        extents = tuple(
+            float(breaks[axis][-1]) - float(breaks[axis][0])
+            for axis in ("x", "y", "z")
+        )
+        nx, ny, nz = _simple_factors(nproc, extents)
+        coeffs = (
+            "\nsimpleCoeffs\n{\n"
+            f"    n               ({nx} {ny} {nz});\n"
+            "    delta           0.001;\n"
+            "}\n"
+        )
+    return (
+        foam_header("decomposeParDict")
+        + f"""numberOfSubdomains {nproc};
 method {method};
 """
+        + coeffs
+    )
 
 
 def render_transport_properties(cfg: dict[str, Any]) -> str:
