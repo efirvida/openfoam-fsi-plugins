@@ -1,8 +1,8 @@
 # IEA 15 MW — serie de convergencia del ALM (malla y paso de tiempo)
 
-- **Estado:** corriendo — **un solo job** (`11610258`, 15 nodos, 360 tareas) con
-  las fases concurrentes en dos olas; run dirs `runs/iea15mw-mconv-*` y logs por
-  fase en `runs/mconv-M<k>.log`
+- **Estado:** **etapa 1** enviada (job `11610406`, 112 rangos / 5 nodos, serie
+  `M1 → M2 → M3`); **M4 y M5 frenados** a propósito. Run dirs
+  `runs/iea15mw-mconv-*`, logs por fase en `runs/mconv-M<k>.log`
 - **Creado:** 2026-10-07
 - **Relacionado:** `odd/tasks/iea15mw-references.md` (configuración validada y el
   eje de malla medido), `odd/issues/asm-mesh-residual-vs-alm.md` (issue #9),
@@ -53,43 +53,54 @@ M1..M3 + el punto coarse que ya existe (`runs/iea15mw-alm-20rev`, misma config,
 20 rev) completan una serie espacial de **cuatro puntos**. M4 agrega el punto fino
 y M5 el chequeo temporal.
 
-**Modo de envío: un solo job, fases concurrentes en dos olas.** Las fases son
-independientes (cada una con su run dir, sin consumir salida de otra), así que el
-job reparte sus **15 nodos** en grupos **disjuntos** y confina el `mpirun` de cada
-fase a su grupo con su propio `TURBINE_MPI_MCA`
-(`--host <grupo> --map-by ppr:24:node`). Sin el `--host`, tres `mpirun`
-concurrentes dentro de una misma asignación ven **toda** la asignación y
-sobre-suscriben los mismos nodos: por eso el script hace un **smoke test** de
-`mpirun --host` antes de arrancar y aborta con mensaje claro si el clúster no lo
-permite (fallar en 10 s, no a las 20 h).
+## Alcance: dos etapas, la segunda condicionada
 
-| ola | fases | rangos por fase | nodos por fase |
-| --- | --- | --- | --- |
-| 1 | M1 \|\| M2 \|\| M3 | 112 | 5 (24 slots/nodo, sobra el 5°) |
-| 2 | M4 \|\| M5 | 168 | 7 |
+**Etapa 1 (en marcha) — el eje espacial, cuatro puntos.** M1, M2 y M3 **en serie
+en una sola tarea**, a 112 rangos y 20 revoluciones cada una, más el punto coarse
+que ya existe (`runs/iea15mw-alm-20rev`, misma configuración). Con cuatro puntos
+se puede ajustar **un** orden `p` y ver si las cargas se asientan dentro de la
+banda de referencia en vez de deambular.
+
+| fase | malla | celda | paso | pasos/rev | rev |
+| --- | --- | --- | --- | --- | --- |
+| M1 | medium D/48 | 4,98 m | 0,0498 | 160 | 20 |
+| M2 | fine uniforme D/64 | 3,75 m | 0,0375 | 213 | 20 |
+| M3 | snappy L2 | 1,87 m | 0,0187 | 427 | 20 |
+
+**Etapa 2 (frenada) — el eje temporal y el punto fino.** M4 (snappy L3, 0,94 m,
+852 pasos/rev, donde vive el 0,5366 del registro) y M5 (L3 con `--dt-factor 0.5`,
+el chequeo temporal a malla fija) están **definidas pero no se lanzan**: son la
+mitad caras (~26 h y ~10 h a 112 rangos) y no tiene sentido gastar cola en ellas
+hasta que la etapa 1 diga que la serie es válida. Se corren explícitamente con
+`TURBINE_MCONV_PHASES=M4` (o `M5`) cuando exista el veredicto.
+
+## Por qué 112 rangos y no una asignación grande
+
+Medido en este clúster: cinco jobs de 112 rangos arrancaron en segundos, mientras
+un job único de 360 CPUs quedó en la **posición #132 de 199 pendientes con ETA a
+2 días**. No era falta de recursos totales (360 CPUs = 3 % de la máquina): los 8
+nodos totalmente libres estaban en estado `plnd` — Slurm se los había reservado al
+backfill de otro job pendiente — y el pedido necesitaba **15 nodos con ≥24 CPUs
+libres simultáneos** mientras los 131 jobs de adelante piden 24 CPUs y entran en
+cualquier fragmento. Los fragmentos se consumen en minutos (a los 15 min de ver 35
+nodos con ≥24 libres, quedaban cero). Las fases de la etapa 1 son baratas: la
+espera de cola las domina, así que conviene el pedido chico.
+
+Cómo se ve la cola ahora mismo, para no volver a diagnosticarlo desde cero:
+
+- `sequana_cpu`: **197 pendientes, 0 CPUs libres**, mi job en la posición ~#138,
+  `StartTime` estimado a ~24 h.
+- `sequana_cpu_dev` (tope 20 h): **5 nodos idle y 1 job pendiente**. M1/M2/M3
+  entran cada una en 20 h, así que un job con slices + `requeue` — el patrón que
+  la campaña ya usó en esa cola — arrancaría ya con la misma semántica (una sola
+  tarea, fases en serie, `scontrol requeue` para continuar slices sin gastar
+  envíos). Es la palanca si se quiere el resultado hoy en vez de mañana.
 
 Los rangos por fase son **parte de la identidad de la fase**: un caso ya
-descompuesto no se puede reusar con otro número de rangos. M1/M2/M3 = 112 (M1 ya
-tenía 112 con 0,5 rev escritas, así que **retoma**), M4/M5 = 168. El modo de fase
-única para reenvíos puntuales es `TURBINE_MCONV_PHASE=M4` (usa toda la asignación).
-
-**Una cola, no cinco.** Una entrada de 15 nodos de los 240 de la partición, en
-vez de cinco jobs de 112 rangos cada uno. Las olas no cambian el trabajo total
-mientras la asignación sea la misma; lo que cambia el reloj es el tamaño de la
-asignación, y acá la concurrencia sirve para que la ola 1 corra mientras la 2
-espera turno y para que un fallo no se lleve puestas las otras fases.
-
-**Stagger de las dos castellations.** En la ola 2, M4 y M5 construyen su malla con
-un `snappyHexMesh` **serie** cuyo pico cae en un nodo (15,5 GB para los 11,6 M de
-celdas), y el script de batch corre en un solo nodo: **M5 espera a que M4 termine
-su malla** (se detecta por `log.topoSet`) para que los dos picos no se solapen. En
-la ola 1 hay una sola fase castellated, así que no hace falta.
-
-Estimación de reloj con la tasa medida en vuelo (3,6 rev/h en medium a 112
-rangos, la mitad de lo que dio el mismo caso en la campaña por co-tenencia de
-nodos): ola 1 ≈ 12 h (el polo es M2, la malla fine) y ola 2 ≈ 13-26 h según cuánto
-pese M4 a 168 rangos. Límite pedido: **48 h**. Si una fase muere, su run dir queda
-resumible y se reenvía sola con `TURBINE_MCONV_PHASE=<fase>`.
+descompuesto no se reusa con otra descomposición, así que un reenvío mantiene los
+112. Si una fase muere o se saltea por tiempo, su run dir queda resumible (el
+runner retoma de `latestTime`, con escritura cada 60°) y se reenvía sola con
+`TURBINE_MCONV_PHASES=<fase>`.
 
 ## Criterio de aceptación (escrito antes de correr)
 
