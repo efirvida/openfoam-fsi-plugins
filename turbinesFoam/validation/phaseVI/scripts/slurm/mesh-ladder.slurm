@@ -38,28 +38,28 @@ if [ -z "${SLURM_SUBMIT_DIR:-}" ]; then
 fi
 cd "$SLURM_SUBMIT_DIR"
 
-# Slurm runs batch scripts as non-login shells, so the `module` function has to be
-# sourced explicitly before it can be used.
-if ! command -v module >/dev/null 2>&1; then
-    for init in /etc/profile.d/modules.sh /usr/share/Modules/init/sh; do
-        if [ -r "$init" ]; then
-            . "$init"
-            break
-        fi
-    done
-fi
+module purge
+module load openfoam/v2506_openmpi-4.1.4_gnu gcc
 
-# The SDumont module does not export the wmake identity variables and its
-# LD_LIBRARY_PATH points at a dead Int32 directory (see the root AGENTS.md).
-module load openfoam/v2506_openmpi-4.1.4_gnu
+# The module exports Int32 paths; set the Int64 identity first and re-source the
+# OpenFOAM bashrc so PATH points at the installed linux64GccDPInt64Opt binaries.
+# Without this `blockMesh: command not found`, which is how the first submission
+# of this job failed.
 export WM_ARCH=linux64
 export WM_COMPILER=Gcc
 export WM_COMPILE_OPTION=Opt
 export WM_PRECISION_OPTION=DP
 export WM_LABEL_SIZE=64
 export WM_OPTIONS=linux64GccDPInt64Opt
+# etc/bashrc is not written for strict mode: it dereferences optional variables
+# (WM_PROJECT_SITE on SDumont) and can return non-zero, so `set -eu` aborts the
+# job while sourcing it. Disable both while sourcing, then restore them.
+set +eu
+. "$WM_PROJECT_DIR/etc/bashrc"
+set -eu
+
 export FOAM_USER_LIBBIN=$WM_PROJECT_USER_DIR/platforms/$WM_OPTIONS/lib
-export LD_LIBRARY_PATH=$FOAM_USER_LIBBIN:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib/sys-openmpi:${LD_LIBRARY_PATH:-}
+export LD_LIBRARY_PATH=$FOAM_USER_LIBBIN:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib/sys-openmpi:$LD_LIBRARY_PATH
 
 case "${SLURM_ARRAY_TASK_ID:?array task id required}" in
     0) levels="0 1" ;;
@@ -68,6 +68,8 @@ case "${SLURM_ARRAY_TASK_ID:?array task id required}" in
 esac
 
 echo "OpenFOAM ${WM_PROJECT_VERSION:-unknown} on $(hostname)"
+echo "blockMesh: $(command -v blockMesh || echo MISSING)"
+echo "snappyHexMesh: $(command -v snappyHexMesh || echo MISSING)"
 echo "Building coarse meshes at refinement levels: $levels"
 
 status=0
