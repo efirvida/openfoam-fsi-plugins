@@ -96,6 +96,35 @@ Cómo se ve la cola ahora mismo, para no volver a diagnosticarlo desde cero:
   tarea, fases en serie, `scontrol requeue` para continuar slices sin gastar
   envíos). Es la palanca si se quiere el resultado hoy en vez de mañana.
 
+## Algoritmo de descomposición: hoy todo es scotch (pendiente)
+
+`render_decompose_par` escribe `method scotch;` **hardcodeado** (no hay bandera) y
+todos los runs de la campaña son scotch: el propio `decomposePar` lo reporta
+(`Decomposition method scotch [192]`), y en la malla medium de 6,5 M de celdas
+tardó 53 s en descomponer.
+
+**Por qué importa justo acá**: la malla es un `blockMesh` **estructurado pero
+graduado** (celdas no uniformes + zonas castellated). `simple`/`hierarchical`
+cortan por **coordenadas**, así que en una malla estructurada suelen dar
+subdominios contiguos, menos halo y mejor localidad de caché; `scotch` optimiza el
+**balance del grafo** (número de celdas por subdominio) y por eso gana en mallas
+irregulares o muy cargadas, a costa de un borde más irregular. Ninguno domina:
+**hay que medirlo**, y hasta ahora nunca se midió.
+
+**Cómo medirlo (siguiente paso, barato)**:
+
+1. Exponer `--decomp-method` en el generador (con el env bridge `TURBINE_*` como
+   las otras perillas; hoy es una línea fija en `render_decompose_par`), más
+   `--decomp-n` para el `n (x y z)` de `simple`/`hierarchical`.
+2. Comparar a **un conteo de rangos FIJO** (p. ej. 192) en vez de repetir el
+   barrido entero: es más directo y mucho más barato. Un método por corrida con
+   `TURBINE_SCALE_TAG=-<metodo>`, que ya separa dirs y CSV.
+3. Métricas: **segundos por paso** (la misma mediana de los deltas de
+   `ExecutionTime`), **celdas por rank** (el balance real), el **tiempo de
+   `decomposePar`** y el **tamaño del halo** (caras de interfaz entre
+   subdominios). Con eso se elige método y recién ahí se repite el barrido con el
+   ganador.
+
 Los rangos por fase son **parte de la identidad de la fase**: un caso ya
 descompuesto no se reusa con otra descomposición, así que un reenvío mantiene los
 112. Si una fase muere o se saltea por tiempo, su run dir queda resumible (el
