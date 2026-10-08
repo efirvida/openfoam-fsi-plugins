@@ -15,4 +15,4 @@ FoamFile
 // Generated from config/case.yaml. Do not edit by hand.
 
 numberOfSubdomains 48;
-method scotch;
+method simple;

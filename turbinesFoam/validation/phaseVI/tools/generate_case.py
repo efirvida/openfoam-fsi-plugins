@@ -359,8 +359,14 @@ def render_decompose_par(cfg: dict[str, Any], ranks: int | None = None) -> str:
     nproc = int(ranks) if ranks is not None else int(
         cfg["decomposition"]["number_of_subdomains"]
     )
+    # `simple` rather than `scotch`: the mesh is a structured blockMesh, so a
+    # geometric split keeps the subdomains axis-aligned and contiguous, which the
+    # cost/benefit measurement on this cluster found best. The config can override
+    # it for an experiment that wants the graph partitioner, which is how the IEA
+    # 15 MW package exposes the same choice.
+    method = cfg["decomposition"].get("method", "simple")
     return foam_header("decomposeParDict") + f"""numberOfSubdomains {nproc};
-method scotch;
+method {method};
 """
 
 

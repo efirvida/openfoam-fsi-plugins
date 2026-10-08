@@ -27,11 +27,26 @@
 #
 # Slurm spools this script, so BASH_SOURCE is not usable; the package root is
 # resolved from the submission directory instead.
+# Only `--ntasks` is a resource decision: this cluster grants 8000 MB per CPU
+# (`DefMemPerCPU`), so the task count is also the memory request, and Slurm places
+# the nodes. `--nodes` is left as a range rather than 1 because the levels need
+# very different rank counts and pinning one node capped the job at 48.
+#
+# The rank count is one core per ~80,000 cells, measured on this cluster as the
+# best cost/benefit point (80k per CORE, so one task per core):
+#
+#   level 0  6,674,304 cells ->  84 tasks
+#   level 1  6,832,896 cells ->  86 tasks
+#   level 2  8,137,584 cells -> 102 tasks
+#   level 3 18,454,156 cells -> 231 tasks
+#
+# Two levels share one array task, so the submitted `--ntasks` is the larger of
+# the two and the smaller level runs slightly over-parallel rather than under.
 #SBATCH --job-name=phaseVI-ladder
 #SBATCH --partition=sequana_cpu
 #SBATCH --time=24:00:00
-#SBATCH --nodes=1
-#SBATCH --ntasks=48
+#SBATCH --nodes=1-8
+#SBATCH --ntasks=86
 #SBATCH --array=0-1
 #SBATCH --output=runs/ladder-r%a.out
 #SBATCH --error=runs/ladder-r%a.err
@@ -78,10 +93,16 @@ echo "Running the convergence ladder at refinement levels: $levels"
 status=0
 for level in $levels; do
     echo "=== ladder level $level ==="
+    # Four complete revolutions, not the production twelve. The convergence
+    # question is where the per-revolution behaviour stops changing, and the
+    # comparison reads that from the per-revolution drift table: four revolutions
+    # are enough to see it, and they cut the ladder's cost threefold. The
+    # comparison has to match this window, so it is run with
+    # `--revolutions 1 4 --allow-short-window`.
     # Continue across levels so one failure still leaves the other meshes measured.
     if ! scripts/runPhaseVI.sh -m alm -u 7 -mesh coarse --sequence H \
-            --refine-level "$level" --delta-t 0.001 --ranks "$SLURM_NTASKS" \
-            --restart --run; then
+            --refine-level "$level" --delta-t 0.001 --end-revs 4 \
+            --ranks "$SLURM_NTASKS" --restart --run; then
         echo "ERROR: ladder level $level failed" >&2
         status=1
     fi
