@@ -511,6 +511,22 @@ Replace the `BEM_*` arrays in `scripts/plot_3models_spanwise.py` with the new
 uniform inflow. The digitized references (`deoliv_*`, `yi_*`, visually read
 +/-10 %) are not regenerated.
 
+## Frozen platform
+
+The converged and validated case every later comparison builds on is frozen in
+[`odd/tasks/iea15mw-platform-freeze.md`](../../../odd/tasks/iea15mw-platform-freeze.md):
+snappy L2 (2 363 760 cells, finest 1.87 m), 96 ranks, `dt` 0.0187 s, 20
+revolutions, Glauert end effects on, dynamic stall and rotational augmentation
+off, converged `cp` 0.534 — +0.6 % against the OLAF free wake and +8.8 % against
+CCBlade/BEM, that last gap being the model residual. Both convergence axes are
+closed (mesh residual +0.14 %, time step −0.13 %).
+
+Read that file before starting an ASM, mesh or FSI study from this case: it lists
+the exact configuration, the numbers, the traps when reading a resumed run
+(split `postProcessing` histories, `compare_spanwise.py --time`) and what is *not*
+established (the mandatory ASM deposit fix, the unfitted rotational-augmentation
+coefficients, the outboard tangential excess).
+
 ## Known limitations
 
 See `PROVENANCE.md`: the `Re = 3.0e6` header is nominal for all 50 stations
