@@ -42,7 +42,12 @@
 set -u
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
-export TURBINE_MODEL=alm TURBINE_RANKS=96 TURBINE_REQUEUE=0 TURBINE_RPM=7.518
+# The model is OVERRIDABLE, not fixed: `run_iea15mw_case.sh` reads TURBINE_MODEL,
+# and the ASM arm of the platform comparison is this same L2 case with only the
+# element type changed. Hardcoding `alm` here would silently turn a submitted ASM
+# run into a second ALM run -- same exit code, wrong physics, citable-looking
+# numbers -- so it uses the same pattern as TURBINE_RUN_DIR and TURBINE_DT_FACTOR.
+export TURBINE_MODEL="${TURBINE_MODEL:-alm}" TURBINE_RANKS=96 TURBINE_REQUEUE=0 TURBINE_RPM=7.518
 export TURBINE_VELOCITY_SAMPLE_RADIUS=3.3 TURBINE_N_VELOCITY_SAMPLES=16
 export TURBINE_END_EFFECTS=on
 export TURBINE_UPSTREAM=3 TURBINE_DOWNSTREAM=7 TURBINE_LATERAL=3
@@ -55,6 +60,17 @@ export TURBINE_DECOMP_METHOD=simple TURBINE_DECOMP_N="4 6 4"
 #     sbatch --time=08:00:00 scripts/slurm/l2-long.slurm
 # TURBINE_ROTATIONAL_AUGMENTATION is read by the generator's own env bridge, the
 # same way TURBINE_DT_FACTOR is, so the runner needs no change.
+#
+# The ASM arm on the FROZEN platform (mesh, decomposition and domain below stay
+# the frozen ones; `asm` does not default to snappy, which is why they are
+# restated here) and its horizon:
+#
+#   TURBINE_MODEL=asm TURBINE_N_CHORDWISE=5 TURBINE_RUN_DIR=runs/iea15mw-asm-l2 \
+#     TURBINE_TOTAL_REVS=20 sbatch -J iea15mw-asm-l2 scripts/slurm/l2-long.slurm
+#
+# 20 revolutions do not fit one allocation at the actuator-surface cost, so the
+# same command is resubmitted to resume from `latestTime` -- one at a time, and
+# each resume appends its own `postProcessing/turbines/<timeName>/` folder.
 export TURBINE_MESH=coarse TURBINE_SNAPPY=on TURBINE_SNAPPY_LEVEL=2
 export TURBINE_RUN_DIR="${TURBINE_RUN_DIR:-runs/iea15mw-screen-m3-l2}"
 export TURBINE_TOTAL_REVS="${TURBINE_TOTAL_REVS:-20}"
