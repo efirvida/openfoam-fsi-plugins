@@ -456,6 +456,18 @@ def main(argv: list[str] | None = None) -> int:
         "--rpm", type=float, default=RPM_RATED, help="rotor speed (default 7.518)"
     )
     parser.add_argument(
+        "--time",
+        default="0",
+        help=(
+            "time directory of the postProcessing output (default 0). A "
+            "RESUMED run writes its own, named after the run's start time: a "
+            "case resumed at 31.9209 s keeps its new revolutions in "
+            "postProcessing/*/31.9209/, so reading .../0/ would analyse the "
+            "history before the resume (the ALM convergence series hit exactly "
+            "this)"
+        ),
+    )
+    parser.add_argument(
         "--out", type=Path, default=None, help="write the spanwise table as CSV"
     )
     parser.add_argument(
@@ -511,8 +523,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     run_dir = args.run_dir.resolve()
-    element_dir = run_dir / ELEMENT_DIR
-    turbine_csv = run_dir / TURBINE_CSV
+    element_dir = run_dir / "postProcessing" / "actuatorLineElements" / args.time
+    turbine_csv = run_dir / "postProcessing" / "turbines" / args.time / "turbine.csv"
     if not element_dir.is_dir():
         print(f"error: {element_dir} is not a directory", file=sys.stderr)
         return 1

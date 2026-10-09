@@ -302,3 +302,41 @@ viejos no deben citarse.
   `FALLO ... without advancing` y el job sale con error. No es un crash, pero el
   exit status miente. Si se reenvía, hay que borrar el `processor*/` o dejar
   `latest=0` para que el run sea real.
+
+## VALIDACIÓN spanwise contra CCBlade (2026-10-09)
+
+`scripts/compare_spanwise.py --run-dir runs/iea15mw-screen-m3-l2 --time 31.9209
+--revs 2` (ventana = revs 19-20, el estado convergido). Primero el control
+interno: la integración spanwise reproduce los coeficientes que reporta el módulo
+dentro del 0,4 % (C_T 0,7755 vs 0,7708; C_P 0,5345 vs 0,5365).
+
+Perfil por banda (lo nuestro sobre el BEM de CCBlade, `analysis/spanwise-references.csv`):
+
+| banda r/R | c_n ratio | c_t ratio | Δα |
+| --- | --- | --- | --- |
+| 0,3-0,5 | 1,028 | 1,085 | +0,48° |
+| 0,5-0,7 | 1,033 | 1,108 | +0,35° |
+| 0,7-0,9 | 1,019 | **1,129** | +0,46° |
+| **0,3-0,9** | **1,027** | **1,101** | **+0,43°** |
+
+Nivel rotor: **cp 0,5365** y ct 0,7708. Contra CCBlade/BEM (cp 0,4910, ct 0,7934):
+**cp +9,3 %** y **ct −2,8 %**. Contra la estela libre de OLAF (0,5312): **+1,0 %**.
+
+**Lectura de la validación:**
+
+- **Validada contra la estela libre** (la referencia de mayor fidelidad): +1,0 %,
+  con los dos ejes convergidos.
+- **El residuo contra el BEM es tangencial, no de nivel**: `c_t` +10,1 % (creciendo
+  hacia afuera) con `c_n` +2,7 % y **α casi igual (+0,43°)**. La firma es la del
+  exceso de fuerza tangencial / inducción rotacional baja, que es lo que la campaña
+  ya había identificado ("el exceso es tangencial, no de punta"), y **no** algo que
+  arregle la malla.
+- El desacuerdo con el BEM (+9,3 %) es del mismo tamaño que el ancho de la **banda
+  de referencia** (0,4910-0,5312 = 8 %): la L2 queda en el **techo** de la banda,
+  pegada a la estela libre y lejos del BEM. Con una sola referencia no se cierra
+  más que eso; el residuo es de **modelo** y va al issue #9, no al eje de malla.
+
+**Arreglo de herramienta**: `compare_spanwise.py` ganó `--time` (default `"0"`)
+porque leía `postProcessing/*/0/` con el `timeName` fijo, así que sobre un run
+retomado analizaba la historia *previa* al retome — exactamente la trampa que
+apareció en el paso 1.
