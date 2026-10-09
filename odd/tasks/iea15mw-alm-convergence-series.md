@@ -239,6 +239,16 @@ baje del criterio (<0,2 %/rev sostenido), el chequeo de **`dt/2` a esa misma mal
 (que es lo que separa el eje temporal), y recién ahí la comparación contra la banda
 y el spanwise de CCBlade. Congelada la malla+configuración, se reusa para el trío
 del issue #9 y para el FSI.
+
+**Paso 1 EN CURSO** (`scripts/slurm/l2-long.slurm`, job `11611026`, 96 rangos, 10 h
+de límite). Extiende **el mismo caso L2 del tamiz**
+(`runs/iea15mw-screen-m3-l2`, 4 revs ya escritas, 96 rangos, descomposición
+`simple 4 6 4`): retomar conserva una sola historia para la curva de deriva, no tira
+las 4 revs del tamiz y reusa la descomposición. Escalonado a propósito: **20 revs**
+primero (~6 h al rendimiento medido de 3,4 rev/h), se lee la deriva y se extiende
+sólo si no bajó del criterio (`TURBINE_TOTAL_REVS=40 sbatch scripts/slurm/l2-long.slurm`).
+La configuración va **congelada y escrita** en el script, porque la convergencia es
+propiedad de esta configuración.
 3. Consecuencia práctica: **el punto L3 (26 h) probablemente no haga falta para la
    pregunta de malla** (la tendencia ya está aplanada), y la comparación de modelos
    del issue #9 se puede hacer en la malla barata (D/64 o L2) porque el sesgo de
