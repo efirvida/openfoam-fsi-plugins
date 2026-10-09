@@ -52,7 +52,11 @@ export TURBINE_DECOMP_METHOD=simple TURBINE_DECOMP_N="4 6 4"
 export TURBINE_MESH=coarse TURBINE_SNAPPY=on TURBINE_SNAPPY_LEVEL=2
 export TURBINE_RUN_DIR=runs/iea15mw-screen-m3-l2
 export TURBINE_TOTAL_REVS="${TURBINE_TOTAL_REVS:-20}"
+# dt refinement at a FIXED mesh. delta_t() derives the step from the cell, so the
+# temporal axis cannot be separated from the spatial one otherwise: 0.5 continues
+# the converged state with half the step, which is the dt/2 check.
+export TURBINE_DT_FACTOR="${TURBINE_DT_FACTOR:-1.0}"
 
-echo "=== L2 largo: hasta ${TURBINE_TOTAL_REVS} revs, retomando ${TURBINE_RUN_DIR} ($(date '+%H:%M:%S')) ==="
+echo "=== L2: hasta ${TURBINE_TOTAL_REVS} revs, dt x${TURBINE_DT_FACTOR}, retomando ${TURBINE_RUN_DIR} ($(date '+%H:%M:%S')) ==="
 bash scripts/run_iea15mw_case.sh
-echo "=== L2 largo terminado con rc=$? ($(date '+%H:%M:%S')) ==="
+echo "=== L2 terminado con rc=$? ($(date '+%H:%M:%S')) ==="
