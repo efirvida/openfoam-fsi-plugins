@@ -682,27 +682,29 @@ def test_validated_sampling_and_re_correction_render_at_the_source_levels(cfg):
     `velocitySampleRadius`/`nVelocitySamples` are read from
     `axialFlowTurbineALSource::coeffs_`, and `liftReCorrExp` is read by
     `profileData` from its own `profileData/S809` subdict, beside the `Re`
-    statement it modifies. Both are absent by default because the configured
-    values equal the source defaults (0.0/20/0.23), which keeps the committed
-    render byte-identical.
+    statement it modifies. The sampling values equal the source defaults
+    (0.0/20), so they render no key; `config/case.yaml` sets
+    `lift_re_corr_exp: 0.0`, so the committed render disables the rescaling.
     """
     def render(element_type, **kwargs):
         return generate_case.render_fv_options(
             cfg, "7", "coarse", PACKAGE / "case", element_type, **kwargs
         )
 
-    # Committed render omits all three keys.
+    # The committed render disables the Reynolds rescaling in every twin; the
+    # sampling keys stay at the source defaults and are omitted.
     for name in ("ALM", "ASM", "ASM-MESH"):
         committed = (
             PACKAGE / "case" / "system" / f"fvOptions.{name}"
         ).read_text(encoding="utf-8")
-        for key in ("velocitySampleRadius", "nVelocitySamples", "liftReCorrExp"):
-            assert key not in committed
+        assert "velocitySampleRadius" not in committed
+        assert "nVelocitySamples" not in committed
+        assert "liftReCorrExp 0;" in committed
 
     alm = render(generate_case.ALM_ELEMENT)
     assert "velocitySampleRadius" not in alm
     assert "nVelocitySamples" not in alm
-    assert "liftReCorrExp" not in alm
+    assert "liftReCorrExp 0;" in alm
 
     # The validated Phase VI method: sampling at the rotor-coeffs level, the
     # Reynolds rescaling disabled inside the S809 profile subdict.
@@ -752,6 +754,112 @@ def test_validated_sampling_and_re_correction_render_at_the_source_levels(cfg):
     # A non-physical radius is rejected before any render.
     with pytest.raises(ValueError, match="zero or positive"):
         render(generate_case.ALM_ELEMENT, velocity_sample_radius=-1.0)
+
+
+def test_hub_radius_rendered_at_rotor_level(cfg, tmp_path):
+    """The Prandtl hub loss renders `hubRadius` at the rotor-coeffs level.
+
+    `axialFlowTurbineALSource` reads `hubRadius` from its rotor-level `coeffs_`
+    and refuses a Glauert root effect without it. The radius is a property of
+    the rotor, so the key rides with `hub_radius`, not with the `rootEffects`
+    toggle: the committed case renders it, and the root-off ablation keeps it.
+    A case that sets no `hub_radius` renders no key.
+    """
+    assert cfg["actuator"]["hub_radius"] == pytest.approx(0.5083)
+
+    def render(element_type, **kwargs):
+        return generate_case.render_fv_options(
+            cfg, "7", "coarse", PACKAGE / "case", element_type, **kwargs
+        )
+
+    twins = (
+        (generate_case.ALM_ELEMENT, {}),
+        (generate_case.ASM_ELEMENT, {}),
+        (
+            generate_case.ASM_ELEMENT,
+            {"surface_geometry": generate_case.SURFACE_GEOMETRY},
+        ),
+    )
+    for element_type, surface in twins:
+        coeffs = block(
+            render(element_type, **surface), "axialFlowTurbineALSourceCoeffs"
+        )
+        assert "hubRadius 0.5083;" in coeffs
+        # At the rotor-coeffs level, beside `rotorRadius`, never inside the
+        # `endEffects` subdict or a blade subdict (the source reads `coeffs_`).
+        assert "hubRadius" not in block(coeffs, "endEffects")
+        assert "hubRadius" not in block(coeffs, "blade1")
+        assert coeffs.index("rotorRadius 5.029;") < coeffs.index(
+            "hubRadius 0.5083;"
+        )
+
+    # The committed twins carry the same key, and all three render the
+    # disabled Reynolds rescaling.
+    for name in ("ALM", "ASM", "ASM-MESH"):
+        committed = (
+            PACKAGE / "case" / "system" / f"fvOptions.{name}"
+        ).read_text(encoding="utf-8")
+        assert "hubRadius 0.5083;" in block(
+            committed, "axialFlowTurbineALSourceCoeffs"
+        )
+        assert "liftReCorrExp 0;" in committed
+
+    # `hubRadius` is a rotor property, not part of the root toggle: the root-off
+    # ablation still renders it.
+    ablation = render(generate_case.ALM_ELEMENT, root_effects=False)
+    assert "rootEffects off;" in block(ablation, "GlauertCoeffs")
+    assert "hubRadius 0.5083;" in block(
+        ablation, "axialFlowTurbineALSourceCoeffs"
+    )
+
+    # A case that sets no `hub_radius` renders no key at all, byte-identical to
+    # the pre-change default render.
+    no_hub = copy.deepcopy(cfg)
+    del no_hub["actuator"]["hub_radius"]
+    no_hub_text = generate_case.render_fv_options(
+        no_hub, "7", "coarse", PACKAGE / "case", generate_case.ALM_ELEMENT
+    )
+    assert "hubRadius" not in no_hub_text
+    # With no key the interpolation degenerates to the pre-change template:
+    # `rotorRadius` is immediately followed by `azimuthalOffset`.
+    assert "rotorRadius 5.029;\n        azimuthalOffset 0;" in no_hub_text
+
+    # A render-time override and the CLI flag both reach the rendered key.
+    overridden = render(generate_case.ALM_ELEMENT, hub_radius=0.6)
+    assert "hubRadius 0.6;" in block(
+        overridden, "axialFlowTurbineALSourceCoeffs"
+    )
+    case_dir = tmp_path / "case"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE / "tools" / "generate_case.py"),
+            "--hub-radius", "0.55",
+            "--case-dir", str(case_dir),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    rendered = (case_dir / "system" / "fvOptions.ALM").read_text(
+        encoding="utf-8"
+    )
+    assert "hubRadius 0.55;" in block(
+        rendered, "axialFlowTurbineALSourceCoeffs"
+    )
+
+    # A non-positive radius is rejected before any render (exit 2).
+    negative = subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE / "tools" / "generate_case.py"),
+            "--hub-radius", "-1",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert negative.returncode == 2
+    assert "must be positive" in negative.stderr
 
 
 def test_sampling_config_and_flags_drive_the_render(cfg, tmp_path):

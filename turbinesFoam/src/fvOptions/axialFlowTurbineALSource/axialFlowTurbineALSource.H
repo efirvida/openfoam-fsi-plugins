@@ -109,6 +109,10 @@ protected:
         //- End effects model name
         word endEffectsModel_;
 
+        //- Hub surface radius for the Glauert root (Prandtl hub loss)
+        //  correction; negative when `hubRadius` was not supplied
+        scalar hubRadius_;
+
         //- Switch to activate the rotor-level induced-velocity tip correction
         bool tipCorrectionActive_;
 

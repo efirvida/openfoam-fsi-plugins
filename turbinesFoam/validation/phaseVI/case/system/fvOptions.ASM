@@ -30,6 +30,7 @@ turbine
         freeStreamVelocity (7 0 0);
         tipSpeedRatio 5.408;
         rotorRadius 5.029;
+        hubRadius 0.5083;
         azimuthalOffset 0;
 
         dynamicStall
@@ -135,6 +136,7 @@ turbine
             S809
             {
                 Re 1e6;
+                liftReCorrExp 0;
                 GaussianCoeffs
                 {
                     chordFactor 0.25;

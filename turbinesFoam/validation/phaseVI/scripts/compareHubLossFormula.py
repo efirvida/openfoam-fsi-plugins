@@ -6,8 +6,12 @@ Both factors have the Prandtl shape `F = 2/pi acos(min(1, exp(-f/sin phi)))`, an
 both are multiplied by the tip factor, `F = F_tip * F_root`. They differ in the
 constant:
 
-    this fork   f_root = (B/2) * r / (R - r)              [src/.../axialFlowTurbineALSource.C]
+    this fork   f_root = (B/2) * (r - r_root) / (R - r)   [src/.../axialFlowTurbineALSource.C]
     AeroDyn     f_root = (B/2) * (r - r_hub) / r_hub      [modules/aerodyn/src/BEMT.f90:246]
+
+`rootDistance` is the blade-arc fraction from the root station, `(i + 0.5)/n`, and
+`rootLocation` is the first geometry point, not the axis, so the fork's constant
+carries `r - r_root` where AeroDyn carries `r`.
 
 Since a run records only the product, `phi` is recovered first by solving the
 fork's own two-factor product against the recorded factor, then AeroDyn's
@@ -19,7 +23,7 @@ Usage:
 from __future__ import annotations
 import argparse, csv, glob, math, os, re
 
-R, R_HUB, N_BLADES = 5.029, 0.5083, 2
+R, R_ROOT, R_HUB, N_BLADES = 5.029, 0.5083, 0.5083, 2
 
 
 def F_of(const, sin_phi):
@@ -57,8 +61,8 @@ def main():
         r = rr * R
         F_meas = m("end_effect_factor")
         # the fork's two constants, and the sin(phi) that reproduces F_meas
-        a_tip = (N_BLADES / 2.0) * (R - r) / r
-        a_root = (N_BLADES / 2.0) * r / (R - r)
+        a_tip = (N_BLADES / 2.0) * (R - r) / (r - R_ROOT)
+        a_root = (N_BLADES / 2.0) * (r - R_ROOT) / (R - r)
         # F is decreasing in sin(phi) from 1 at 0+ to 0 at large sin(phi)
         lo, hi = 1e-8, 1.0
         for _ in range(200):

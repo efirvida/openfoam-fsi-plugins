@@ -26,11 +26,15 @@ turbine:
 
 # `profileData` Reynolds-rescaling exponent, rendered as `liftReCorrExp` inside
 # the `profileData/S809` subdict. `0.23` is the `profileData::updateRe` source
-# default, so it renders no key and the committed case is byte-identical; the
-# Phase VI validation sets `0` to disable the rescaling that the declared
-# `Re 1e6` would otherwise apply to the polar (issue #6).
+# default. The Phase VI validation sets `0` to disable the rescaling: the
+# polar's declared reference Reynolds number (1e6,
+# `data/polars/S809_OSU_Re1M_total.dat`) sits above the run's own Reynolds
+# number (0.61e6 at 30 % span to 0.95e6 at 70 %), so the upstream correction
+# currently REDUCES lift by 5.8 % on the mean and by 10.7 % at r/R = 0.29, and
+# the zero-lift angle it displaces is unphysical
+# (`scripts/quantifyPolarReScaling.py`).
 profile:
-  lift_re_corr_exp: 0.23
+  lift_re_corr_exp: 0.0
 
 # Per-speed measured tip-speed ratio. `rpm` is informational (the rotor speed
 # is set through `tipSpeedRatio` in fvOptions); `row` names the canonical
@@ -277,3 +281,9 @@ actuator:
   velocity_sampling:
     velocity_sample_radius: 0.0
     n_velocity_samples: 20
+  # Hub surface radius, rendered as `hubRadius` at the rotor-coeffs level
+  # beside `rotorRadius`. The Glauert root effect is the Prandtl hub loss
+  # `f_hub = (B/2)*(r - rHub)/rHub`, so `axialFlowTurbineALSource` refuses to
+  # build it unless this key is supplied. The blade root station is the hub
+  # surface for this rotor (0.5083 m).
+  hub_radius: 0.5083

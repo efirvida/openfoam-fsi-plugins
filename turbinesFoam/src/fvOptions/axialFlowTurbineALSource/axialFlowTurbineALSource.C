@@ -662,10 +662,35 @@ void Foam::fv::axialFlowTurbineALSource::calcEndEffects()
                 }
                 if (endEffectsCoeffs.lookupOrDefault("rootEffects", false))
                 {
-                    scalar tipDist = 1.0 - rootDist;
+                    // Prandtl hub loss. For this rotor the blade root station
+                    // is the hub surface, so the blade-arc fraction `rootDist`
+                    // recovers the local radius from the hub and rotor radii.
+                    // AeroDyn builds the hub-loss constant as
+                    // (B/2)*(r - rHub)/rHub (BEMT.f90 lines 244-246); the fork
+                    // previously used the tip constant reflected about the
+                    // mid radius, which no source supports.
+                    if (hubRadius_ <= 0.0)
+                    {
+                        FatalErrorInFunction
+                            << "The rotor-level end effects model `"
+                            << endEffectsModel_ << "` on `" << name_
+                            << "` is active with its root effect on, but "
+                            << "`hubRadius` was not supplied (or is not "
+                            << "positive) in the coefficients of `" << name_
+                            << "`. The Prandtl hub loss is "
+                            << "(B/2)*(r - rHub)/rHub and cannot be built "
+                            << "without the hub surface radius rHub; set "
+                            << "`hubRadius` in the "
+                            << "axialFlowTurbineALSourceCoeffs dictionary "
+                            << "of `" << name_
+                            << "`. Refusing to invent a default."
+                            << exit(FatalError);
+                    }
+                    const scalar rLocal =
+                        hubRadius_ + rootDist*(rotorRadius_ - hubRadius_);
                     scalar acosArg = Foam::exp
                     (
-                        -nBlades_/2.0*(1.0/tipDist - 1)/sin(phi)
+                        -nBlades_/2.0*(rLocal - hubRadius_)/hubRadius_/sin(phi)
                     );
                     f *= 2.0/pi*acos(min(1.0, acosArg));
                 }
@@ -1103,6 +1128,7 @@ Foam::fv::axialFlowTurbineALSource::axialFlowTurbineALSource
     hasHub_(false),
     hasTower_(false),
     hasNacelle_(false),
+    hubRadius_(-VGREAT),
     tipCorrectionActive_(false),
     tipCorrectionModel_("DagSorensen"),
     wakeTurns_(2),
@@ -1540,6 +1566,11 @@ bool Foam::fv::axialFlowTurbineALSource::read(const dictionary& dict)
         endEffectsDict_ = coeffs_.subOrEmptyDict("endEffects");
         endEffectsDict_.lookup("active") >> endEffectsActive_;
         endEffectsDict_.lookup("endEffectsModel") >> endEffectsModel_;
+
+        // Rotor-level hub surface radius for the Prandtl hub loss. Negative
+        // when `hubRadius` was not supplied; `calcEndEffects` then refuses to
+        // invent a value when the root effect is on.
+        hubRadius_ = coeffs_.lookupOrDefault("hubRadius", -VGREAT);
 
         // Read the tip correction subdictionary (additive, default off)
         dictionary tipCorrectionDict = coeffs_.subOrEmptyDict

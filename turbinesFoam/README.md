@@ -21,7 +21,14 @@
 > 1. **Actuator-line load chain.** Two rotational-augmentation models for the
 >    3D stall delay, after Du–Selig and after Lindenburg, and an optional
 >    induced-velocity tip correction after Dağ & Sørensen, as an alternative to
->    the original Glauert end effects. Both act on the polar lookup and are read
+>    the original Glauert end effects. That root effect is the Prandtl hub loss
+>    as AeroDyn builds it (`f_hub = (B/2)*(r − rHub)/rHub`, with the new
+>    rotor-level `hubRadius` key supplying `rHub`); the tip factor is unchanged.
+>    The previous root constant was the tip constant reflected about the mid
+>    radius, which no source supports, and a `rootEffects on` case must now set
+>    `hubRadius`. The `Shen` model's root factor is still the reflected tip
+>    constant; no source defines a Shen hub loss, so it is left unchanged and
+>    unmeasured, a known follow-up. Both act on the polar lookup and are read
 >    from the element dictionary (`rotationalAugmentation { active on; … }`,
 >    `tipCorrection { active on; model DagSorensen; … }`); see "Rotational
 >    augmentation" below. The tip correction needs the bound circulation

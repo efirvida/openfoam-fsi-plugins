@@ -568,6 +568,7 @@ def render_fv_options(
     root_effects: bool | None = None,
     tip_effects: bool | None = None,
     tip_correction: bool | None = None,
+    hub_radius: float | None = None,
     polar: str | None = None,
     velocity_sample_radius: float | None = None,
     n_velocity_samples: int | None = None,
@@ -594,8 +595,12 @@ def render_fv_options(
     radial geometry the element needs. `root_effects` defaults to
     `actuator.end_effects.root` and is the render-time ablation toggle (design
     D5, §6.2). `tip_effects` mirrors it and defaults to
-    `actuator.end_effects.tip`. `tip_correction` renders the Dag & Sorensen
-    `tipCorrection` block beside `endEffects` and defaults to
+    `actuator.end_effects.tip`. `hub_radius` overrides `actuator.hub_radius` and
+    renders `hubRadius` at the rotor-coeffs level, beside `rotorRadius`, whenever
+    it is configured, independent of the root-effect toggle; an absent value
+    renders no key, and the source refuses a root effect with no hub radius.
+    `tip_correction` renders the Dag &
+    Sorensen `tipCorrection` block beside `endEffects` and defaults to
     `actuator.tip_correction.active` (off for the committed case).
 
     `velocity_sample_radius` and `n_velocity_samples` override the
@@ -703,6 +708,22 @@ def render_fv_options(
         )
     root = bool(end_effects["root"]) if root_effects is None else bool(root_effects)
     tip = bool(end_effects["tip"]) if tip_effects is None else bool(tip_effects)
+    # The Prandtl hub loss is built from the hub surface radius. `hubRadius`
+    # is a property of the rotor, so it renders whenever it is configured,
+    # independent of the root-effect toggle; a case that sets no value renders
+    # no key (the source then refuses a root effect rather than invent one).
+    hub_radius_value = (
+        hub_radius if hub_radius is not None else actuator.get("hub_radius")
+    )
+    if hub_radius_value is not None:
+        hub_radius_value = float(hub_radius_value)
+        if hub_radius_value <= 0.0:
+            raise ValueError("hubRadius must be positive")
+    hub_radius_line = (
+        f"\n        hubRadius {hub_radius_value:.8g};"
+        if hub_radius_value is not None
+        else ""
+    )
     # Mirror `endEffects`: render the tip-correction switch at the rotor-coeffs
     # level (AFTAL reads it from `coeffs_`). Absent from the config, the block
     # falls back to the paper defaults with the switch off.
@@ -748,7 +769,7 @@ def render_fv_options(
         verticalDirection {foam_vector(turbine['vertical_direction'])};
         freeStreamVelocity ({values['speed']:.8g} 0 0);
         tipSpeedRatio {values['tsr']:.8g};
-        rotorRadius {float(turbine['radius']):.8g};
+        rotorRadius {float(turbine['radius']):.8g};{hub_radius_line}
         azimuthalOffset 0;{sampling_block}
 
         dynamicStall
@@ -971,6 +992,7 @@ def outputs(
     root_effects: bool | None = None,
     tip_effects: bool | None = None,
     tip_correction: bool | None = None,
+    hub_radius: float | None = None,
     polar: str | None = None,
     velocity_sample_radius: float | None = None,
     n_velocity_samples: int | None = None,
@@ -996,6 +1018,7 @@ def outputs(
             root_effects=root_effects,
             tip_effects=tip_effects,
             tip_correction=tip_correction,
+            hub_radius=hub_radius,
             polar=polar,
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
@@ -1008,6 +1031,7 @@ def outputs(
             root_effects=root_effects,
             tip_effects=tip_effects,
             tip_correction=tip_correction,
+            hub_radius=hub_radius,
             polar=polar,
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
@@ -1028,6 +1052,7 @@ def outputs(
             root_effects=root_effects,
             tip_effects=tip_effects,
             tip_correction=tip_correction,
+            hub_radius=hub_radius,
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
             lift_re_corr_exp=lift_re_corr_exp,
@@ -1182,6 +1207,15 @@ def main(argv: list[str] | None = None) -> int:
              "config/case.yaml (on). `off` is the render-time ablation",
     )
     parser.add_argument(
+        "--hub-radius",
+        type=_positive_float,
+        default=None,
+        metavar="R",
+        help="override the hub surface radius rendered as `hubRadius` for the "
+             "Glauert Prandtl hub loss; the config/case.yaml value applies "
+             "unless overridden. Rendered only while the root effect is on",
+    )
+    parser.add_argument(
         "--tip-correction",
         choices=("on", "off"),
         default=None,
@@ -1291,6 +1325,7 @@ def main(argv: list[str] | None = None) -> int:
             root_effects=root_effects,
             tip_effects=tip_effects,
             tip_correction=tip_correction,
+            hub_radius=args.hub_radius,
             polar=args.polar,
             velocity_sample_radius=args.velocity_sample_radius,
             n_velocity_samples=args.n_velocity_samples,
