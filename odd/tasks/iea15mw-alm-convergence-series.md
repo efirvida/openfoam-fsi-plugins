@@ -367,3 +367,58 @@ No está en disco `runs/iea15mw-asm-mesh-fix` (la re-validación del fix del
 depósito del issue #5): se borró antes de esta limpieza, así que su evidencia vive
 solo en el hilo del issue y en los commits. Si hace falta re-correrla es el script
 `scripts/slurm/asm-mesh-deposit-fix.slurm` (~1 h).
+
+## Eje temporal y A/B de rotational augmentation (2026-10-09)
+
+Herramienta nueva: `turbinesFoam/validation/tools/rev_history.py` (+ su test). Un
+run retomado parte la historia en `postProcessing/turbines/<timeName>/`, cuyos
+nombres ordenan mal como texto ("31.9209" después de "159.6232") y cuyas
+filas/rev cambian con el `dt`; la herramienta une todas las historias en orden
+numérico, reconstruye la revolución desde el `angle_deg` acumulado (que sigue
+creciendo a través del retome) y marca como **parcial** un stub del final (una
+sola fila en `endTime`) para que no invente deriva ni contamine el plateau.
+
+### dt/2 (job 11611244, 2:42 h, exit 0)
+
+`runs/iea15mw-screen-m3-l2`, continuación del estado convergido con `dt`
+0,0187 → 0,00935 (las filas por revolución saltan de 427 a 853):
+
+| historia | revs | filas/rev |
+| --- | --- | --- |
+| `0/` | 1-4 | 427 |
+| `31.9209/` | 5-20 | 427 |
+| `159.6232/` | 21-25 | 854 |
+
+| | cp | deriva/rev |
+| --- | --- | --- |
+| plateau con `dt` (rev 20) | 0,53633 | −0,065 % |
+| plateau con `dt/2` (revs 24-25) | 0,53444 | −0,025 % |
+
+Δ directo = **−0,35 %**, apenas por encima del criterio del 0,3 % — pero **casi
+todo es la convergencia que al run con `dt` le faltaba**: su deriva en rev 20
+(−0,065 %/rev) con decaimiento ×0,86 por revolución extrapola una caída restante
+de 0,40 %, que es exactamente la observada. Extrapolando cada uno a su asíntota
+quedan 0,5342 (`dt`) contra 0,5335 (`dt/2`): **−0,13 %, dentro del criterio**. La
+primera revolución tras el cambio muestra un salto de −0,27 % (el transitorio del
+esquema). **El paso de tiempo no carga el resultado**, y el cp convergido del L2
+es ~**0,5344**, no 0,5363 (que estaba 0,4 % alto por convergencia); contra la
+estela libre de OLAF (0,5312) queda **+0,6 %**.
+
+### A/B de rotational augmentation (job 11611248, 5:13 h, exit 0)
+
+`runs/iea15mw-l2-ra`: misma malla L2, mismo dominio, 96 rangos y horizonte (20
+revs), sólo `rotationalAugmentation { active on }` (DuSelig, a=b=d=1). A igual
+horizonte (rev 20): cp **0,53633 → 0,54029 (+0,74 %)** y ct 0,06017 → 0,06062
+(+0,75 %), con la misma tasa de convergencia (−0,065 contra −0,066 %/rev).
+
+El spanwise dice **dónde** actúa: casi todo en las estaciones de raíz en pérdida
+profunda (α 52-56° en r/R<0,1, donde las cargas son ~0 y el `c_t` cambia de
+signo) más un +0,2 a +1,2 % en `c_n` de r/R>0,5. En las bandas que cargan el
+torque el cambio es ±0,5 %, y el peso del cambio en el torque +0,31 %.
+
+**Veredicto**: activar el modelo con coeficientes unitarios **no reproduce la
+física que captura el CFD** (los pares de papers dan +49 a +71 % de fuerza
+tangencial CFD/BEM inboard y acá no aparece nada de eso). El `a=b=d=1` es el del
+fixture de test del repo, no un ajuste; reproducir esas referencias requiere
+**coeficientes ajustados por perfil**, que es trabajo de modelo, ortogonal a la
+malla.
