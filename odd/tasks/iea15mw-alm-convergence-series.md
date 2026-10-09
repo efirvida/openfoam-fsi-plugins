@@ -340,3 +340,30 @@ Nivel rotor: **cp 0,5365** y ct 0,7708. Contra CCBlade/BEM (cp 0,4910, ct 0,7934
 porque leía `postProcessing/*/0/` con el `timeName` fijo, así que sobre un run
 retomado analizaba la historia *previa* al retome — exactamente la trampa que
 apareció en el paso 1.
+
+## Estado en disco (2026-10-09, limpieza)
+
+Se liberaron **107,6 GB** (los `runs/` pasaron de 128,8 GB a 21,1 GB; el repo de
+185 GB a 77 GB). Se borraron los estudios **concluidos**: el de escalado
+(`iea15mw-scale-*`, 18 dirs, 44,6 GB — sobreviven sus `scale-summary*.csv` y el
+artefacto commiteado), el de algoritmos de descomposición (`iea15mw-decomp-*`,
+10 dirs, 24,8 GB — sobrevive `decomp-summary.csv` y el ganador está anotado en
+`mesh-screening.slurm`), mis intentos de 20 revs superados por el tamiz
+(`iea15mw-mconv-*`, 3 dirs, 8,7 GB) y `_archive/oldruns-2026-10-02` (0,5 GB).
+
+Los **tres puntos del tamiz ya terminados** (`m0-coarse`, `m1-medium`, `m2-fine`)
+se recortaron a su evidencia: se borraron `processor*/`, `constant/polyMesh` y los
+time dirs de campo, y se conservaron `postProcessing/` (los CSV: 15/23/30 MB), los
+diccionarios del caso y los logs. **Ojo: por eso esos tres casos ya no se pueden
+retomar** (el L2 sí: es la plataforma y está entero). El análisis del tamiz se
+verificó después del recorte y reproduce los mismos cuatro puntos.
+
+Sigue en disco y **en uso**: `iea15mw-screen-m3-l2` (12 GB, el L2 de producción y
+la continuación con `dt/2`) y `iea15mw-l2-ra` (5 GB, el A/B con rotational
+augmentation). Y `_archive/` (4,4 GB) se conservó porque sostiene las mediciones
+citadas (los pares ALM/ASM del muestreo y las ablaciones de punta).
+
+No está en disco `runs/iea15mw-asm-mesh-fix` (la re-validación del fix del
+depósito del issue #5): se borró antes de esta limpieza, así que su evidencia vive
+solo en el hilo del issue y en los commits. Si hace falta re-correrla es el script
+`scripts/slurm/asm-mesh-deposit-fix.slurm` (~1 h).
