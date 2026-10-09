@@ -166,3 +166,25 @@ por hipótesis.
   la carga de la pala.
 - No correr 40 rev hasta que el trío sobre la misma malla cierre: si el 10 % es
   malla, la curva de convergencia del ASM+mesh estaría midiendo otra cosa.
+
+## Estado tras el congelamiento (2026-10-09)
+
+La plataforma quedó congelada y validada (`odd/tasks/iea15mw-platform-freeze.md`):
+snappy L2 (2 363 760 celdas), 96 rangos, `dt` 0,0187 s, 20 revoluciones, `cp`
+convergido **0,534** (+0,6 % contra la estela libre de OLAF, +8,8 % contra
+CCBlade/BEM), con los dos ejes cerrados (malla +0,14 %, tiempo −0,13 %).
+
+Publicado en el issue #9 (comentario `issuecomment-6086582709`):
+
+- el par ALM/ASM **0,871-0,903 no es la respuesta** — otra malla, otro argumento
+  de muestreo y 0,2 rev: hay que rehacerlo sobre la plataforma con las mismas 20
+  revoluciones que el ALM;
+- los dos residuos de modelo quedan caracterizados por separado: el **exceso
+  tangencial outboard** contra el BEM (+10-13 %, creciente hacia afuera) y el
+  **déficit inboard** contra el CFD (+49 a +71 % en los pares de papers), que el
+  `rotationalAugmentation` con coeficientes unitarios no arregla (+0,74 % en `cp`,
+  casi todo en la raíz en pérdida profunda).
+
+Siguiente paso registrado en el issue: ASM sobre la misma malla, 96 rangos y 20
+revoluciones, verificando primero el test de partición de la unidad del depósito
+(serial y 2 rangos), obligatorio desde `5026c97`.
