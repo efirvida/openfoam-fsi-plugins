@@ -1399,6 +1399,58 @@ class TestDecompMethod:
         assert generate_case.resolve_decomp_n() == "8 4 4"
 
 
+class TestRotationalAugmentation:
+    """The ``--rotational-augmentation`` knob (inboard stall-delay model).
+
+    The validated configuration renders the block with ``active off`` (the
+    committed stub, kept byte for byte). The flag flips only that switch and
+    renders the coefficients the repository's own fixture uses (DuSelig,
+    a = b = d = 1; ``tests/rotationalAugmentation/fvOptions.on``), which is what
+    the A/B against the converged L2 needs: same mesh, same configuration, only
+    the model on.
+    """
+
+    def test_default_off_and_bridge_name(self, monkeypatch):
+        monkeypatch.delenv(generate_case.ROTATIONAL_AUGMENTATION_ENV, raising=False)
+        assert generate_case.DEFAULT_ROTATIONAL_AUGMENTATION == "off"
+        assert (
+            generate_case.ROTATIONAL_AUGMENTATION_ENV
+            == "TURBINE_ROTATIONAL_AUGMENTATION"
+        )
+        assert generate_case.resolve_rotational_augmentation() == "off"
+
+    def test_flag_flips_only_the_active_switch(self, tmp_path, monkeypatch):
+        monkeypatch.delenv(generate_case.ROTATIONAL_AUGMENTATION_ENV, raising=False)
+        off = tmp_path / "off"
+        on = tmp_path / "on"
+        assert generate_case.main(["--case-dir", str(off)]) == 0
+        assert (
+            generate_case.main(
+                ["--case-dir", str(on), "--rotational-augmentation", "on"]
+            )
+            == 0
+        )
+        before = (off / "system" / "fvOptions.ALM").read_text(encoding="utf-8")
+        after = (on / "system" / "fvOptions.ALM").read_text(encoding="utf-8")
+        assert "            active off;\n            model DuSelig;" in before
+        assert "            active on;\n            model DuSelig;" in after
+        assert "            a 1;\n            b 1;\n            d 1;" in after
+        # Exactly one switch changed: the rest of the rendered file is identical
+        assert (
+            before.replace(
+                "active off;\n            model DuSelig;",
+                "active on;\n            model DuSelig;",
+            )
+            == after
+        )
+
+    def test_env_bridge_and_precedence(self, monkeypatch):
+        monkeypatch.setenv(generate_case.ROTATIONAL_AUGMENTATION_ENV, "on")
+        assert generate_case.resolve_rotational_augmentation() == "on"
+        # An explicit flag wins over the environment.
+        assert generate_case.resolve_rotational_augmentation("off") == "off"
+
+
 class TestWriteNodePerf:
     """The opt-in per-node surface dump gate (``writeNodePerf``).
 

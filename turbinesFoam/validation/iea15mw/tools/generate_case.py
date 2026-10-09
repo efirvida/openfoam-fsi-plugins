@@ -205,6 +205,13 @@ DEFAULT_END_EFFECTS_ACTIVE = "off"
 DEFAULT_TIP_EFFECTS = "on"
 DEFAULT_ROOT_EFFECTS = "on"
 END_EFFECTS_ENV = "TURBINE_END_EFFECTS"
+#: Rotational augmentation (``rotationalAugmentation`` block). Off in the
+#: validated configuration; the inboard deficit that BEM misses and
+#: blade-resolved CFD captures is exactly this effect, so the A/B against the
+#: converged L2 turns it on with the coefficients the repository's own fixture
+#: uses (DuSelig, a = b = d = 1; see turbinesFoam/tests/rotationalAugmentation).
+DEFAULT_ROTATIONAL_AUGMENTATION = "off"
+ROTATIONAL_AUGMENTATION_ENV = "TURBINE_ROTATIONAL_AUGMENTATION"
 TIP_EFFECTS_ENV = "TURBINE_TIP_EFFECTS"
 ROOT_EFFECTS_ENV = "TURBINE_ROOT_EFFECTS"
 
@@ -1188,6 +1195,26 @@ def _end_effects_block(
     )
 
 
+def _rotational_augmentation_block(active: str) -> str:
+    """Render the ``rotationalAugmentation`` block.
+
+    The repository's own fixture for the model is ``active on; model DuSelig;
+    a 1; b 1; d 1`` (``tests/rotationalAugmentation/fvOptions.on``), so that is
+    what "on" renders; the default keeps the committed ``active off`` stub byte
+    for byte.
+    """
+    return (
+        "        rotationalAugmentation\n"
+        "        {\n"
+        f"            active {active};\n"
+        "            model DuSelig;\n"
+        "            a 1;\n"
+        "            b 1;\n"
+        "            d 1;\n"
+        "        }\n"
+    )
+
+
 def _tip_correction_block(
     active: str,
     wake_turns: int,
@@ -1232,6 +1259,7 @@ def render_fv_options(
     velocity_sample_radius: float = DEFAULT_VELOCITY_SAMPLE_RADIUS,
     n_velocity_samples: int = DEFAULT_N_VELOCITY_SAMPLES,
     end_effects_active: str = DEFAULT_END_EFFECTS_ACTIVE,
+    rotational_augmentation: str = DEFAULT_ROTATIONAL_AUGMENTATION,
     tip_effects: str = DEFAULT_TIP_EFFECTS,
     root_effects: str = DEFAULT_ROOT_EFFECTS,
     tip_correction_active: str = DEFAULT_TIP_CORRECTION_ACTIVE,
@@ -1258,6 +1286,9 @@ def render_fv_options(
     rotation_dir = -1.0 if rotation == "cw" else 1.0
     sampling_keys = _sampling_keys(velocity_sample_radius, n_velocity_samples)
     end_effects = _end_effects_block(end_effects_active, tip_effects, root_effects)
+    rotational_augmentation_block = _rotational_augmentation_block(
+        rotational_augmentation
+    )
     tip_correction = ""
     if tip_correction_active == "on":
         tip_correction = "\n" + _tip_correction_block(
@@ -1365,15 +1396,7 @@ def render_fv_options(
             dynamicStallModel LeishmanBeddoes;
         }}
 
-        rotationalAugmentation
-        {{
-            active off;
-            model DuSelig;
-            a 1;
-            b 1;
-            d 1;
-        }}
-
+{rotational_augmentation_block}
 {end_effects}{tip_correction}
         blades
         {{
@@ -1749,6 +1772,7 @@ def outputs(
     snappy_tower_lateral_factor: float = ASM_TOWER_LATERAL_FACTOR,
     snappy_wake_level_offset: int = ASM_WAKE_LEVEL_OFFSET,
     end_effects_active: str = DEFAULT_END_EFFECTS_ACTIVE,
+    rotational_augmentation: str = DEFAULT_ROTATIONAL_AUGMENTATION,
     tip_effects: str = DEFAULT_TIP_EFFECTS,
     root_effects: str = DEFAULT_ROOT_EFFECTS,
     tip_correction_active: str = DEFAULT_TIP_CORRECTION_ACTIVE,
@@ -1791,6 +1815,7 @@ def outputs(
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
             end_effects_active=end_effects_active,
+            rotational_augmentation=rotational_augmentation,
             tip_effects=tip_effects,
             root_effects=root_effects,
             tip_correction_active=tip_correction_active,
@@ -1806,6 +1831,7 @@ def outputs(
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
             end_effects_active=end_effects_active,
+            rotational_augmentation=rotational_augmentation,
             tip_effects=tip_effects,
             root_effects=root_effects,
             tip_correction_active=tip_correction_active,
@@ -1822,6 +1848,7 @@ def outputs(
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
             end_effects_active=end_effects_active,
+            rotational_augmentation=rotational_augmentation,
             tip_effects=tip_effects,
             root_effects=root_effects,
             tip_correction_active=tip_correction_active,
@@ -1840,6 +1867,7 @@ def outputs(
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
             end_effects_active=end_effects_active,
+            rotational_augmentation=rotational_augmentation,
             tip_effects=tip_effects,
             root_effects=root_effects,
             tip_correction_active=tip_correction_active,
@@ -2125,6 +2153,17 @@ def _resolve_on_off(cli_value: str | None, env_name: str, default: str) -> str:
 def resolve_end_effects_active(cli_value: str | None = None) -> str:
     """Resolve ``endEffects.active`` (off = the committed neutral baseline)."""
     return _resolve_on_off(cli_value, END_EFFECTS_ENV, DEFAULT_END_EFFECTS_ACTIVE)
+
+
+def resolve_rotational_augmentation(cli_value: str | None = None) -> str:
+    """Resolve the rendered ``rotationalAugmentation/active`` switch.
+
+    Precedence: an explicit ``--rotational-augmentation`` wins, else
+    ``TURBINE_ROTATIONAL_AUGMENTATION``, else the committed ``off``.
+    """
+    return _resolve_on_off(
+        cli_value, ROTATIONAL_AUGMENTATION_ENV, DEFAULT_ROTATIONAL_AUGMENTATION
+    )
 
 
 def resolve_tip_effects(cli_value: str | None = None) -> str:
@@ -2485,6 +2524,19 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--rotational-augmentation",
+        choices=("on", "off"),
+        default=None,
+        help=(
+            "activates the rotational-augmentation model in place of the "
+            f"committed off stub (effective default "
+            f"{DEFAULT_ROTATIONAL_AUGMENTATION}); renders DuSelig with "
+            "a = b = d = 1, the coefficients the repository's own fixture uses. "
+            f"Explicit flag beats {ROTATIONAL_AUGMENTATION_ENV}, which beats "
+            f"{DEFAULT_ROTATIONAL_AUGMENTATION}"
+        ),
+    )
+    parser.add_argument(
         "--tip-effects",
         choices=("on", "off"),
         default=None,
@@ -2563,6 +2615,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         n_velocity_samples = resolve_n_velocity_samples(args.n_velocity_samples)
         end_effects_active = resolve_end_effects_active(args.end_effects)
+        rotational_augmentation = resolve_rotational_augmentation(
+            args.rotational_augmentation
+        )
         tip_effects = resolve_tip_effects(args.tip_effects)
         root_effects = resolve_root_effects(args.root_effects)
         tip_correction_active = resolve_tip_correction_active(args.tip_correction)
@@ -2639,6 +2694,7 @@ def main(argv: list[str] | None = None) -> int:
             write_node_perf=write_node_perf,
             **snappy_geometry,
             end_effects_active=end_effects_active,
+            rotational_augmentation=rotational_augmentation,
             tip_effects=tip_effects,
             root_effects=root_effects,
             tip_correction_active=tip_correction_active,

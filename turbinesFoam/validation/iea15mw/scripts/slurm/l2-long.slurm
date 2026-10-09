@@ -49,8 +49,14 @@ export TURBINE_UPSTREAM=3 TURBINE_DOWNSTREAM=7 TURBINE_LATERAL=3
 export TURBINE_WRITE_DEG=60
 export TURBINE_DECOMP_METHOD=simple TURBINE_DECOMP_N="4 6 4"
 
+# Two uses, same script: extend the screen's L2 (the default), or run a variant
+# case in its own directory -- e.g. the rotational-augmentation A/B:
+#   TURBINE_RUN_DIR=runs/iea15mw-l2-ra TURBINE_ROTATIONAL_AUGMENTATION=on \
+#     sbatch --time=08:00:00 scripts/slurm/l2-long.slurm
+# TURBINE_ROTATIONAL_AUGMENTATION is read by the generator's own env bridge, the
+# same way TURBINE_DT_FACTOR is, so the runner needs no change.
 export TURBINE_MESH=coarse TURBINE_SNAPPY=on TURBINE_SNAPPY_LEVEL=2
-export TURBINE_RUN_DIR=runs/iea15mw-screen-m3-l2
+export TURBINE_RUN_DIR="${TURBINE_RUN_DIR:-runs/iea15mw-screen-m3-l2}"
 export TURBINE_TOTAL_REVS="${TURBINE_TOTAL_REVS:-20}"
 # dt refinement at a FIXED mesh. delta_t() derives the step from the cell, so the
 # temporal axis cannot be separated from the spatial one otherwise: 0.5 continues
