@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import itertools
 import json
 import statistics
 import sys
@@ -116,9 +117,9 @@ def per_revolution(rows: list[dict[str, float]]) -> list[dict[str, Any]]:
         entry["partial"] = entry["rows"] < PARTIAL_FRACTION * mid
         entry["drift_cp_pct"] = None
     complete = [entry for entry in series if not entry["partial"]]
-    # Consecutive-pair walk over the complete revolutions only; unequal by
-    # construction (complete[1:] is one shorter), hence strict=False.
-    for previous, current in zip(complete, complete[1:], strict=False):
+    # Consecutive-pair walk over the complete revolutions only, so a stub cannot
+    # invent a drift.
+    for previous, current in itertools.pairwise(complete):
         current["drift_cp_pct"] = 100.0 * (current["cp"] - previous["cp"]) / previous["cp"]
     return series
 
@@ -136,7 +137,7 @@ def analyse(
     revisions = [entry["rev"] for entry in series]
     gaps = [
         missing
-        for previous, current in zip(revisions, revisions[1:], strict=False)
+        for previous, current in itertools.pairwise(revisions)
         for missing in range(previous + 1, current)
     ]
     tail = [entry for entry in series if not entry["partial"]][-window:]
