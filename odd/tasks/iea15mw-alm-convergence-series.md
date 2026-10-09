@@ -240,15 +240,44 @@ baje del criterio (<0,2 %/rev sostenido), el chequeo de **`dt/2` a esa misma mal
 y el spanwise de CCBlade. Congelada la malla+configuración, se reusa para el trío
 del issue #9 y para el FSI.
 
-**Paso 1 EN CURSO** (`scripts/slurm/l2-long.slurm`, job `11611026`, 96 rangos, 10 h
-de límite). Extiende **el mismo caso L2 del tamiz**
-(`runs/iea15mw-screen-m3-l2`, 4 revs ya escritas, 96 rangos, descomposición
-`simple 4 6 4`): retomar conserva una sola historia para la curva de deriva, no tira
-las 4 revs del tamiz y reusa la descomposición. Escalonado a propósito: **20 revs**
-primero (~6 h al rendimiento medido de 3,4 rev/h), se lee la deriva y se extiende
-sólo si no bajó del criterio (`TURBINE_TOTAL_REVS=40 sbatch scripts/slurm/l2-long.slurm`).
-La configuración va **congelada y escrita** en el script, porque la convergencia es
-propiedad de esta configuración.
+**Paso 1 HECHO** (`scripts/slurm/l2-long.slurm`, job `11611026`, 96 rangos;
+4:04 de pared, exit 0). Extendió el caso L2 del tamiz hasta **20 revoluciones**
+(las 4 del tamiz + 16 nuevas) y el resultado es el que buscabas:
+
+| rev | cp | deriva/rev | | rev | cp | deriva/rev |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 0,7216 | — | | 12 | 0,5417 | −0,25 % |
+| 2 | 0,6288 | −12,87 % | | 16 | 0,5381 | −0,12 % |
+| 4 | 0,5778 | −2,98 % | | 19 | 0,5367 | −0,077 % |
+| 8 | 0,5493 | −0,71 % | | **20** | **0,5363** | **−0,065 %** |
+
+- **Eje temporal cerrado**: la deriva media en las revs 16→20 es **−0,084 %/rev**,
+  y viene por debajo del 0,2 %/rev del criterio desde ~la rev 13. El `cp` de la
+  última revolución completa es **0,5363** (`ct` 0,0603).
+- **Validación contra la referencia numérica**: 0,5363 es **+1,0 %** de la estela
+  libre de OLAF (**0,5312**), +1,8 % del ALM independiente (0,5270) y +9,2 % del
+  CCBlade/BEM (0,4910). Es exactamente la relación que la campaña había llamado
+  "validado" (0,5366 = +1,0 %, medido en otra malla), ahora sobre una malla cuyo
+  eje espacial está cerrado (remanente +0,14 %).
+
+**Así que la plataforma queda definida**: **L2 (celda 1,87 m), 96 rangos,
+configuración congelada, horizonte 20 revs** → `cp = 0,5363`, +1,0 % contra la
+estela libre, con los dos ejes argumentados. El límite de poder de la validación
+sigue siendo la **banda de referencia** (0,4910-0,5312 = 8 % de ancho): el integral
+cae dentro; el discriminador fino es el spanwise de CCBlade, que falta correr.
+
+**Trampa operativa que hay que recordar**: **retomar un run parte los CSV de
+`postProcessing` en una carpeta nueva con el `timeName` de arranque**. Este run
+arrancó en `31.9209` (las 4 revs del tamiz), así que sus 16 revs nuevas quedaron en
+`postProcessing/turbines/31.9209/turbine.csv` y no en `.../0/`. Cualquier análisis
+que lea una sola carpeta ve media historia (y a mí me pasó). Hay que **unir todas
+las carpetas** de `<owner>` o consolidarlas.
+
+**Lo que queda para cerrarla del todo**: el chequeo **`dt/2` a L2 continuando desde
+el estado convergido** (no re-corriendo 20 revs: seguir ~5 revs con `dt/2` y exigir
+que el `cp` no se mueva; ~2-3 h) — es lo que separa el eje temporal del espacial
+porque `dt` se deriva de la celda; y el **spanwise** contra CCBlade, que se hace sin
+cola.
 3. Consecuencia práctica: **el punto L3 (26 h) probablemente no haga falta para la
    pregunta de malla** (la tendencia ya está aplanada), y la comparación de modelos
    del issue #9 se puede hacer en la malla barata (D/64 o L2) porque el sesgo de
