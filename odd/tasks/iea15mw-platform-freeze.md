@@ -60,7 +60,9 @@ our `c_t` over the BEM is 1.085 / 1.108 / **1.129** (r/R 0.3-0.5 / 0.5-0.7 /
 
 ## What is NOT established
 
-- **ASM**: the deposit fix (`5026c97`) is mandatory. ASM+mesh values from before
+- **ASM**: the deposit fix (`5026c97`) is mandatory, and as of `c7eda86` the L2
+  runner can no longer substitute ALM for a requested ASM (it did until then).
+  ASM+mesh values from before
   that commit cannot be cited: the flow received 33 % → 0.1 % → 0 % of the blade
   load. The ASM's `moment()` also omits the pitching moment (~0.1 %).
 - **rotationalAugmentation**: switching it on with `a=b=d=1` raises cp by +0.74 %
@@ -83,9 +85,17 @@ TURBINE_MODEL=asm TURBINE_N_CHORDWISE=5 \
 ```
 
 (`l2-long.slurm` re-states mesh, snappy level, domain, decomposition and write
-interval to the frozen values; it does not touch the model or the chordwise count,
-so both pass through. `asm` does not default to snappy, hence the explicit level
-inside the script.)
+interval to the frozen values. `asm` does not default to snappy, hence the
+explicit level inside the script.)
+
+> **Fixed on 2026-10-09 (`c7eda86`).** This recipe was silently broken when it was
+> written: `l2-long.slurm` exported `TURBINE_MODEL=alm` unconditionally, which
+> overrides the value passed on the submit line, so an ASM submission produced a
+> second **ALM** run under `runs/iea15mw-asm-l2` — same exit code, wrong physics.
+> The model is now overridable (`${TURBINE_MODEL:-alm}`) and the ASM recipe lives
+> in the script header. Check the run's `system/fvOptions` for
+> `elementType actuatorSurfaceElement` before trusting any ASM number.
+> Tracked in `odd/tasks/iea15mw-asm-l2-validation.md`.
 
 First two things to verify, in this order:
 

@@ -94,5 +94,5 @@ answer. It is the prior, not the result.
 
 ## Progress log
 
-- 2026-10-09 — feature opened; T1 defect found and fixed; T2 gate passed;
-  job 11611470 submitted (T3).
+- 2026-10-09 — feature opened; T1 defect found and fixed (`c7eda86`); T2 gate
+  passed; job 11611470 submitted (T3).
