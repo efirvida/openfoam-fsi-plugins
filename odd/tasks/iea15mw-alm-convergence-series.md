@@ -203,26 +203,42 @@ viven en `analysis/hpc-performance.md`, que se regenera con
 
 ## RESULTADO del tamiz (2026-10-08, `runs/iea15mw-screen-*`)
 
-Los tres puntos existen y son comparables entre sí: **mismo horizonte (4 revs),
-misma configuración validada, mismos 96 rangos** (`method simple`, `n (4 6 4)`).
+Los **cuatro** puntos existen y son comparables entre sí: **mismo horizonte (4 revs),
+misma configuración validada, mismos 96 rangos** (`method simple`, `n (4 6 4)`). El
+coarse lo produjo el propio tamiz (`m0-coarse`, job `11611018`, 12:16) porque el run
+de 20 revs que se iba a usar fue borrado.
 
-| malla | celda | cp rev1 | rev2 | rev3 | rev4 | deriva/rev |
-| --- | --- | --- | --- | --- | --- | --- |
-| medium D/48 | 4,98 m | 0,7391 | 0,6373 | 0,6031 | **0,5850** | −3,00 % |
-| fine D/64 | 3,75 m | 0,7312 | 0,6310 | 0,5973 | **0,5795** | −2,99 % |
-| snappy L2 | 1,87 m | 0,7216 | 0,6288 | 0,5955 | **0,5778** | −2,98 % |
+| malla | celda | cp rev1 | rev2 | rev3 | rev4 | ct rev4 | deriva/rev |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| coarse D/32 | 7,50 m | 0,7582 | 0,6554 | 0,6192 | **0,6005** | 0,06738 | −3,02 % |
+| medium D/48 | 4,98 m | 0,7391 | 0,6373 | 0,6031 | **0,5850** | 0,06563 | −3,00 % |
+| fine D/64 | 3,75 m | 0,7312 | 0,6310 | 0,5973 | **0,5795** | 0,06501 | −2,99 % |
+| snappy L2 | 1,87 m | 0,7216 | 0,6288 | 0,5955 | **0,5778** | 0,06482 | −2,98 % |
 
 **Lo que dice el tamiz:**
 
-1. **El eje de malla es chico y converge rápido**: los escalones son **−0,95 %**
-   (4,98 → 3,75 m) y **−0,29 %** (3,75 → 1,87 m), decrecientes. Refinar de D/48 a
-   L2 (celda 2,7× más fina) mueve el `cp` **menos del 1,3 %**, y el remanente en L2
-   es ≲0,3 %.
-2. **El transitorio domina por un orden de magnitud**: la deriva es **−3,00 %/rev
-   en las tres mallas**, contra escalones de malla de ~1 %. Por eso el valor a 4
-   revs **no** se compara con la referencia convergida: 0,5778 es **+8,8 %** de
-   0,5312, mientras el ALM validado a 20 revs estaba a +1,0 %. El tamiz ordena
-   mallas; el número de producción sale de la corrida larga.
+1. **El eje de malla converge rápido y el orden es alto.** Escalones **−2,59 %**
+   (7,50 → 4,98 m), **−0,95 %** (4,98 → 3,75 m) y **−0,29 %** (3,75 → 1,87 m):
+   decrecientes y fuertemente. El ajuste `cp(h) = cp∞ + C·h^p` sobre los cuatro
+   puntos da **p = 2,82**, `cp∞ = 0,5770`, rms 0,00055 — y deja el **remanente de
+   malla en L2 en +0,14 %**.
+2. Consecuencia: **la malla está resuelta en L2**. Ir a L3 (0,94 m) compraría
+   ~0,1 % por ~50 h. Para el eje espacial, L2 es la malla de producción.
+3. **Cuidado con leer ese `p` como orden espacial.** `dt` se deriva de la celda
+   (`0,95·h/velocidad de punta`), así que los cuatro puntos refinan **espacio y
+   tiempo juntos**: el `p` medido es el orden *efectivo* del refinamiento acoplado,
+   no el del esquema en espacio. **El eje temporal no está probado** por esto.
+4. **El transitorio sigue dominando**: −3,0 %/rev en las cuatro mallas, contra
+   escalones de malla ≤2,6 %. A 4 revs el nivel está ~+9 % sobre la banda de
+   referencia (0,5770 extrapolado contra 0,5312), que es exactamente el
+   transitorio, no un sesgo de malla.
+
+**Lo que falta para "convergida y validada"** (el objetivo declarado: la malla que
+va a sostener todo lo de después): una corrida **larga en L2** hasta que la deriva
+baje del criterio (<0,2 %/rev sostenido), el chequeo de **`dt/2` a esa misma malla**
+(que es lo que separa el eje temporal), y recién ahí la comparación contra la banda
+y el spanwise de CCBlade. Congelada la malla+configuración, se reusa para el trío
+del issue #9 y para el FSI.
 3. Consecuencia práctica: **el punto L3 (26 h) probablemente no haga falta para la
    pregunta de malla** (la tendencia ya está aplanada), y la comparación de modelos
    del issue #9 se puede hacer en la malla barata (D/64 o L2) porque el sesgo de
