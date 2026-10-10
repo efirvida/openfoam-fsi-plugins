@@ -49,7 +49,7 @@ Related tools outside this directory:
 | tool | answers |
 | --- | --- |
 | `phaseVI/scripts/comparePhaseVI.py` | simulation vs measured WDH data, with metric definitions fixed against the NREL report |
-| `iea15mw/scripts/compare_spanwise.py` | spanwise diagnosis of an IEA 15 MW ALM run |
+| `iea15mw/scripts/compare_spanwise.py` | spanwise diagnosis of an IEA 15 MW ALM run, and a two-run per-band comparison (`--compare-with`) |
 | `nacelle-asn/scripts/compareNacelle.py` | nacelle actuator-surface comparison |
 | `phaseVI/tools/generate_case.py` | renders the committed case; `--check` is non-destructive |
 | `phaseVI/tools/case_config.py` | loads and validates `config/case.yaml` |

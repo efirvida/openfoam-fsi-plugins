@@ -53,8 +53,16 @@ is never re-read to bound the window.
 
 Usage:
     compare_spanwise.py [--run-dir DIR] [--revs N] [--out FILE]
+    compare_spanwise.py --run-dir DIR --compare-with DIR2 [--comparison-out FILE]
     compare_spanwise.py --profiles-out analysis/spanwise-profiles.csv
     compare_spanwise.py --from-csv analysis/spanwise-profiles.csv
+
+With ``--compare-with`` a second run is read with the same window and the two
+are compared band by band (``r/R`` 0.3-0.5, 0.5-0.7, 0.7-0.9 and the pooled
+0.3-0.9): stations counted, mean ``alpha_deg`` of each run, the alpha difference
+(B minus A) and the ``c_n``/``c_t`` ratios B/A.  The runs are paired **by
+element index** and must share one ``r/R`` grid -- a different element count or
+a station whose ``r/R`` differs is a hard error, never an interpolation.
 
 The multi-model snapshot ``analysis/spanwise-profiles.csv`` is written by
 ``--profiles-out`` (one row per model per element, window mean over the last
@@ -151,6 +159,28 @@ MEAN_COLUMNS = (
     "f_ref_n",
     "f_ref_t",
 )
+
+#: Campaign spanwise bands in ``r/R``; :data:`OVERALL_BAND` is the pooled band.
+COMPARISON_BANDS = ((0.3, 0.5), (0.5, 0.7), (0.7, 0.9))
+OVERALL_BAND = (0.3, 0.9)
+
+#: Largest per-station ``r/R`` difference tolerated between the two runs.
+R_OVER_R_TOLERANCE = 1e-6
+
+#: Columns of the printed two-run band table.
+COMPARISON_HEADER = (
+    "band",
+    "stations",
+    "alpha_a_deg",
+    "alpha_b_deg",
+    "delta_alpha_deg",
+    "c_n_ratio",
+    "c_t_ratio",
+)
+
+
+class StationGridMismatchError(Exception):
+    """The two runs are not on the same per-element station grid."""
 
 
 def _element_index(path: Path) -> int:
@@ -443,6 +473,131 @@ def integrate_rows(rows):
     return integrate(profile, N_BLADES, dr, tsr), tsr
 
 
+def _read_profile(run_dir, time_name, revs, rpm):
+    """Averaged spanwise profile of one run, plus its element indices.
+
+    Read-only: the run's CSVs are opened and nothing is written.  Raises
+    ``FileNotFoundError`` when the element directory or the module CSV is
+    missing and ``ValueError`` when a window holds no samples.
+    """
+    element_dir = (
+        run_dir / "postProcessing" / "actuatorLineElements" / time_name
+    )
+    turbine_csv = (
+        run_dir / "postProcessing" / "turbines" / time_name / "turbine.csv"
+    )
+    if not element_dir.is_dir():
+        raise FileNotFoundError(f"{element_dir} is not a directory")
+    files = sorted(element_dir.glob("*.csv"), key=_element_index)
+    if not files:
+        raise FileNotFoundError(f"no element CSVs in {element_dir}")
+    t_start, t_end, _ = window_bounds(turbine_csv, revs, rpm)
+    profile = [average_element(path, t_start, t_end) for path in files]
+    return profile, [_element_index(path) for path in files]
+
+
+def compare_profiles(profile_a, label_a, profile_b, label_b,
+                     tolerance=R_OVER_R_TOLERANCE):
+    """Per-band comparison of two spanwise profiles paired by station index.
+
+    ``label_a``/``label_b`` name the runs in the output and in the error.  A
+    different number of stations or a per-station ``r/R`` difference larger
+    than ``tolerance`` raises :class:`StationGridMismatchError`: the runs are
+    then not on the same mesh and a station-by-station comparison would be
+    meaningless.  A band with no stations is kept in the result with
+    ``stations == 0`` and ``None`` metrics, never dropped or synthesised.
+    """
+    if len(profile_a) != len(profile_b):
+        raise StationGridMismatchError(
+            f"{label_a} has {len(profile_a)} stations but {label_b} has "
+            f"{len(profile_b)}: the two runs are not on the same element grid"
+        )
+    grid_a = [r_over_r(element) for element in profile_a]
+    grid_b = [r_over_r(element) for element in profile_b]
+    for index, (rr_a, rr_b) in enumerate(zip(grid_a, grid_b, strict=True)):
+        if abs(rr_a - rr_b) > tolerance:
+            raise StationGridMismatchError(
+                f"station {index}: {label_a} r/R = {rr_a:.8g} but {label_b} "
+                f"r/R = {rr_b:.8g} differ by more than {tolerance:g}: the two "
+                f"runs are not on the same element grid"
+            )
+    results = []
+    for band in COMPARISON_BANDS + (OVERALL_BAND,):
+        low, high = band
+        stations = [
+            i for i, rr in enumerate(grid_a) if low <= rr < high
+        ]
+        if not stations:
+            results.append({
+                "band": band,
+                "stations": 0,
+                "alpha_a": None,
+                "alpha_b": None,
+                "delta_alpha": None,
+                "c_n_ratio": None,
+                "c_t_ratio": None,
+            })
+            continue
+        count = len(stations)
+        alpha_a = sum(profile_a[i]["alpha_deg"] for i in stations) / count
+        alpha_b = sum(profile_b[i]["alpha_deg"] for i in stations) / count
+        c_n_a = sum(profile_a[i]["c_ref_n"] for i in stations) / count
+        c_n_b = sum(profile_b[i]["c_ref_n"] for i in stations) / count
+        c_t_a = sum(profile_a[i]["c_ref_t"] for i in stations) / count
+        c_t_b = sum(profile_b[i]["c_ref_t"] for i in stations) / count
+        results.append({
+            "band": band,
+            "stations": count,
+            "alpha_a": alpha_a,
+            "alpha_b": alpha_b,
+            "delta_alpha": alpha_b - alpha_a,
+            "c_n_ratio": c_n_b / c_n_a if c_n_a else None,
+            "c_t_ratio": c_t_b / c_t_a if c_t_a else None,
+        })
+    return results
+
+
+def print_comparison(results, label_a, label_b):
+    """Print the two-run band table (A is ``label_a``, B is ``label_b``)."""
+    print(f"\nspanwise comparison: A = {label_a}, B = {label_b}")
+    print("  " + ",".join(COMPARISON_HEADER))
+    for item in results:
+        low, high = item["band"]
+        band = f"{low:g}-{high:g}"
+        if not item["stations"]:
+            print(f"  {band},0,absent,absent,absent,absent,absent")
+            continue
+        print(
+            f"  {band},{item['stations']},"
+            f"{item['alpha_a']:.4f},{item['alpha_b']:.4f},"
+            f"{item['delta_alpha']:+.4f},"
+            f"{item['c_n_ratio']:.4f},{item['c_t_ratio']:.4f}"
+        )
+
+
+def write_comparison_csv(path, results, label_a, label_b):
+    """Write the band table as CSV, naming both runs and the band bounds."""
+    header = ("run_a", "run_b", "band_lo", "band_hi") + COMPARISON_HEADER[1:]
+    with path.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(header)
+        for item in results:
+            low, high = item["band"]
+            if not item["stations"]:
+                writer.writerow(
+                    (label_a, label_b, f"{low:g}", f"{high:g}", 0,
+                     "", "", "", "", "")
+                )
+                continue
+            writer.writerow((
+                label_a, label_b, f"{low:g}", f"{high:g}",
+                item["stations"],
+                f"{item['alpha_a']:.6g}", f"{item['alpha_b']:.6g}",
+                f"{item['delta_alpha']:.6g}",
+                f"{item['c_n_ratio']:.6g}", f"{item['c_t_ratio']:.6g}",
+            ))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", type=Path, default=DEFAULT_RUN_DIR)
@@ -469,6 +624,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--out", type=Path, default=None, help="write the spanwise table as CSV"
+    )
+    parser.add_argument(
+        "--compare-with", type=Path, default=None,
+        help=(
+            "second run directory to compare against; prints the per-band "
+            "table after the single-run output"
+        ),
+    )
+    parser.add_argument(
+        "--compare-time", default=None,
+        help=(
+            "time directory of the second run's postProcessing output "
+            "(default: the same as --time)"
+        ),
+    )
+    parser.add_argument(
+        "--comparison-out", type=Path, default=None,
+        help="write the two-run band table as CSV",
     )
     parser.add_argument(
         "--profiles-out", type=Path, default=None,
@@ -591,6 +764,37 @@ def main(argv: list[str] | None = None) -> int:
             f"C_Q {integrated['c_q'] / module['ct']:.4f}  "
             f"C_P {integrated['c_p'] / module['cp']:.4f}"
         )
+
+    if args.compare_with is not None:
+        label_a = str(args.run_dir)
+        label_b = str(args.compare_with)
+        compare_time = (
+            args.compare_time if args.compare_time is not None else args.time
+        )
+        try:
+            profile_b, indices_b = _read_profile(
+                args.compare_with.resolve(), compare_time, args.revs, args.rpm
+            )
+        except (FileNotFoundError, ValueError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
+        indices_a = [_element_index(path) for path in files]
+        try:
+            if indices_a != indices_b:
+                raise StationGridMismatchError(
+                    f"{label_a} has element indices {indices_a} but {label_b} "
+                    f"has {indices_b}: the two runs are not on the same "
+                    f"element grid"
+                )
+            results = compare_profiles(profile, label_a, profile_b, label_b)
+        except StationGridMismatchError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
+        print_comparison(results, label_a, label_b)
+        if args.comparison_out is not None:
+            write_comparison_csv(
+                args.comparison_out, results, label_a, label_b)
+            print(f"\nwrote {args.comparison_out}")
     return 0
 
 
