@@ -60,11 +60,18 @@ our `c_t` over the BEM is 1.085 / 1.108 / **1.129** (r/R 0.3-0.5 / 0.5-0.7 /
 
 ## What is NOT established
 
-- **ASM**: the deposit fix (`5026c97`) is mandatory, and as of `c7eda86` the L2
-  runner can no longer substitute ALM for a requested ASM (it did until then).
-  ASM+mesh values from before
-  that commit cannot be cited: the flow received 33 % → 0.1 % → 0 % of the blade
-  load. The ASM's `moment()` also omits the pitching moment (~0.1 %).
+- **ASM**: MEASURED on this platform (2026-10-09) — see
+  `odd/tasks/iea15mw-asm-l2-validation.md`: cp 0.57431 against the ALM's 0.53651,
+  **+7.05 %**, produced by the surface seeing +0.30 deg of local alpha with the
+  load following the section lift curve (no unexplained multiplier, no tip
+  artifact, no bookkeeping defect). The old ALM/ASM pair (0.871-0.903) is not the
+  platform answer, and the free-wake comparison is a shape oracle, not a truth
+  ordering. Still open: the stalled root's `cl = 0.0000` in the polar table, on
+  BOTH arms, and the ASM+mesh arm. The deposit fix (`5026c97`) stays mandatory and
+  as of `c7eda86` the L2 runner can no longer substitute ALM for a requested ASM
+  (it did until then); ASM+mesh values from before `5026c97` cannot be cited: the
+  flow received 33 % → 0.1 % → 0 % of the blade load. The ASM's `moment()` also
+  omits the pitching moment (~0.1 %).
 - **rotationalAugmentation**: switching it on with `a=b=d=1` raises cp by +0.74 %
   and acts almost entirely at the deep-stall root (α 52-56° at r/R < 0.1); it does
   **not** reproduce the +49…+71 % of inboard tangential force the URANS-vs-BEM

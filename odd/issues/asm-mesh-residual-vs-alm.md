@@ -188,3 +188,99 @@ Publicado en el issue #9 (comentario `issuecomment-6086582709`):
 Siguiente paso registrado en el issue: ASM sobre la misma malla, 96 rangos y 20
 revoluciones, verificando primero el test de partición de la unidad del depósito
 (serial y 2 rangos), obligatorio desde `5026c97`.
+
+---
+
+## La respuesta (2026-10-09): el offset se da vuelta
+
+Ese siguiente paso se corrió. Job **11611470** (`TURBINE_MODEL=asm
+TURBINE_N_CHORDWISE=5`, 96 rangos, misma malla L2, mismo dt, 20 rev):
+**COMPLETED en 05:58:17, exit 0, una sola asignación** (no hizo falta encadenar),
+un solo histórico `postProcessing/turbines/0/` (8536 filas, revs 1-21). Antes de
+arrancar se verificó lo obligatorio: partición de unidad del depósito en serial y
+2 rangos (**13 passed en 34.9 s**) y que el caso generado ES la superficie
+(`elementType actuatorSurfaceElement`, `nChordwise 5`, L2, dominio 3/7/3,
+`dynamicStall` y `rotationalAugmentation` off).
+
+| brazo (misma malla, dt 0,0187, ventana revs 19-20) | cp | ct | deriva media revs 17-20 |
+| --- | --- | --- | --- |
+| ALM dt (revs 1-20) | 0,53651 | 0,06019 | −0,084 %/rev |
+| ASM | **0,57431** | 0,06443 | −0,092 %/rev |
+| **ASM / ALM** | **+7,05 %** | +7,05 % | — |
+
+El ASM queda **+7,05 % ARRIBA** del ALM, no 10-13 % abajo. Los dos brazos convergen
+casi al mismo ritmo (los residuos difieren 0,008 %/rev), así que es una
+comparación controlada y no un brazo quedándose atrás. **El par 0,871-0,903 queda
+retirado como respuesta**: medía otra malla, otro argumento de muestreo y 0,2 rev.
+Y queda retirada también la proyección de este espejo ("un offset de −7…−13 %
+dejaría al ASM en 0,47-0,50, o sea −6 a −11 % bajo la estela libre"): el ASM
+queda **+8,1 % arriba** de la estela libre en cp.
+
+### El mecanismo, medido, no inferido
+
+Sobre la misma malla, por bandas de r/R (A = ALM dt, B = ASM):
+
+| banda | α A | α B | **Δα** | c_n B/A | c_t B/A |
+| --- | --- | --- | --- | --- | --- |
+| 0,3-0,5 | 7,638 | 7,795 | **+0,157** | 1,0128 | 1,0267 |
+| 0,5-0,7 | 6,953 | 7,306 | **+0,352** | 1,0321 | 1,0826 |
+| 0,7-0,9 | 7,497 | 7,894 | **+0,397** | 1,0280 | 1,1017 |
+| 0,3-0,9 | 7,364 | 7,667 | **+0,303** | 1,0239 | 1,0597 |
+
+Δα es **positivo en todas las bandas** y crece hacia la raíz y hacia afuera (hasta
++2,3° en la raíz en pérdida profunda, donde la cuerda es mayor). La carga lo sigue
+por la curva de sustentación de la sección: +2,39 % de c_n por +0,303° implica una
+pendiente de ~0,10/° ≈ 5,7/rad ≈ **0,90·2π**, por debajo del 2π del ala delgada y
+justo donde queda una sección con factor de pérdida de punta. Chequeos
+independientes del mismo mecanismo: en la punta el ratio de `c_n` (0,7254/0,7236)
+es igual al de `cl` (0,7289/0,7268) al **0,04 %** con `cd` en 0,008 — o sea la
+proyección por franjas no aporta nada; `c_t` crece más que `c_n` afuera (+10,2 % vs
++2,8 % en 0,7-0,9), que es el mismo Δα actuando por el ángulo de flujo; `c_t` es
+**negativo** en r/R < 0,07 en los dos brazos (la raíz en pérdida hace arrastre, no
+potencia); y los brazos difieren **+0,4 %** en la última estación mientras la banda
+0,7-0,9 difiere +10,2 % en c_t, así que **no es un efecto de punta ni la corrección
+de punta**. La integración spanwise reproduce el módulo al 0,40 % en los dos brazos.
+
+### Contra las referencias, en forma
+
+Con la estela libre ya commiteada como referencia (`olaf-fvw`, 50 estaciones, sin
+pérdida de punta de Prandtl) y BEM (`ccblade-bem`): en **empuje** el ASM se mueve
+hacia la estela libre en todas las bandas (cierra 17 % de la brecha en 0,3-0,5,
+83 % en 0,5-0,7, la sobrepasa en 0,7-0,9; 53 % global). En **torque** la estela
+libre no es una cota: su c_t está muy por debajo adentro (ratio 0,7467) y por
+encima afuera (1,2585), así que el excedente profundiza el exceso inboard donde los
+tres modelos ya discrepan más y cierra 39 % de la brecha outboard. Nada de esto
+dice cuál está más cerca del rotor real: dice que el excedente tiene forma y
+dirección coherentes, no un multiplicador plano.
+
+### El criterio de aceptación de este espejo ya no sirve
+
+Decía "cp/ct/cd dentro del 2 % entre los tres modelos". Los dos brazos difieren
+7,05 %, así que ese criterio no puede cumplirse sin cambiar la física. El criterio
+que lo reemplaza, y que es el que se usó: **la diferencia tiene que estar producida
+por un mecanismo identificado y físicamente consistente**, medido banda por banda
+sobre la misma malla — no una distancia a una referencia.
+
+### Aclaración sobre el argumento de muestreo
+
+En la plataforma congelada los dos brazos usan `velocitySampleRadius 3.3` con
+`nVelocitySamples 16` (endEffects Glauert con tip y root on), así que el **radio de
+muestreo no es la diferencia**. Lo que difiere es el **muestreo promediado en
+cuerda sobre 5 franjas** y la proyección (`force/nChordwise`), que es exactamente
+lo que el mecanismo medido arriba señala.
+
+### Lo que queda abierto
+
+1. **`cl = 0,0000` exacto en las polares para α 41-56° y r/R < 0,07, en LOS DOS
+   brazos.** La raíz queda sostenida sólo por `cd`. Es entrada compartida, así que
+   no sesga esta comparación, pero es lo único sin explicar y afecta a todo lo que
+   se apoye en la carga inboard (incluido el FSI).
+2. **El brazo ASM+mesh sobre la plataforma** — la pata que falta del trío.
+3. **`cd` en `rev_history.py`**: el plateau de empuje es el único número que se
+   leyó a mano en toda esta campaña.
+4. **La forma estación por estación**: las medias por banda no pueden mostrar un
+   serrucho.
+5. **El defecto lateral de `meshFactor_` inerte en la rama coseno** (más arriba en
+   este espejo): sigue sin arreglar y necesita decisión.
+
+Registro completo: `odd/tasks/iea15mw-asm-l2-validation.md`.

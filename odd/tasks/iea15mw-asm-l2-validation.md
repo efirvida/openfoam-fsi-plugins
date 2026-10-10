@@ -1,6 +1,8 @@
 # IEA 15 MW — ASM validation on the FROZEN L2 platform
 
-**Status:** T1-T4 done; T5 next
+**Status:** CLOSED for handoff (2026-10-09). T1-T4 done; T5 items 1, 2, 4, 5 done
+and item 3 partial; three-way bands recorded. Open items and their exact resume
+commands are in the Handoff section at the end.
 **Owner:** orchestrator session, 2026-10-09
 **Platform:** `odd/tasks/iea15mw-platform-freeze.md` (L2 snappy, 1.87 m, 2 363 760
 cells, 96 ranks, dt 0.0187 s, 20 revs, cp 0.5344 / dt-verified). Nothing in the
@@ -308,4 +310,72 @@ answer. It is the prior, not the result.
   it outboard); in torque the free wake is not a bound, so the surplus deepens
   the inboard excess where the models disagree most and closes 39 % of the
   outboard gap. Band means over different station grids are recorded as
-  comparable as averages only. Next: items 6 and 7 of the checklist.
+  comparable as averages only.
+
+## Handoff (2026-10-09)
+
+**Established — do not re-derive.** The frozen platform
+(`odd/tasks/iea15mw-platform-freeze.md`): L2 snappy, 2 363 760 cells, 96 ranks,
+dt 0.0187 s, 20 revolutions, ALM cp 0.5344 with both axes closed. The ASM on it:
+cp 0.57431 / ct 0.06443 against the ALM's 0.53651 / 0.06019 over revs 19-20,
+**+7.05 %**, from one 6 h allocation (job 11611470, a single history). The
+mechanism: d alpha +0.30 deg overall, positive in every band, the load following
+the section lift curve at ~0.10 /deg ~ 0.90*2pi; not a tip effect, not the strip
+projection, not bookkeeping. The three-way shape: in thrust the ASM moves toward
+the free wake (53 % of the gap, overshooting outboard); in torque it moves away
+inboard and toward it outboard, because the free wake is not a bound there.
+
+**Commits.** `c7eda86` (the runner trap), `937d6a3` (handoff correction),
+`aedc533` + `029620e` (the ratio), `89c0bbe` (`rev_history.py --max-rev`),
+`6dd0943` + `50c61c1` (two-run bands + the mechanism), `c857851` + `6e114e2`
+(OLAF committed as a reference), `a4af114` + `cc14d22` (reference columns + the
+three-way).
+
+**Open, in priority order.**
+
+1. **The stalled root's `cl = 0.0000` in the polars** (`alpha` 41-56 deg,
+   `r/R < 0.07`, BOTH arms): the root is carried by `cd` alone. Shared input, so it
+   cannot bias the comparison, but it is the only unexplained physical fact left
+   and it touches every future inboard load, the FSI included. No run needed: read
+   the polar table a generated case carries in `constant/`, the lookup path in
+   `profileData.C`, and what `buildPolars.py` puts at the table's ends.
+2. **The third arm, ASM+mesh, on the frozen platform** (the leg the trio is
+   missing, and the FSI's critical case). Same vehicle as the ASM run —
+   `TURBINE_MODEL=asm-mesh TURBINE_RUN_DIR=runs/iea15mw-asm-mesh-l2
+   TURBINE_TOTAL_REVS=20 sbatch scripts/slurm/l2-long.slurm` — but verify BEFORE
+   launching: the deposit gate (serial + 2 ranks), that the generated case carries
+   `surfaceGeometry` as well as `actuatorSurfaceElement`, and that the blade STL is
+   staged for the paths the generator references.
+3. **`cd` in `rev_history.py`**: the thrust plateau is the only number read by
+   hand in this whole campaign (its COLUMNS tuple carries cp/ct only). Test-first,
+   one column, and then the thrust side of every table here is tool-backed.
+4. **Per-station shape**: band means cannot show a sawtooth; needs a per-station
+   ratio read (the two-run comparison already has the paired grid for it).
+5. **The two plot consumers** (`plot_3models_spanwise.py`,
+   `plot_spanwise_diagnosis.py`) enumerate sources in hardcoded dicts, so
+   `olaf-fvw` is inert in the plots until it is added there.
+6. **Registration the skills require and this tree cannot take yet**: a
+   `### Tooling` entry in `CHANGELOG.md` and the coverage row in
+   `tools/analysis_gap.py` — deferred because another session has the first dirty
+   and the second untracked (a path-scoped commit would sweep its in-flight work).
+7. **The `meshFactor_` defect** recorded in `odd/issues/asm-mesh-residual-vs-alm.md`
+   (a documented kernel-width knob that is inert in the cosine path of the ASM+mesh
+   deposit) still needs a decision: honour it there, or stop documenting it as
+   general.
+
+**Traps already paid for — do not re-learn them.** A resumed run splits its
+history into a folder named after the run's start timeName and those names sort
+wrongly as text (`31.9209` after `159.6232`); `rev_history.py` unions them and
+`compare_spanwise.py` needs `--time`. The tool's plateau is a 2-rev mean, while
+the platform doc's "0.53633" is the last revolution alone. A finished run's last
+"revolution" is a one-row stub at `endTime` and must stay out of the plateau.
+Band means over different station grids are comparable as averages only, never
+differenced into a slope across models. The reference store is CRLF and any
+script rewriting it must read with `newline=""`. `python3 -m pytest` without
+`source .../tmp/ofenv.sh` dies on `libpsm_infinipath.so.1`, and pytest output must
+be redirected to a file (through the proxy a direct pipe can come back empty). An
+sbatch script that assigns a knob unconditionally overrides the submit-line value
+— that was T1, and it would have produced a second ALM run labelled ASM.
+
+**Review state.** The user-owned review switch reads OFF (global; clone-local
+unset), so delivery follows ordinary repository policy. Nothing was pushed.
