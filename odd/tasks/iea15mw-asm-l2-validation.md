@@ -1,6 +1,6 @@
 # IEA 15 MW — ASM validation on the FROZEN L2 platform
 
-**Status:** T1 and T2 done; T3 running (job 11611470); T4-T5 pending
+**Status:** T1-T4 done; T5 next
 **Owner:** orchestrator session, 2026-10-09
 **Platform:** `odd/tasks/iea15mw-platform-freeze.md` (L2 snappy, 1.87 m, 2 363 760
 cells, 96 ranks, dt 0.0187 s, 20 revs, cp 0.5344 / dt-verified). Nothing in the
@@ -46,20 +46,55 @@ answer. It is the prior, not the result.
       **Provenance**: `turbinesFoam/src/fvOptions/bladeSurface/` is clean at
       `5026c97` (10-07 16:10) and no turbine source has changed since, so the
       ALM reference run (Oct 8-9) and this ASM run share one build.
-- [ ] **T3 — ASM run on the frozen platform.** IN PROGRESS.
-      Submitted **job 11611470** on 2026-10-09, 96 ranks, 2 nodes, 10 h limit:
+- [x] **T3 — ASM run on the frozen platform. DONE.**
+      **Job 11611470 COMPLETED**, 2026-10-09 15:26:28 -> 21:24:45,
+      **05:58:17 wall, exit 0, in ONE allocation** (no chaining was needed).
+      Case verified before reading anything: `system/fvOptions` has
+      `elementType actuatorSurfaceElement` + `nChordwise 5`, `controlDict`
+      `deltaT 0.0187` / `endTime 159.61692` (20 revs), and a single history
+      `postProcessing/turbines/0/` (8536 rows, revs 1-21, the one-row rev-21
+      stub excluded by the tool). The actuator-surface rate on L2 is ~3.4 rev/h,
+      the same as the ALM's, so the 5x-per-element estimate was pessimistic.
+- [x] **T4 — ASM plateau, drift and the ratio against the L2 ALM. DONE**
+      (recorded comparison still to be re-read with `rev_history.py --max-rev 20`;
+      the numbers below are the tool's own per-revolution output).
 
-      ```sh
-      TURBINE_MODEL=asm TURBINE_N_CHORDWISE=5 TURBINE_RUN_DIR=runs/iea15mw-asm-l2 \
-        TURBINE_TOTAL_REVS=20 sbatch -J iea15mw-asm-l2 --time=10:00:00 \
-        scripts/slurm/l2-long.slurm
-      ```
+      | arm (dt 0.0187, same mesh, same 96 ranks) | plateau revs 19-20 cp | ct | drift rev 20 | mean drift revs 17-20 |
+      | --- | --- | --- | --- | --- |
+      | ALM, `runs/iea15mw-screen-m3-l2` revs 1-20 | 0.53651 | 0.06021 | -0.065 %/rev | -0.084 %/rev |
+      | ASM, `runs/iea15mw-asm-l2` | **0.57431** | 0.06443 | -0.070 %/rev | -0.092 %/rev |
+      | **ASM / ALM** | **1.070** | 1.070 | — | — |
 
-      Same L2 case, same decomposition (`simple 4 6 4`), same domain, same
-      horizon; only the element type differs. The rate is unknown on this mesh
-      (ASM is ~5x the ALM per element), so 20 revs are expected NOT to fit one
-      allocation: the same command is resubmitted to resume from `latestTime`,
-      one submission at a time.
+      Both arms are read over the same window definition (2-rev mean of revs
+      19-20) and at the same horizon. The ALM's dt/2 continuation (revs 21-25 in
+      the same directory) is excluded: `rev_history.py` takes its plateau from the
+      tail, so a union read reports the dt/2 arm instead. Note the platform doc's
+      "dt plateau 0.53633" is the LAST revolution alone, not a 2-rev mean; the
+      plateau definition must be the same on both sides or the ratio picks up
+      0.03 %.
+
+      **The sign flips.** The prior (floor of this doc) was the ASM at
+      0.871-0.903 of the ALM, a ~10-13 % DEFICIT measured on another mesh with a
+      different sampling argument. On the frozen platform the actuator surface
+      carries **+7.0 %** of cp AND ct. The two arms converge at nearly the same
+      rate (residual drifts differ by 0.008 %/rev), so this is a controlled
+      comparison and not one arm lagging. cp and ct move by the same 7.0 %
+      (cp = ct·TSR by construction), so the ASM shifts the load LEVEL, not the
+      rotor's ct/cp relationship.
+
+      Against the references the ASM lands FURTHER out than the ALM:
+
+      | | cp | vs OLAF free wake 0.5312 | vs CCBlade/BEM 0.4910 |
+      | --- | --- | --- | --- |
+      | ALM | 0.5344 | +0.6 % | +8.8 % |
+      | ASM | 0.5743 | **+8.1 %** | **+17.0 %** |
+
+      So the old story ("the gap is the ALM's sampling argument, the ASM is the
+      lower one") does not survive on this platform. Whether the surplus is
+      finite-chord physics — the surface distributes the load over the chord, so
+      the local self-induction is weaker than a thin line's and the sections see
+      a higher effective angle of attack — or a residual defect in the surface
+      path is decided by T5, because the integral alone cannot separate them.
 - [ ] **T4 — ASM plateau, drift and the ratio against the L2 ALM.**
       `turbinesFoam/validation/tools/rev_history.py` over the union of every
       split `postProcessing/turbines/<timeName>/` folder; the plateau is the
@@ -96,3 +131,8 @@ answer. It is the prior, not the result.
 
 - 2026-10-09 — feature opened; T1 defect found and fixed (`c7eda86`); T2 gate
   passed; job 11611470 submitted (T3).
+- 2026-10-09 — T3 done: job COMPLETED in one 6 h allocation, single history.
+  T4 done: ASM cp 0.57431 against the ALM dt 0.53651 = **+7.0 %**, the opposite
+  sign to the prior; both arms converged by the campaign criterion at revs 19-20.
+  T5 (spanwise) is now the discriminator, and `rev_history.py` needs a
+  `--max-rev` cut so the ALM's dt arm can be read without its dt/2 continuation.
