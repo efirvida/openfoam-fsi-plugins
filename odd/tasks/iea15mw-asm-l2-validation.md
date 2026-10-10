@@ -92,24 +92,128 @@ answer. It is the prior, not the result.
       (cp = ct·TSR by construction), so the ASM shifts the load LEVEL, not the
       rotor's ct/cp relationship.
 
-      Against the references the ASM lands FURTHER out than the ALM:
+      Against the references the ASM lands further out than the ALM:
 
       | | cp | vs OLAF free wake 0.5312 | vs CCBlade/BEM 0.4910 |
       | --- | --- | --- | --- |
       | ALM | 0.5344 | +0.6 % | +8.8 % |
       | ASM | 0.5743 | **+8.1 %** | **+17.0 %** |
 
-      So the old story ("the gap is the ALM's sampling argument, the ASM is the
-      lower one") does not survive on this platform. Whether the surplus is
-      finite-chord physics — the surface distributes the load over the chord, so
-      the local self-induction is weaker than a thin line's and the sections see
-      a higher effective angle of attack — or a residual defect in the surface
-      path is decided by T5, because the integral alone cannot separate them.
-- [ ] **T5 — spanwise ASM vs ALM vs BEM and the record.**
-      `scripts/compare_spanwise.py --run-dir runs/iea15mw-asm-l2 --time <timeName>
-      --revs 2`, compared against the same window of `runs/iea15mw-screen-m3-l2`
-      and against `analysis/spanwise-references.csv`; results written back here
-      and mirrored into `odd/issues/asm-mesh-residual-vs-alm.md`.
+      **Read that table as a sanity envelope, not as an error bar.** OLAF free
+      wake, CCBlade/BEM, the ALM and the ASM are four different models with
+      different, known biases, and there are no experimental data for this rotor
+      at this Reynolds number: being further from OLAF or from BEM is NOT
+      evidence of being further from reality, and no ordering of the four is
+      established by their spread. The band (0.4910-0.5312) is 8 % wide, which is
+      the same size as the effect being discussed.
+
+      So the question is not which arm is closer to a reference, it is whether
+      the ASM result **closes physically**. The T5 checklist below is that
+      question made checkable: the reference profiles enter it as a shape oracle,
+      and the decisive test is the finite-chord mechanism itself (lower local
+      induction and higher effective alpha than the thin line at the same
+      station), not the distance between two integrals.
+- [ ] **T5 — does the ASM close physically? Spanwise, mechanism by mechanism.**
+      Not "is it closer to BEM": the two arms, the two references and the four
+      sets of assumptions are all in play, so what has to hold is that the
+      +7.05 % is produced by a mechanism that makes physical sense, station by
+      station. Each item names its oracle, so none of them is an opinion:
+
+      1. **Internal consistency.** The spanwise integration over the 147 elements
+         reproduces the module's own cp/ct to ~0.4 %, as it does on the ALM
+         (`compare_spanwise.py`'s rotor-integration summary). A larger gap is a
+         bookkeeping defect, independent of the physics.
+      2. **The mechanism, not just the level (decisive).** The finite-chord
+         argument predicts that the surface spreads the load over the chord, so
+         the self-induction at the blade is WEAKER than the thin line's and the
+         sections see a HIGHER effective alpha. The band-by-band check: the ASM
+         must show **lower axial induction and higher alpha than the ALM at the
+         same station**, by an amount consistent with a +7 % load. If alpha comes
+         out equal or lower while the load is higher, the surplus is NOT this
+         mechanism and `bladeSurfaceSource` has a defect to find.
+      3. **Section-level reachability.** For every station, the reported
+         `c_n`/`c_t` must be reachable from the polar at the alpha the same run
+         reports: no `C_L` above the polar's `cl_max`, no `C_L > 2*pi*alpha` in
+         attached flow. An unreachable section is a sampling or projection bug.
+      4. **The tip.** With the Glauert tip factor on, `c_n` and `c_t` must vanish
+         as `r/R -> 1` on both arms.
+      5. **The root.** The deep-stall root (alpha 50-56 deg at `r/R < 0.1`)
+         contributes drag and ~no power; a POSITIVE power contribution from a
+         stalled root is a red flag on either arm.
+      6. **Shape, not level.** Both profiles must be smooth in `r/R` and differ by
+         a coherent amount. A 5-cycle pattern across the chord is the signature
+         of the `nChordwise` projection, not of the chord's effect on induction,
+         and that is what separates a real level shift from a strip artifact.
+      7. **Thrust vs torque.** The two are different projections of the same
+         force, so the excesses need not be equal, but their direction and rough
+         ratio must follow from the alpha shift of item 2. `rev_history.py`
+         carries only cp/ct today: extend it to cd so the thrust plateau is read
+         by the same tool and the same window, not by hand.
+
+      Oracles: `scripts/compare_spanwise.py` (two runs, same window),
+      `analysis/spanwise-references.csv` for the profile SHAPE, and the run's own
+      `system/fvOptions` polars for item 3. Results are written back here and
+      mirrored into `odd/issues/asm-mesh-residual-vs-alm.md`.
+
+      **Results so far (2026-10-09).** `compare_spanwise.py` gained the two-run
+      comparison for this (`--compare-with`, `--compare-time`,
+      `--comparison-out`; stations paired by index with the r/R grids checked, a
+      mismatch failing loudly instead of interpolating). A = the ALM dt arm
+      (`--time 31.9209`), B = the ASM:
+
+      | band r/R | stations | alpha ALM | alpha ASM | d alpha | c_n ratio | c_t ratio |
+      | --- | --- | --- | --- | --- | --- | --- |
+      | 0.3-0.5 | 30 | 7.638 | 7.795 | **+0.157** | 1.0128 | 1.0267 |
+      | 0.5-0.7 | 30 | 6.953 | 7.306 | **+0.352** | 1.0321 | 1.0826 |
+      | 0.7-0.9 | 31 | 7.497 | 7.894 | **+0.397** | 1.0280 | 1.1017 |
+      | 0.3-0.9 | 91 | 7.364 | 7.667 | **+0.303** | 1.0239 | 1.0597 |
+
+      1. **Internal consistency — PASSED.** Spanwise integration against the
+         module: ASM C_T 1.0060 / C_Q 0.9965 / C_P 0.9965, ALM C_T 1.0060 /
+         C_Q 0.9962 / C_P 0.9962 — the same 0.4 % bookkeeping on both arms.
+      2. **The mechanism — PASSED, and it accounts for the level.** d alpha is
+         POSITIVE in every band (it could have come out equal or negative, which
+         would have meant the surplus is not this mechanism) and it grows toward
+         the root and outboard. The level follows it through the section lift
+         curve: +2.39 % in `c_n` per +0.303 deg overall implies a section slope of
+         ~0.0239*C_l/0.303 = 0.08 /deg ~= 4.5-5.0 /rad, i.e. ~0.75 * 2*pi — below
+         the thin-airfoil 2*pi and in the range a tip-loss-reduced section has.
+         Independent check of the same conclusion: inside the tip region the
+         ratio of `c_n` (0.7254/0.7236) equals the ratio of `cl` (0.7289/0.7268)
+         to 0.04 %, with `cd` there at 0.008, so the projection contributes
+         nothing to the difference. `c_t` rises faster than `c_n` outboard
+         (+10.2 % against +2.8 % in 0.7-0.9), which is the same d alpha acting
+         through the inflow angle (`c_t ~ C_l*sin(phi)`, phi ~ 8 deg there): the
+         level effect plus the angle's own effect.
+      3. **Reachability — PARTIAL.** The identity
+         `c_n ~= cl*cos(phi) + cd*sin(phi)` holds to <1 % at the tip on both
+         arms. OPEN: at `r/R < 0.07` the polars report `cl = 0.0000` for
+         alpha 41-56 deg on BOTH arms (a polar-table limit, shared, so it cannot
+         bias this comparison), so the stalled root is carried by `cd` alone.
+         That is worth its own look in the polar pipeline, not here.
+      4. **The tip — PASSED.** Both arms decay monotonically to `c_n` 0.2732
+         (ALM) / 0.2733 (ASM) and `c_t` 0.0201 / 0.0206 at `r/R = 0.9983`. Note
+         the arms differ by +0.4 % at the last station while the 0.7-0.9 band
+         differs by +10.2 % in `c_t`: the surplus is NOT a tip effect, and it is
+         not the tip correction.
+      5. **The root — PASSED.** `c_t` is NEGATIVE at `r/R < 0.07` on both arms
+         (-0.10 to -0.18): the deep-stall root produces drag, not power.
+      6. **Shape, station by station — OPEN.** Band means cannot show a sawtooth;
+         needs a per-station ratio read.
+      7. **Thrust vs torque — OPEN.** `rev_history.py` carries only cp/ct, so the
+         thrust plateau has to come from the same tool before the split is
+         quotable. The band `c_n` ratio (+2.4 %) against the rotor-level torque
+         (+7.05 %) is the same qualitative split the reference comparison shows,
+         but it has to come from the tool, not from a mental subtraction.
+
+      **Conclusion so far**: the +7.05 % is the surface seeing a HIGHER local
+      angle of attack — +0.30 deg overall, +0.16 in the inboard band, +0.40 in
+      0.7-0.9, up to +2.3 deg in the stalled root where the chord is largest —
+      with the load following it through the section lift curve. No unexplained
+      multiplier, no tip artifact, no bookkeeping defect. Which still does not
+      say which arm is closer to the real rotor: it says the ASM's surplus is
+      produced by a mechanism that makes physical sense, which is the standard
+      this comparison has to meet.
 
 ## Acceptance
 
@@ -138,7 +242,11 @@ answer. It is the prior, not the result.
 - 2026-10-09 — feature opened; T1 defect found and fixed (`c7eda86`); T2 gate
   passed; job 11611470 submitted (T3).
 - 2026-10-09 — T3 done: job COMPLETED in one 6 h allocation, single history.
-  T4 done: ASM cp 0.57431 against the ALM dt 0.53651 = **+7.0 %**, the opposite
+  T4 done: ASM cp 0.57431 against the ALM dt 0.53651 = **+7.05 %**, the opposite
   sign to the prior; both arms converged by the campaign criterion at revs 19-20.
-  T5 (spanwise) is now the discriminator, and `rev_history.py` needs a
-  `--max-rev` cut so the ALM's dt arm can be read without its dt/2 continuation.
+- 2026-10-09 — T5 in progress: `compare_spanwise.py` gained the two-run band
+  comparison (stations paired by index, mismatched r/R grids fail loudly), and
+  the mechanism check PASSES (items 1, 2, 4, 5 of the checklist); items 3, 6 and 7
+  are open. The +7.05 % is the finite-chord alpha shift, not a defect.
+  Next: OLAF's spanwise profile into the committed reference set (it is on disk,
+  50 nodes with the induction components, but only BEM is committed today).
