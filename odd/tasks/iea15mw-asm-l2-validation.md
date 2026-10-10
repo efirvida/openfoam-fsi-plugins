@@ -151,9 +151,12 @@ answer. It is the prior, not the result.
          by the same tool and the same window, not by hand.
 
       Oracles: `scripts/compare_spanwise.py` (two runs, same window),
-      `analysis/spanwise-references.csv` for the profile SHAPE, and the run's own
-      `system/fvOptions` polars for item 3. Results are written back here and
-      mirrored into `odd/issues/asm-mesh-residual-vs-alm.md`.
+      `analysis/spanwise-references.csv` for the profile SHAPE — it now carries
+      the free-wake profile too, source `olaf-fvw` (50 stations, no Prandtl tip
+      loss), imported by `scripts/import_olaf_reference.py` from the gitignored
+      OpenFAST run — and the run's own `system/fvOptions` polars for item 3.
+      Results are written back here and mirrored into
+      `odd/issues/asm-mesh-residual-vs-alm.md`.
 
       **Results so far (2026-10-09).** `compare_spanwise.py` gained the two-run
       comparison for this (`--compare-with`, `--compare-time`,
@@ -248,5 +251,9 @@ answer. It is the prior, not the result.
   comparison (stations paired by index, mismatched r/R grids fail loudly), and
   the mechanism check PASSES (items 1, 2, 4, 5 of the checklist); items 3, 6 and 7
   are open. The +7.05 % is the finite-chord alpha shift, not a defect.
-  Next: OLAF's spanwise profile into the committed reference set (it is on disk,
-  50 nodes with the induction components, but only BEM is committed today).
+- 2026-10-09 — the free-wake spanwise oracle is now committed: `olaf-fvw` in
+  `analysis/spanwise-references.csv` (150 rows, 50 stations x alpha_deg/cn/ct),
+  produced by `scripts/import_olaf_reference.py` from the gitignored OpenFAST
+  profile, idempotent and non-destructive to the other sources. Next: the
+  three-way band comparison (both arms against the free wake), with the caveat
+  that no reference ordering is a truth ordering.

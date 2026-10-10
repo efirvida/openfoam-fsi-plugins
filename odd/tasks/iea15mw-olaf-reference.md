@@ -56,6 +56,23 @@ envelope, not as a narrow target.**
 - The mid-span (r/R 0.5–0.9) `Cn` tracks within a few percent, with OLAF
   systematically higher and the gap growing toward the tip.
 
+**Committed as a reference.** The `Alpha`/`Cn`/`Ct` triple of this profile is in
+`analysis/spanwise-references.csv` (committed) as source **`olaf-fvw`**, 50
+stations, so the spanwise shape oracle includes the free wake and not only the
+BEM that carries the tip loss. The raw CSV, the OpenFAST outputs and this
+directory stay gitignored, which is why the importer exists: after regenerating
+the reference, re-run
+
+```sh
+python3 turbinesFoam/validation/iea15mw/scripts/import_olaf_reference.py
+```
+
+It rewrites only the `olaf-fvw` block and leaves every other source
+byte-identical. The store uses CRLF line endings and the importer preserves them
+(a whole-file rewrite would show a spurious 422-line diff); the test pins it. The
+source's `Vrel` and induction columns (`Vindx`, `Vindy`, `TnInd`, `AxInd`) are
+intentionally NOT imported — the store stays minimal and the source keeps them.
+
 ## Use in the campaign
 
 - **P3** (neutral baseline): rotor-level against the WISDEM↔BEM band; spanwise
