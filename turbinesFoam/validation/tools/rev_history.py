@@ -4,6 +4,7 @@
 Usage:
     rev_history.py runs/iea15mw-screen-m3-l2
     rev_history.py --window 2 --csv /tmp/dt2.csv runs/iea15mw-screen-m3-l2
+    rev_history.py --max-rev 20 runs/iea15mw-screen-m3-l2 runs/iea15mw-asm-l2
     rev_history.py runs/iea15mw-screen-m3-l2 runs/iea15mw-l2-ra
 
 Why it exists: a resumed run writes a *new*
@@ -20,6 +21,12 @@ order; that is the mistake this tool removes.
 The same trap applies to the per-element histories (``actuatorLineElements/``,
 ``bladeSurface/``), which carry the same folder split; ``compare_spanwise.py``
 takes --time for that reason.
+
+A run directory can also hold more than one ARM: one whose time step was
+refined, and the continuation that followed it. Reading such a directory whole
+reports the continuation, because the plateau comes from the tail; ``--max-rev``
+cuts the union at a revolution so the two arms can be compared at the same
+horizon.
 """
 
 from __future__ import annotations
@@ -128,12 +135,34 @@ def analyse(
     run_dir: Path,
     window: int = 2,
     drift_window: int = 4,
+    max_rev: int | None = None,
 ) -> dict[str, Any]:
-    """Per-revolution series plus the plateau and drift of its tail."""
+    """Per-revolution series plus the plateau and drift of its tail.
+
+    ``max_rev`` cuts the union at a revolution. One directory can hold more than
+    one arm -- ``runs/iea15mw-screen-m3-l2`` holds a converged time step on
+    revolutions 1-20 and a dt/2 continuation on 21-25 -- and without the cut the
+    plateau is taken from the tail, i.e. from the wrong arm.
+    """
     files = history_files(run_dir)
     series = per_revolution(read_history(files))
     if not series:
         raise ValueError(f"{run_dir}: the histories hold no rows")
+    if max_rev is None:
+        discarded: list[int] = []
+    else:
+        # A stub is not a revolution (per_revolution says so), so only complete
+        # revolutions beyond the cut are reported as discarded.
+        discarded = [
+            entry["rev"]
+            for entry in series
+            if entry["rev"] > max_rev and not entry["partial"]
+        ]
+        series = [entry for entry in series if entry["rev"] <= max_rev]
+        if not series:
+            raise ValueError(
+                f"{run_dir}: no revolution at or below --max-rev {max_rev}"
+            )
     revisions = [entry["rev"] for entry in series]
     gaps = [
         missing
@@ -156,6 +185,8 @@ def analyse(
         "gaps": gaps,
         "partial_revs": [entry["rev"] for entry in series if entry["partial"]],
         "plateau_window": window,
+        "max_rev": max_rev,
+        "discarded_revs": discarded,
         "plateau_cp": statistics.fmean(entry["cp"] for entry in tail),
         "plateau_ct": statistics.fmean(entry["ct"] for entry in tail),
         "mean_drift_cp_pct": (
@@ -170,6 +201,13 @@ def render_text(results: list[dict[str, Any]], window: int) -> str:
     for result in results:
         lines.append(f"=== {result['run']}")
         lines.append(f"    {len(result['histories'])} historia(s) en el union")
+        # Only when something complete was dropped: a cut above the last
+        # revolution is not a cut, and a stub is not a revolution.
+        if result["discarded_revs"]:
+            lines.append(
+                f"    recortado a rev <= {result['max_rev']} "
+                f"({len(result['discarded_revs'])} revoluciones descartadas)"
+            )
         if result["gaps"]:
             lines.append(f"    OJO: faltan las revoluciones {result['gaps']}")
         lines.append(f"    {'rev':>4} {'time':>9} {'rows':>6} {'cp':>9} {'ct':>9} {'d(cp)':>8}")
@@ -243,13 +281,23 @@ def main(argv: list[str] | None = None) -> int:
         help="revolutions averaged into the mean drift (default 4)",
     )
     parser.add_argument("--csv", type=Path, help="write the per-revolution series here")
+    parser.add_argument(
+        "--max-rev",
+        type=int,
+        help=(
+            "only revolutions at or below this one: a run directory can hold "
+            "more than one arm, and --max-rev 20 reads the one the horizon ends on"
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     args = parser.parse_args(argv)
 
     results = []
     for run_dir in args.run_dirs:
         try:
-            results.append(analyse(Path(run_dir), args.window, args.drift_window))
+            results.append(
+                analyse(Path(run_dir), args.window, args.drift_window, args.max_rev)
+            )
         except (FileNotFoundError, ValueError) as error:
             print(f"error: {error}", file=sys.stderr)
             return 1

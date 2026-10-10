@@ -16,6 +16,7 @@ cumulative angle, and it reports a gap instead of hiding one.
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -72,6 +73,18 @@ def _split_run(tmp_path: Path) -> Path:
     _write_history(tmp_path, "0", 1, 2, cp)  # the original run
     _write_history(tmp_path, "31.9209", 3, 4, cp)  # first resume
     _write_history(tmp_path, "159.6232", 5, 6, cp)  # second resume
+    return tmp_path
+
+
+def _two_arm_run(tmp_path: Path) -> Path:
+    """Revolutions 1-3 of one arm, then a much cheaper tail (gap at 4).
+
+    The tail's cp is far below the head's, so a plateau taken from the tail
+    silently reports the second arm; only ``--max-rev 3`` recovers the first.
+    """
+    cp = {1: 0.60, 2: 0.61, 3: 0.62, 5: 0.40, 6: 0.38}
+    _write_history(tmp_path, "0", 1, 3, cp)
+    _write_history(tmp_path, "31.9209", 5, 6, cp)
     return tmp_path
 
 
@@ -171,3 +184,86 @@ def test_cli_writes_the_series_and_compares_plateaus(tmp_path):
     assert lines[0] == "run,rev,time,rows,cp,ct,drift_cp_pct"
     assert len(lines) == 13  # header + 6 revolutions x 2 runs
     assert module.main([str(tmp_path / "absent")]) == 1
+
+
+def test_max_rev_takes_the_plateau_and_drift_from_the_first_n(tmp_path):
+    module = _load("rev_history", TOOL)
+    run = _two_arm_run(tmp_path)
+    full = module.analyse(run, window=2, drift_window=2)
+    cut = module.analyse(run, window=2, drift_window=2, max_rev=3)
+    # Without the cut the cheap tail wins the plateau and the gap is reported ...
+    assert full["plateau_cp"] == (0.40 + 0.38) / 2
+    assert full["gaps"] == [4]
+    # ... with it both the plateau and the drift come from the first three, the
+    # gap beyond the cut is not reported, and the discarded revs are named.
+    assert [entry["rev"] for entry in cut["series"]] == [1, 2, 3]
+    assert cut["revolutions"] == 3
+    assert cut["first_rev"] == 1
+    assert cut["last_rev"] == 3
+    assert cut["gaps"] == []
+    assert cut["max_rev"] == 3
+    assert cut["discarded_revs"] == [5, 6]
+    assert cut["plateau_cp"] == (0.61 + 0.62) / 2
+    assert cut["plateau_ct"] == 0.06
+    expected = ((0.62 - 0.61) / 0.61 * 100.0 + (0.61 - 0.60) / 0.60 * 100.0) / 2
+    assert abs(cut["mean_drift_cp_pct"] - expected) < 1e-9
+    assert abs(cut["mean_drift_cp_pct"] - full["mean_drift_cp_pct"]) > 1.0
+
+
+def test_a_stub_inside_the_cut_is_still_kept_out(tmp_path):
+    module = _load("rev_history", TOOL)
+    cp = {1: 0.60, 2: 0.58, 3: 0.56, 4: 0.55, 6: 0.53, 7: 0.52, 8: 0.51}
+    _write_history(tmp_path, "0", 1, 4, cp)
+    _write_history(tmp_path, "31.9209", 6, 8, cp)
+    # One row at endTime partway into revolution 5: a stub, inside the cut.
+    csv = tmp_path / "postProcessing" / "turbines" / "0" / "turbine.csv"
+    with csv.open("a", encoding="utf-8") as handle:
+        handle.write(f"{40.0:.6f},{1442.0:.6f},8.9131856,0.549,0.4,0.06,0,0\n")
+    result = module.analyse(tmp_path, window=2, max_rev=6)
+    assert result["partial_revs"] == [5]
+    assert result["discarded_revs"] == [7, 8]
+    assert [entry["rev"] for entry in result["series"]] == [1, 2, 3, 4, 5, 6]
+    # The stub is not a revolution: the plateau is the last two complete revs.
+    assert result["plateau_cp"] == (0.55 + 0.53) / 2
+
+
+def test_max_rev_above_the_last_revolution_is_no_cut(tmp_path):
+    module = _load("rev_history", TOOL)
+    run = _split_run(tmp_path)
+    full = module.analyse(run)
+    above = module.analyse(run, max_rev=999)
+    assert above["discarded_revs"] == []
+    assert above["revolutions"] == full["revolutions"]
+    assert above["plateau_cp"] == full["plateau_cp"]
+    assert above["mean_drift_cp_pct"] == full["mean_drift_cp_pct"]
+    assert [entry["rev"] for entry in above["series"]] == [
+        entry["rev"] for entry in full["series"]
+    ]
+
+
+def test_cli_max_rev_cuts_the_csv_and_says_so(tmp_path, capsys):
+    module = _load("rev_history", TOOL)
+    run = _two_arm_run(tmp_path / "run")
+    out = tmp_path / "series.csv"
+    assert module.main([str(run), "--max-rev", "3", "--csv", str(out)]) == 0
+    text = capsys.readouterr().out
+    assert "recortado a rev <= 3 (2 revoluciones descartadas)" in text
+    lines = out.read_text(encoding="utf-8").strip().splitlines()
+    assert lines[0] == "run,rev,time,rows,cp,ct,drift_cp_pct"
+    assert [line.split(",")[1] for line in lines[1:]] == ["1", "2", "3"]
+
+
+def test_cli_json_reports_the_cut(tmp_path, capsys):
+    module = _load("rev_history", TOOL)
+    run = _two_arm_run(tmp_path / "run")
+    assert module.main([str(run), "--max-rev", "3", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload[0]["max_rev"] == 3
+    assert payload[0]["discarded_revs"] == [5, 6]
+
+
+def test_cli_reports_no_cut_when_max_rev_is_above_the_last(tmp_path, capsys):
+    module = _load("rev_history", TOOL)
+    run = _split_run(tmp_path / "run")
+    assert module.main([str(run), "--max-rev", "999"]) == 0
+    assert "recortado" not in capsys.readouterr().out
