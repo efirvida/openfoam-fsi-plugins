@@ -55,15 +55,25 @@ answer. It is the prior, not the result.
       `postProcessing/turbines/0/` (8536 rows, revs 1-21, the one-row rev-21
       stub excluded by the tool). The actuator-surface rate on L2 is ~3.4 rev/h,
       the same as the ALM's, so the 5x-per-element estimate was pessimistic.
-- [x] **T4 — ASM plateau, drift and the ratio against the L2 ALM. DONE**
-      (recorded comparison still to be re-read with `rev_history.py --max-rev 20`;
-      the numbers below are the tool's own per-revolution output).
+- [x] **T4 — ASM plateau, drift and the ratio against the L2 ALM. DONE.** One
+      command, same horizon on both sides, after adding `--max-rev` to
+      `rev_history.py` (the tool takes its plateau from the tail, so a
+      whole-directory read of the ALM silently reports its dt/2 continuation):
 
-      | arm (dt 0.0187, same mesh, same 96 ranks) | plateau revs 19-20 cp | ct | drift rev 20 | mean drift revs 17-20 |
-      | --- | --- | --- | --- | --- |
-      | ALM, `runs/iea15mw-screen-m3-l2` revs 1-20 | 0.53651 | 0.06021 | -0.065 %/rev | -0.084 %/rev |
-      | ASM, `runs/iea15mw-asm-l2` | **0.57431** | 0.06443 | -0.070 %/rev | -0.092 %/rev |
-      | **ASM / ALM** | **1.070** | 1.070 | — | — |
+      ```sh
+      python3 tools/rev_history.py --max-rev 20 \
+        iea15mw/runs/iea15mw-screen-m3-l2 iea15mw/runs/iea15mw-asm-l2
+      #   iea15mw-screen-m3-l2  recortado a rev <= 20 (5 revoluciones descartadas)
+      #        plateau (ultimas 2 rev): cp 0.53651  ct 0.06019  deriva media -0.084%/rev
+      #   iea15mw-asm-l2        plateau (ultimas 2 rev): cp 0.57431  ct 0.06443  deriva media -0.092%/rev
+      #   comparacion           iea15mw-asm-l2  cp 0.57431 (+7.05% vs iea15mw-screen-m3-l2)
+      ```
+
+      | arm (dt 0.0187, same mesh, same 96 ranks, revs 19-20) | cp | ct | mean drift revs 17-20 |
+      | --- | --- | --- | --- |
+      | ALM, `runs/iea15mw-screen-m3-l2` revs 1-20 | 0.53651 | 0.06019 | -0.084 %/rev |
+      | ASM, `runs/iea15mw-asm-l2` | **0.57431** | 0.06443 | -0.092 %/rev |
+      | **ASM / ALM** | **+7.05 %** | +7.05 % | — |
 
       Both arms are read over the same window definition (2-rev mean of revs
       19-20) and at the same horizon. The ALM's dt/2 continuation (revs 21-25 in
@@ -76,9 +86,9 @@ answer. It is the prior, not the result.
       **The sign flips.** The prior (floor of this doc) was the ASM at
       0.871-0.903 of the ALM, a ~10-13 % DEFICIT measured on another mesh with a
       different sampling argument. On the frozen platform the actuator surface
-      carries **+7.0 %** of cp AND ct. The two arms converge at nearly the same
+      carries **+7.05 %** of cp AND ct. The two arms converge at nearly the same
       rate (residual drifts differ by 0.008 %/rev), so this is a controlled
-      comparison and not one arm lagging. cp and ct move by the same 7.0 %
+      comparison and not one arm lagging. cp and ct move by the same 7.05 %
       (cp = ct·TSR by construction), so the ASM shifts the load LEVEL, not the
       rotor's ct/cp relationship.
 
@@ -95,10 +105,6 @@ answer. It is the prior, not the result.
       the local self-induction is weaker than a thin line's and the sections see
       a higher effective angle of attack — or a residual defect in the surface
       path is decided by T5, because the integral alone cannot separate them.
-- [ ] **T4 — ASM plateau, drift and the ratio against the L2 ALM.**
-      `turbinesFoam/validation/tools/rev_history.py` over the union of every
-      split `postProcessing/turbines/<timeName>/` folder; the plateau is the
-      last complete revolution, the stub row at `endTime` excluded.
 - [ ] **T5 — spanwise ASM vs ALM vs BEM and the record.**
       `scripts/compare_spanwise.py --run-dir runs/iea15mw-asm-l2 --time <timeName>
       --revs 2`, compared against the same window of `runs/iea15mw-screen-m3-l2`
