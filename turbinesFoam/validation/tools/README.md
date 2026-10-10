@@ -49,7 +49,7 @@ Related tools outside this directory:
 | tool | answers |
 | --- | --- |
 | `phaseVI/scripts/comparePhaseVI.py` | simulation vs measured WDH data, with metric definitions fixed against the NREL report |
-| `iea15mw/scripts/compare_spanwise.py` | spanwise diagnosis of an IEA 15 MW ALM run, and a two-run per-band comparison (`--compare-with`) |
+| `iea15mw/scripts/compare_spanwise.py` | spanwise diagnosis of an IEA 15 MW ALM run, and a two-run per-band comparison (`--compare-with`); `--references` adds each reference model's band stations/means and its `cn`/`ct` ratios **to run A** (`--reference-source`, `analysis/spanwise-references.csv`) |
 | `iea15mw/scripts/import_olaf_reference.py` | the `olaf-fvw` OLAF free-vortex-wake spanwise block in `analysis/spanwise-references.csv` (`alpha_deg`/`cn`/`ct` per node), regenerated from the gitignored OpenFAST CSV |
 | `nacelle-asn/scripts/compareNacelle.py` | nacelle actuator-surface comparison |
 | `phaseVI/tools/generate_case.py` | renders the committed case; `--check` is non-destructive |

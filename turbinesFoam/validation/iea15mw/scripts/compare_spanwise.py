@@ -54,6 +54,7 @@ is never re-read to bound the window.
 Usage:
     compare_spanwise.py [--run-dir DIR] [--revs N] [--out FILE]
     compare_spanwise.py --run-dir DIR --compare-with DIR2 [--comparison-out FILE]
+    compare_spanwise.py --run-dir DIR --compare-with DIR2 --references
     compare_spanwise.py --profiles-out analysis/spanwise-profiles.csv
     compare_spanwise.py --from-csv analysis/spanwise-profiles.csv
 
@@ -63,6 +64,20 @@ are compared band by band (``r/R`` 0.3-0.5, 0.5-0.7, 0.7-0.9 and the pooled
 (B minus A) and the ``c_n``/``c_t`` ratios B/A.  The runs are paired **by
 element index** and must share one ``r/R`` grid -- a different element count or
 a station whose ``r/R`` differs is a hard error, never an interpolation.
+
+``--references`` appends to each band row the committed reference models'
+station count, band-mean ``alpha_deg``/``cn``/``ct`` and the ratios
+``cn_ratio``/``ct_ratio`` = band mean of the reference divided by band mean of
+**run A** (the ``--run-dir`` run).  Run A is the baseline, so ``cn_ratio``
+answers "is run A's ``c_ref_n`` higher or lower than the reference here?".
+Sources are chosen with ``--reference-source`` (repeatable; default
+``ccblade-bem`` and ``olaf-fvw``) and read from ``--reference-store``
+(``analysis/spanwise-references.csv``, long format).  The store's
+``r_over_R_or_radius_m`` column must hold ``r/R``: a source whose values exceed
+1.2 carries a radius in metres and is rejected rather than band-averaged as
+if it were ``r/R``.  A requested source missing from the store is an error,
+and a band with no reference stations is printed ``n/a`` with a station count
+of 0, never a synthesised value.
 
 The multi-model snapshot ``analysis/spanwise-profiles.csv`` is written by
 ``--profiles-out`` (one row per model per element, window mean over the last
@@ -178,9 +193,34 @@ COMPARISON_HEADER = (
     "c_t_ratio",
 )
 
+#: Reference sources appended to the band table when ``--references`` is on.
+DEFAULT_REFERENCE_SOURCES = ("ccblade-bem", "olaf-fvw")
+
+#: Committed long-format reference store read by ``--references``.
+REFERENCE_STORE = ANALYSIS_DIR / "spanwise-references.csv"
+
+#: Reference quantities band-averaged per source (the store's ``quantity``).
+REFERENCE_QUANTITIES = ("alpha_deg", "cn", "ct")
+
+#: The store's ``r_over_R_or_radius_m`` column may only carry ``r/R``; a value
+#: above this is a radius in metres and must not be band-averaged as ``r/R``.
+R_OVER_R_MAX = 1.2
+
 
 class StationGridMismatchError(Exception):
     """The two runs are not on the same per-element station grid."""
+
+
+class ReferenceStoreError(Exception):
+    """The committed spanwise reference store cannot answer the request."""
+
+
+class UnknownReferenceSourceError(ReferenceStoreError):
+    """A requested reference source is not in the store."""
+
+
+class ReferenceUnitError(ReferenceStoreError):
+    """A reference source's radius column carries metres, not ``r/R``."""
 
 
 def _element_index(path: Path) -> int:
@@ -536,6 +576,8 @@ def compare_profiles(profile_a, label_a, profile_b, label_b,
                 "delta_alpha": None,
                 "c_n_ratio": None,
                 "c_t_ratio": None,
+                "c_n_a": None,
+                "c_t_a": None,
             })
             continue
         count = len(stations)
@@ -553,49 +595,215 @@ def compare_profiles(profile_a, label_a, profile_b, label_b,
             "delta_alpha": alpha_b - alpha_a,
             "c_n_ratio": c_n_b / c_n_a if c_n_a else None,
             "c_t_ratio": c_t_b / c_t_a if c_t_a else None,
+            "c_n_a": c_n_a,
+            "c_t_a": c_t_a,
         })
     return results
 
 
-def print_comparison(results, label_a, label_b):
-    """Print the two-run band table (A is ``label_a``, B is ``label_b``)."""
+def load_reference_profiles(store: Path, sources) -> dict:
+    """Per-source reference profiles from the long-format store.
+
+    Returns ``{source: [{"r_over_R": r, "alpha_deg": ..., "cn": ...,
+    "ct": ...}, ...]}`` with one entry per station, sorted by ``r/R`` and
+    carrying only :data:`REFERENCE_QUANTITIES`.
+
+    Raises :class:`UnknownReferenceSourceError` for a source missing from the
+    store (naming the available ones) and :class:`ReferenceUnitError` when a
+    requested source's ``r_over_R_or_radius_m`` column holds a radius in metres
+    (a value outside ``[0, 1.2]``): band-averaging metres as if they were
+    ``r/R`` would produce a plausible, wrong table.
+    """
+    with store.open(encoding="utf-8", newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    available = sorted({
+        (row.get("source") or "").strip() for row in rows
+    } - {""})
+    missing = [source for source in sources if source not in available]
+    if missing:
+        raise UnknownReferenceSourceError(
+            f"reference source {missing[0]!r} is not in {store}; available "
+            f"sources: {', '.join(available)}"
+        )
+    profiles = {}
+    for source in sources:
+        stations: dict[float, dict] = {}
+        radii = set()
+        for row in rows:
+            if (row.get("source") or "").strip() != source:
+                continue
+            raw = (row.get("r_over_R_or_radius_m") or "").strip()
+            if not raw:
+                continue
+            try:
+                radius = float(raw)
+            except ValueError:
+                continue
+            radii.add(radius)
+            quantity = (row.get("quantity") or "").strip()
+            if quantity in REFERENCE_QUANTITIES:
+                stations.setdefault(radius, {})[quantity] = float(row["value"])
+        if radii and not all(0.0 <= radius <= R_OVER_R_MAX for radius in radii):
+            raise ReferenceUnitError(
+                f"reference source {source!r} in {store}: its "
+                f"r_over_R_or_radius_m column carries a radius in metres "
+                f"(values up to {max(radii):g}), not r/R in [0, "
+                f"{R_OVER_R_MAX:g}]; it cannot be band-averaged with the r/R "
+                f"bands"
+            )
+        profiles[source] = [
+            {"r_over_R": radius} | stations[radius]
+            for radius in sorted(stations)
+        ]
+    return profiles
+
+
+def reference_band_stats(profile, band) -> dict:
+    """Station count and band means of one reference profile in ``band``.
+
+    Uses the same ``low <= r/R < high`` convention as the run bands, so the
+    columns are directly comparable.  A band with no stations keeps
+    ``stations == 0`` and ``None`` means, never a synthesised value.
+    """
+    low, high = band
+    stations = [item for item in profile if low <= item["r_over_R"] < high]
+    stats: dict[str, float | None] = {"stations": len(stations)}
+    for quantity in REFERENCE_QUANTITIES:
+        values = [item[quantity] for item in stations if quantity in item]
+        stats[quantity] = sum(values) / len(values) if values else None
+    return stats
+
+
+def attach_references(results, profiles, sources):
+    """Add each source's band stats and its ratios to run A to ``results``.
+
+    The ratios are ``band-mean reference / band-mean run A``: run A is the
+    ``--run-dir`` baseline.  A ratio is ``None`` when either side is absent.
+    """
+    enriched = []
+    for item in results:
+        references = {}
+        for source in sources:
+            stats = reference_band_stats(profiles[source], item["band"])
+            c_n_a = item.get("c_n_a")
+            c_t_a = item.get("c_t_a")
+            references[source] = stats | {
+                "cn_ratio": (
+                    stats["cn"] / c_n_a
+                    if stats["cn"] is not None and c_n_a else None
+                ),
+                "ct_ratio": (
+                    stats["ct"] / c_t_a
+                    if stats["ct"] is not None and c_t_a else None
+                ),
+            }
+        enriched.append(item | {"references": references})
+    return enriched
+
+
+def reference_table_columns(sources) -> tuple:
+    """The per-source reference columns appended to the band table header."""
+    columns = []
+    for source in sources:
+        columns += (
+            f"{source}_n",
+            f"{source}_alpha_deg",
+            f"{source}_cn",
+            f"{source}_ct",
+            f"{source}_cn_ratio",
+            f"{source}_ct_ratio",
+        )
+    return tuple(columns)
+
+
+def _reference_cell(value, digits=4) -> str:
+    """A printed reference value, or ``n/a`` when the band has none."""
+    return "n/a" if value is None else f"{value:.{digits}f}"
+
+
+def _reference_csv_cell(value) -> str:
+    """A CSV reference value, or an empty field when the band has none."""
+    return "" if value is None else f"{value:.6g}"
+
+
+def print_comparison(results, label_a, label_b, sources=(), store=None):
+    """Print the two-run band table (A is ``label_a``, B is ``label_b``).
+
+    With ``sources`` the committed reference models' band stats and their
+    ratios to run A are appended, one group of columns per source; the printed
+    header names run A as the baseline the ratios are measured against.
+    """
     print(f"\nspanwise comparison: A = {label_a}, B = {label_b}")
-    print("  " + ",".join(COMPARISON_HEADER))
+    if sources:
+        print(
+            f"reference band means: ratios are reference / A ({label_a}, the "
+            f"--run-dir baseline); store: {store}"
+        )
+    print("  " + ",".join(COMPARISON_HEADER + reference_table_columns(sources)))
     for item in results:
         low, high = item["band"]
         band = f"{low:g}-{high:g}"
         if not item["stations"]:
-            print(f"  {band},0,absent,absent,absent,absent,absent")
-            continue
-        print(
-            f"  {band},{item['stations']},"
-            f"{item['alpha_a']:.4f},{item['alpha_b']:.4f},"
-            f"{item['delta_alpha']:+.4f},"
-            f"{item['c_n_ratio']:.4f},{item['c_t_ratio']:.4f}"
-        )
+            fields = [band, "0", "absent", "absent", "absent", "absent",
+                      "absent"]
+        else:
+            fields = [
+                band,
+                str(item["stations"]),
+                f"{item['alpha_a']:.4f}",
+                f"{item['alpha_b']:.4f}",
+                f"{item['delta_alpha']:+.4f}",
+                f"{item['c_n_ratio']:.4f}",
+                f"{item['c_t_ratio']:.4f}",
+            ]
+        for source in sources:
+            reference = item["references"][source]
+            fields += [
+                str(reference["stations"]),
+                _reference_cell(reference["alpha_deg"]),
+                _reference_cell(reference["cn"]),
+                _reference_cell(reference["ct"]),
+                _reference_cell(reference["cn_ratio"]),
+                _reference_cell(reference["ct_ratio"]),
+            ]
+        print("  " + ",".join(fields))
 
 
-def write_comparison_csv(path, results, label_a, label_b):
-    """Write the band table as CSV, naming both runs and the band bounds."""
-    header = ("run_a", "run_b", "band_lo", "band_hi") + COMPARISON_HEADER[1:]
+def write_comparison_csv(path, results, label_a, label_b, sources=()):
+    """Write the band table as CSV, naming both runs and the band bounds.
+
+    With ``sources`` each row gains that source's reference columns; a band
+    with no reference stations writes a count of 0 and empty value fields.
+    """
+    header = (("run_a", "run_b", "band_lo", "band_hi")
+              + COMPARISON_HEADER[1:] + reference_table_columns(sources))
     with path.open("w", encoding="utf-8", newline="") as stream:
         writer = csv.writer(stream)
         writer.writerow(header)
         for item in results:
             low, high = item["band"]
             if not item["stations"]:
-                writer.writerow(
-                    (label_a, label_b, f"{low:g}", f"{high:g}", 0,
-                     "", "", "", "", "")
-                )
-                continue
-            writer.writerow((
-                label_a, label_b, f"{low:g}", f"{high:g}",
-                item["stations"],
-                f"{item['alpha_a']:.6g}", f"{item['alpha_b']:.6g}",
-                f"{item['delta_alpha']:.6g}",
-                f"{item['c_n_ratio']:.6g}", f"{item['c_t_ratio']:.6g}",
-            ))
+                fields = [label_a, label_b, f"{low:g}", f"{high:g}", 0,
+                          "", "", "", "", ""]
+            else:
+                fields = [
+                    label_a, label_b, f"{low:g}", f"{high:g}",
+                    item["stations"],
+                    f"{item['alpha_a']:.6g}", f"{item['alpha_b']:.6g}",
+                    f"{item['delta_alpha']:.6g}",
+                    f"{item['c_n_ratio']:.6g}", f"{item['c_t_ratio']:.6g}",
+                ]
+            for source in sources:
+                reference = item["references"][source]
+                fields += [
+                    reference["stations"],
+                    _reference_csv_cell(reference["alpha_deg"]),
+                    _reference_csv_cell(reference["cn"]),
+                    _reference_csv_cell(reference["ct"]),
+                    _reference_csv_cell(reference["cn_ratio"]),
+                    _reference_csv_cell(reference["ct_ratio"]),
+                ]
+            writer.writerow(fields)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -644,6 +852,32 @@ def main(argv: list[str] | None = None) -> int:
         help="write the two-run band table as CSV",
     )
     parser.add_argument(
+        "--references",
+        action="store_true",
+        help=(
+            "append the committed reference models' band means and their "
+            "ratios to run A to the --compare-with band table"
+        ),
+    )
+    parser.add_argument(
+        "--reference-store",
+        type=Path,
+        default=REFERENCE_STORE,
+        help=(
+            "long-format reference store (default: "
+            "analysis/spanwise-references.csv)"
+        ),
+    )
+    parser.add_argument(
+        "--reference-source",
+        action="append",
+        default=None,
+        help=(
+            "reference source in the store to report (repeatable; default: "
+            + " and ".join(DEFAULT_REFERENCE_SOURCES) + ")"
+        ),
+    )
+    parser.add_argument(
         "--profiles-out", type=Path, default=None,
         help="write the committed multi-model snapshot and exit",
     )
@@ -656,6 +890,14 @@ def main(argv: list[str] | None = None) -> int:
         help="model to print with --from-csv (default: alm)",
     )
     args = parser.parse_args(argv)
+
+    if args.references and args.compare_with is None:
+        print(
+            "error: --references needs --compare-with, which builds the band "
+            "table it annotates",
+            file=sys.stderr,
+        )
+        return 1
 
     if args.profiles_out is not None:
         written, skipped = write_profiles_csv(
@@ -790,10 +1032,22 @@ def main(argv: list[str] | None = None) -> int:
         except StationGridMismatchError as error:
             print(f"error: {error}", file=sys.stderr)
             return 1
-        print_comparison(results, label_a, label_b)
+        sources = ()
+        store = None
+        if args.references:
+            sources = tuple(dict.fromkeys(
+                args.reference_source or DEFAULT_REFERENCE_SOURCES))
+            store = args.reference_store
+            try:
+                references = load_reference_profiles(store, sources)
+            except (ReferenceStoreError, OSError) as error:
+                print(f"error: {error}", file=sys.stderr)
+                return 1
+            results = attach_references(results, references, sources)
+        print_comparison(results, label_a, label_b, sources, store)
         if args.comparison_out is not None:
             write_comparison_csv(
-                args.comparison_out, results, label_a, label_b)
+                args.comparison_out, results, label_a, label_b, sources)
             print(f"\nwrote {args.comparison_out}")
     return 0
 
