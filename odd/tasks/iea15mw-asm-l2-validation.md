@@ -179,8 +179,11 @@ answer. It is the prior, not the result.
          would have meant the surplus is not this mechanism) and it grows toward
          the root and outboard. The level follows it through the section lift
          curve: +2.39 % in `c_n` per +0.303 deg overall implies a section slope of
-         ~0.0239*C_l/0.303 = 0.08 /deg ~= 4.5-5.0 /rad, i.e. ~0.75 * 2*pi — below
-         the thin-airfoil 2*pi and in the range a tip-loss-reduced section has.
+         ~0.0239*C_l/0.303. With the band-mean `C_l` of ~1.26 that is 0.10 /deg ~=
+         5.7 /rad ~= 0.90*2*pi — below the thin-airfoil 2*pi and in the range a
+         tip-loss-reduced section has. (This paragraph first read 0.08 /deg =
+         4.5-5.0 /rad, from an assumed `C_l` ~ 1.1 that I had not read off the
+         profile; the corrected magnitude strengthens the same conclusion.)
          Independent check of the same conclusion: inside the tip region the
          ratio of `c_n` (0.7254/0.7236) equals the ratio of `cl` (0.7289/0.7268)
          to 0.04 %, with `cd` there at 0.008, so the projection contributes
@@ -218,6 +221,51 @@ answer. It is the prior, not the result.
       produced by a mechanism that makes physical sense, which is the standard
       this comparison has to meet.
 
+      **Three-way bands (2026-10-09).** Same bands, same window, now with the
+      committed references (`--references`; ratios are reference / A, A = our
+      ALM, so 1.000 would mean "identical to the line"):
+
+      | band | ASM/ALM c_n | ASM/ALM c_t | BEM/ALM c_n | BEM/ALM c_t | OLAF/ALM c_n | OLAF/ALM c_t | OLAF/ALM alpha |
+      | --- | --- | --- | --- | --- | --- | --- | --- |
+      | 0.3-0.5 | 1.0128 | 1.0267 | 0.9757 | 0.9302 | **1.0761** | **0.7467** | +0.60 |
+      | 0.5-0.7 | 1.0321 | 1.0826 | 0.9680 | 0.9071 | **1.0386** | 0.9608 | +0.39 |
+      | 0.7-0.9 | 1.0280 | 1.1017 | 0.9818 | 0.8912 | 1.0156 | **1.2585** | -0.09 |
+      | 0.3-0.9 | 1.0239 | 1.0597 | 0.9756 | 0.9184 | 1.0451 | 0.9246 | +0.30 |
+
+      **In the thrust/normal direction the ASM moves TOWARD the free wake, in every
+      band.** BEM sits below our line everywhere (0.976-0.982) and the free wake
+      above it everywhere (1.016-1.076), so a surplus can only move one way: the
+      ASM closes 17 % of the A-to-OLAF gap in 0.3-0.5, 83 % in 0.5-0.7, and
+      OVERSHOOTS it in 0.7-0.9 (1.028 against 1.016) — 53 % overall. It is not a
+      uniform scale factor: the closure is band-dependent.
+
+      **In the torque/tangential direction it moves AWAY inboard and TOWARD
+      outboard, because the free wake is not a bound there**: its `c_t` is far
+      below ours in 0.3-0.5 (0.7467 — OLAF 0.1978 against our line's 0.2649, with
+      BEM at 0.2464) and above us in 0.7-0.9 (1.2585). So the ASM's +2.7..10.2 %
+      deepens the inboard excess where the three models already disagree most, and
+      closes 39 % of the outboard gap. Overall OLAF/ASM = 0.872: the surface has
+      14.6 % more tangential force than the free wake, against the line's 8.2 %.
+
+      **Method caveat, and it matters**: these band means are taken over DIFFERENT
+      station grids (our 30 stations in 0.3-0.5 against 10 for each reference) and
+      both `c_n` and `alpha` vary strongly inside a band through twist and taper.
+      Band levels and ratios are therefore readable as band averages, but
+      differencing two MODELS' band means to infer a slope is invalid here — item
+      2 above does not have that problem because it differences the two arms over
+      the SAME 30 stations.
+
+      Cross-check of the new columns: the A/B columns reproduce the
+      pre-extension measurement exactly, and the BEM ratios agree with the values
+      already recorded for this platform to ~0.3 % in `c_n` and ~1 % in `c_t`; the
+      small residual is not attributed, most likely the band-edge convention.
+
+      And the standing caveat again, because this table invites the opposite
+      reading: moving toward OLAF is not evidence of being closer to the real
+      rotor. It says the surface's surplus has a direction and a band structure
+      consistent with the free wake's own outboard tilt, where a broken
+      implementation would have produced a flat multiplier.
+
 ## Acceptance
 
 - T2 green (serial and both ranks), on a build of the current source.
@@ -254,6 +302,10 @@ answer. It is the prior, not the result.
 - 2026-10-09 — the free-wake spanwise oracle is now committed: `olaf-fvw` in
   `analysis/spanwise-references.csv` (150 rows, 50 stations x alpha_deg/cn/ct),
   produced by `scripts/import_olaf_reference.py` from the gitignored OpenFAST
-  profile, idempotent and non-destructive to the other sources. Next: the
-  three-way band comparison (both arms against the free wake), with the caveat
-  that no reference ordering is a truth ordering.
+  profile, idempotent and non-destructive to the other sources.
+- 2026-10-09 — three-way bands done: in thrust the ASM moves toward the free
+  wake in every band (closing 53 % of the A-to-OLAF gap overall, and overshooting
+  it outboard); in torque the free wake is not a bound, so the surplus deepens
+  the inboard excess where the models disagree most and closes 39 % of the
+  outboard gap. Band means over different station grids are recorded as
+  comparable as averages only. Next: items 6 and 7 of the checklist.
