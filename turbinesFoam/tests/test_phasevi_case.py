@@ -1575,3 +1575,131 @@ def test_sequence_s_kinematics_render_for_every_archive_speed(cfg):
                 tsr_from_rpm(float(row["rpm"]), speed, float(cfg["turbine"]["radius"])),
                 abs=0.002,
             )
+
+
+def _render_cli(case_dir, *extra):
+    return subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE / "tools" / "generate_case.py"),
+            *extra,
+            "--case-dir", str(case_dir),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+
+def _mesh_factors(case_dir):
+    values = {}
+    for name in ("fvOptions.ALM", "fvOptions.ASM", "fvOptions.ASM-MESH"):
+        text = (case_dir / "system" / name).read_text()
+        values[name] = re.findall(r"meshFactor\s+([^;]+);", text)
+    return values
+
+
+def test_cli_mesh_factor_override_reaches_every_fvoptions_variant(tmp_path):
+    """--mesh-factor F renders F as meshFactor in ALM, ASM and ASM-MESH."""
+    result = _render_cli(tmp_path / "case", "--mesh-factor", "2.5")
+    assert result.returncode == 0, result.stderr
+    factors = _mesh_factors(tmp_path / "case")
+    for name, found in factors.items():
+        assert found, name
+        assert set(found) == {"2.5"}, (name, found)
+
+
+def test_cli_mesh_factor_is_applied_before_refine_level(tmp_path):
+    """--mesh-factor 2 --refine-level 1 renders 4 (override first, then 2**N)."""
+    result = _render_cli(
+        tmp_path / "case", "--mesh-factor", "2", "--refine-level", "1"
+    )
+    assert result.returncode == 0, result.stderr
+    for name, found in _mesh_factors(tmp_path / "case").items():
+        assert found and set(found) == {"4"}, (name, found)
+
+
+@pytest.mark.parametrize("bad", ["0", "-1", "abc"])
+def test_cli_mesh_factor_rejects_invalid_values(tmp_path, bad):
+    result = _render_cli(tmp_path / "case", "--mesh-factor", bad)
+    assert result.returncode == 2
+    assert "--mesh-factor" in result.stderr
+    assert not (tmp_path / "case" / "system" / "fvOptions.ALM").exists()
+
+
+def test_cli_mesh_factor_absent_or_default_leaves_render_unchanged(tmp_path):
+    """No flag and the configured value (1.0) render byte-identical files."""
+    plain = _render_cli(tmp_path / "plain")
+    explicit = _render_cli(tmp_path / "explicit", "--mesh-factor", "1.0")
+    assert plain.returncode == 0, plain.stderr
+    assert explicit.returncode == 0, explicit.stderr
+    plain_files = sorted(p.relative_to(tmp_path / "plain")
+                         for p in (tmp_path / "plain").rglob("*") if p.is_file())
+    explicit_files = sorted(p.relative_to(tmp_path / "explicit")
+                            for p in (tmp_path / "explicit").rglob("*") if p.is_file())
+    assert plain_files == explicit_files and plain_files
+    for rel in plain_files:
+        assert (tmp_path / "plain" / rel).read_bytes() == (
+            tmp_path / "explicit" / rel
+        ).read_bytes(), rel
+
+
+def _prepare_sandbox(tmp_path):
+    sandbox = tmp_path / "sandbox"
+    package = sandbox / "validation" / "phaseVI"
+    package.parent.mkdir(parents=True)
+    shutil.copytree(
+        PACKAGE,
+        package,
+        ignore=shutil.ignore_patterns("runs", "results", "polyMesh", "__pycache__"),
+    )
+    (sandbox / "geometry").symlink_to(TURBINESFOAM / "geometry")
+    environment = package / "scripts" / "check_environment.sh"
+    environment.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    environment.chmod(0o755)
+    for level in ("", "-r1"):
+        mesh = package / "runs" / f"mesh-coarse{level}" / "constant" / "polyMesh"
+        mesh.mkdir(parents=True)
+        (mesh / ".keep").write_text("", encoding="utf-8")
+    shim = tmp_path / "bin"
+    shim.mkdir()
+    (shim / "python3").symlink_to(sys.executable)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("SLURM_")}
+    env["PATH"] = str(shim) + os.pathsep + env.get("PATH", "")
+    return package, env
+
+
+def test_runner_mesh_factor_validation_and_run_json(tmp_path):
+    """runPhaseVI.sh validates --mesh-factor and records the effective value."""
+    package, env = _prepare_sandbox(tmp_path)
+    script = str(package / "scripts" / "runPhaseVI.sh")
+    base = ["sh", script, "-m", "alm", "-u", "7", "-mesh", "coarse"]
+
+    for bad in ("0", "-1", "abc", "0.0"):
+        refused = subprocess.run(
+            [*base, "--mesh-factor", bad],
+            cwd=package, capture_output=True, text=True, env=env,
+        )
+        assert refused.returncode == 2, bad
+        assert "--mesh-factor" in refused.stderr
+
+    absent = subprocess.run(
+        [*base, "--run-label", "mf-absent"],
+        cwd=package, capture_output=True, text=True, env=env,
+    )
+    assert absent.returncode == 0, absent.stderr
+    payload = json.loads(
+        (package / "runs" / "alm-U7-coarse-mf-absent" / "run.json").read_text()
+    )
+    assert payload["mesh_factor"] == 1.0
+
+    prepared = subprocess.run(
+        [*base, "--mesh-factor", "2", "--refine-level", "1", "--run-label", "mf"],
+        cwd=package, capture_output=True, text=True, env=env,
+    )
+    assert prepared.returncode == 0, prepared.stderr
+    run_dir = package / "runs" / "alm-U7-coarse-r1-mf"
+    payload = json.loads((run_dir / "run.json").read_text())
+    assert payload["mesh_factor"] == 4.0
+    assert set(re.findall(
+        r"meshFactor\s+([^;]+);", (run_dir / "system" / "fvOptions").read_text()
+    )) == {"4"}

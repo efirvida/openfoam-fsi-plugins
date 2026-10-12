@@ -9,7 +9,8 @@
 #                 [--nchordwise N] [--n-elements N] [--ranks N]
 #                 [--end-revs FLOAT] [--run-label WORD] [--stage0]
 #                 [--restart] [--rotational-augmentation on|off]
-#                 [--root-effects on|off] [--run] [--submit]
+#                 [--root-effects on|off] [--refine-level N] [--mesh-factor F]
+#                 [--run] [--submit]
 #
 # -m/-u select the model and the per-speed measured TSR from config/case.yaml.
 # -mesh selects the mesh (default coarse = D/32); -s S selects the Sequence S
@@ -32,6 +33,12 @@
 # --n-elements N overrides the configured blade spanwise element count (every
 # model; rendered as `nElements` in the blade subdicts). It is validated as a
 # positive integer (exit 2 otherwise) and forwarded to the renderer when set.
+# --mesh-factor F overrides turbine.gaussian_mesh_factor (positive number, exit 2
+# otherwise): the ALM / no-mesh-ASM projection width eps = 2*cbrt(V)*meshFactor
+# changes without touching the mesh. It is applied before the --refine-level
+# scaling and the effective value is recorded as `mesh_factor` in run.json. The
+# shared mesh directory keys on the refine level only: the mesh is the same for
+# every mesh factor.
 # --run-label WORD appends -WORD to the run id (`runs/<id>-WORD`) and records it
 # in run.json, so two render variants of the same (model, speed, mesh) live in
 # separate, independently restartable directories (the two-arm campaign uses it
@@ -78,6 +85,7 @@ tip_correction=""
 div_phi_u=""
 polar=""
 refine_level=0
+mesh_factor=""
 delta_t=""
 end_revs=""
 run_label=""
@@ -103,6 +111,7 @@ while [ $# -gt 0 ]; do
         --div-phi-u) div_phi_u="$2"; shift ;;
         --polar) polar="$2"; shift ;;
         --refine-level) refine_level="$2"; shift ;;
+        --mesh-factor) mesh_factor="$2"; shift ;;
         --delta-t) delta_t="$2"; shift ;;
         --end-revs) end_revs="$2"; shift ;;
         --run-label) run_label="$2"; shift ;;
@@ -208,6 +217,12 @@ fi
 case "$refine_level" in
     ''|*[!0-9]*) echo "ERROR: --refine-level takes a non-negative integer" >&2; exit 2 ;;
 esac
+if [ -n "$mesh_factor" ]; then
+    # Positive finite number; the generator re-validates it, this fails early.
+    if ! python3 -c 'import math, sys; v = float(sys.argv[1]); sys.exit(0 if v > 0 and math.isfinite(v) else 1)' "$mesh_factor" 2>/dev/null; then
+        echo "ERROR: --mesh-factor must be a positive number" >&2; exit 2
+    fi
+fi
 if [ -n "$delta_t" ]; then
     # The convergence ladder fixes the step at the finest level's requirement, so
     # it must stay positive and finite.
@@ -330,6 +345,9 @@ run_dir="$root/runs/$run_id"
 
 echo "Preparing $run_id in $run_dir"
 render_args=(--mesh "$mesh" --speed "$speed" --domain "$domain" --sequence "$sequence" --case-dir "$run_dir" --solver "$solver" --ranks "$ranks" --refine-level "$refine_level")
+if [ -n "$mesh_factor" ]; then
+    render_args+=(--mesh-factor "$mesh_factor")
+fi
 if [ -n "$delta_t" ]; then
     render_args+=(--delta-t "$delta_t")
 fi
@@ -427,7 +445,8 @@ cp -al "$mesh_dir/constant/polyMesh" "$run_dir/constant/polyMesh"
 echo "Linked shared $mesh mesh (refinement level $refine_level) from $mesh_dir"
 
 python3 - "$run_dir" "$root" "$model" "$speed_token" "$mesh" "$domain" "$sequence" \
-    "$stage0" "$solver" "$nchordwise" "$ranks" "$staged_stl_sha256" "$run_label" <<'PY'
+    "$stage0" "$solver" "$nchordwise" "$ranks" "$staged_stl_sha256" "$run_label" \
+    "$mesh_factor" "$refine_level" <<'PY'
 import datetime
 import hashlib
 import json
@@ -449,7 +468,9 @@ from pathlib import Path
     ranks,
     staged_stl_sha256,
     run_label,
-) = sys.argv[1:14]
+    mesh_factor,
+    refine_level,
+) = sys.argv[1:16]
 run_dir = Path(run_dir)
 root = Path(root)
 
@@ -465,6 +486,15 @@ def git_commit():
 
 
 config = root / "config" / "case.yaml"
+# Effective meshFactor as rendered: --mesh-factor (or the configured value),
+# then scaled by 2**refine_level exactly like the generator does.
+effective_mesh_factor = (
+    float(mesh_factor)
+    if mesh_factor
+    else float(
+        __import__("yaml").safe_load(config.read_text())["turbine"]["gaussian_mesh_factor"]
+    )
+) * 2.0 ** int(refine_level)
 payload = {
     "git_commit": git_commit(),
     "openfoam_version": __import__("os").environ.get("WM_PROJECT_VERSION", "unknown"),
@@ -476,6 +506,7 @@ payload = {
     "sequence": sequence,
     "solver": solver,
     "n_chordwise": int(nchordwise) if nchordwise else None,
+    "mesh_factor": effective_mesh_factor,
     "ranks": int(ranks),
     "run_label": run_label or None,
     "stage0": stage0 == "1",

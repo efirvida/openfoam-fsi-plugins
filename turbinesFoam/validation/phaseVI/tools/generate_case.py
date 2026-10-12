@@ -1266,6 +1266,17 @@ def main(argv: list[str] | None = None) -> int:
              "support 2.5*h of the cell)",
     )
     parser.add_argument(
+        "--mesh-factor",
+        type=_positive_float,
+        default=None,
+        metavar="F",
+        help="override turbine.gaussian_mesh_factor of config/case.yaml, so the "
+             "ALM / no-mesh-ASM projection width eps = 2*cbrt(V)*meshFactor can "
+             "be varied per run without changing the mesh. Applied BEFORE the "
+             "--refine-level scaling (--mesh-factor 2 --refine-level 1 renders "
+             "meshFactor 4). Absent, the configured value governs",
+    )
+    parser.add_argument(
         "--delta-t",
         type=_positive_float,
         default=None,
@@ -1289,7 +1300,10 @@ def main(argv: list[str] | None = None) -> int:
         case_dir = args.case_dir.resolve()
         # Campaign overrides for the mesh-convergence ladder. Both leave the
         # committed default render byte-identical: level 0 scales by 2**0 = 1, and
-        # an absent --delta-t changes nothing.
+        # an absent --delta-t or --mesh-factor changes nothing. --mesh-factor is
+        # applied first so that the refine-level scaling multiplies it.
+        if args.mesh_factor is not None:
+            cfg["turbine"]["gaussian_mesh_factor"] = float(args.mesh_factor)
         if args.refine_level:
             cfg["turbine"]["gaussian_mesh_factor"] = float(
                 cfg["turbine"]["gaussian_mesh_factor"]
