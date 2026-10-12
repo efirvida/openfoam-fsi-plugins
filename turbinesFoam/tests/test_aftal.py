@@ -117,10 +117,14 @@ def check_spanwise(plot=False):
         ax.plot(root_dist, frn, label=r"$F_N$")
         ax.plot(root_dist, frt, label=r"$F_T$")
         ax.legend()
+    # The root factor is the Prandtl hub loss since CHANGELOG #19 (hubRadius is
+    # the blade root radius, 0.0075 m); the tangential maxima sit at the root
+    # and moved with it (0.429 -> 0.840 and 7.150 -> 7.214 under the retired
+    # reflected-tip constant); the normal ones did not.
     assert_almost_equal(max(crn), 1.063, decimal=2)
-    assert_almost_equal(max(crt), 0.429, decimal=2)
+    assert_almost_equal(max(crt), 0.840, decimal=2)
     assert_almost_equal(max(frn), 37.179, decimal=2)
-    assert_almost_equal(max(frt), 7.150, decimal=2)
+    assert_almost_equal(max(frt), 7.214, decimal=2)
 
 
 def all_checks():

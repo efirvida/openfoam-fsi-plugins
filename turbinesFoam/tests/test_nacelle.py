@@ -295,7 +295,7 @@ def test_empty_stl_aborts(tmp_path):
     code, log = _run_with_geometry(case_dir, "geometry/empty.stl")
     assert code != 0
     assert "FOAM FATAL ERROR" in log
-    assert "contains no triangles" in log
+    assert "contains no faces" in log
 
 
 def test_corrupt_stl_aborts(tmp_path):

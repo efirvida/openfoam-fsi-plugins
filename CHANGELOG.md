@@ -276,6 +276,31 @@ its node). `l2-ds-gate.slurm` resumes the converged frozen L2 state with the
 Dag & Sorensen correction on (or, with two environment overrides, the control
 arm of Glauert tip and root).
 
+#### 24. Bring the tutorials and solver-driven tests back in line with the Prandtl hub loss
+
+**Files:**
+- `turbinesFoam/tutorials/axialFlowTurbineAL/system/fvOptions`
+- `turbinesFoam/tutorials/axialFlowTurbineASM/system/fvOptions`
+- `turbinesFoam/tests/test_aftal.py`
+- `turbinesFoam/tests/test_nacelle.py`
+- `tools/foam-env.sh`
+
+**Problem:** the solver-driven suite had not been run since #19. The two HAWT
+tutorials (and so `tests/axialFlowTurbineASMSource` and `tests/test_aftal_asm.py`)
+carried `rootEffects on` without `hubRadius` and aborted at start; the golden
+tangential maxima of `test_aftal.py` encoded the retired reflected-tip root
+constant (they sit at the root); `test_empty_stl_aborts` expected a message the
+sampler no longer prints ("contains no triangles", now "contains no faces").
+
+**Fix:** both tutorials render `hubRadius 0.0075`, the blade root radius of
+their `elementData`. `test_aftal.py` takes the measured values
+(`max c_ref_t` 0.429 -> 0.840, `max f_ref_t` 7.150 -> 7.214; the normal maxima
+are unchanged). The nacelle test follows the message. `tools/foam-env.sh`
+records the build and test environment of the SDumont module (Int64 platform,
+libstdc++, dummy decomposition libraries). Known environment limit: the module
+ships no scotch, so `tests/test_al.py::test_parallel` (`method scotch`) cannot
+decompose there; the rest of the suite passes.
+
 ### New Features
 
 #### 2. AeroDyn blade shape (prebend, sweep, curve angle) in the ALM

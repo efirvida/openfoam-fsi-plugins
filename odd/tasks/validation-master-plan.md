@@ -72,7 +72,7 @@ Engram `turbinesfoam/code-review-2026-10-11`.
       when chord > 1 m), so it hit Phase VI and not most of the IEA span.
       Test-first: a unit-level check of the fraction of kernel kept per strip.
       Add a `CHANGELOG.md` entry (`Files:` / `Problem:` / `Fix:`).
-- [ ] **P0.2** Document the ASM as a hybrid: Yang & Sotiropoulos 2017 chord-averaged
+- [x] **P0.2** (ad49eef) Document the ASM as a hybrid: Yang & Sotiropoulos 2017 chord-averaged
       sampling + a Gaussian spreading kernel as in Massie/Ouro 2019
       (eps = max(c/4, 4*cbrt(V)); the code default `meshFactor 2` equals 4h, the
       Phase VI case overrides it to 1). Fix the README claim that it is the paper's model.
@@ -92,7 +92,7 @@ Engram `turbinesfoam/code-review-2026-10-11`.
       frozen L2 platform at a short horizon (dev partition) before it is frozen.
       **Gate:** if it is unstable or inconsistent there, stop and bring the user the
       fallback options; do not freeze silently.
-- [ ] **P0.5** Smoke-test the parallel-steps-in-one-job pattern on `sequana_cpu_dev`
+- [x] **P0.5** (c0a409b) Smoke-test the parallel-steps-in-one-job pattern on `sequana_cpu_dev`
       (two 48-rank steps on two nodes, one node each).
 - [ ] **P0.6** Read the Du-Selig A/B on the IEA L2 (commit `ff58337`) and decide
       whether augmentation is on in both pillars (physics should not change
@@ -175,3 +175,7 @@ Resume pack: `odd/tasks/iea15mw-platform-freeze.md`, `odd/tasks/iea15mw-asm-l2-v
 |---|---|
 | 2026-10-11 | Plan written. Decisions: tip correction frozen as D&S without Glauert tip loss; up to 4 concurrent jobs, parallel steps per job, `sequana_cpu_dev` for jobs of about 20 min. |
 | 2026-10-11 | P0.1 done (914aa72): RED 12/18 -> GREEN 0/18 in `tests/asmPrefilterBox`; a 0.4 m chord kept 69-74 % of the kernel before. `test_asm` chord-averaging tolerance 1e-5 -> 1e-7 (difference now 9e-7). Pre-existing failure found: `tests/axialFlowTurbineASMSource` aborts (`hubRadius` missing since CHANGELOG #19); fix in the P0 exit. |
+| 2026-10-12 | P0.2 done (ad49eef): Massie, Ouro, Stoesser & Luo 2019 (*Energies*, Eq. 13) verified in `articles/`: `eps = max(c/4, 4*cbrt(V))` after Mendoza et al.; the element keeps the `4*cbrt(V)` branch at the default `meshFactor 2` and has no `c/4` term. |
+| 2026-10-12 | P0.5 done (c0a409b): `tools/run_parallel_steps.sh` + `parallel_steps_smoke.slurm` passed on `sequana_cpu_dev` (job 11613061): two 48-rank steps, one node each, overlapping, all ranks on their node. First attempt (11613059) failed: `mpirun --host <node>` gives one slot under Slurm; the launcher now passes `--host <node>:<ranks>`. |
+| 2026-10-12 | **Finding (blocks the "frozen platform" numbers):** the IEA frozen platform (cp 0.534, run 2026-10-09 01:29) predates `4c49dc3` (2026-10-09 17:23), which made the Glauert root factor the Prandtl hub loss and made `hubRadius` mandatory. The IEA generator did not render it, so the recipe could not start on the current library (fixed in 8faff39). Also fixed: tutorials `axialFlowTurbineAL`/`ASM` lacked `hubRadius` (their tests aborted). |
+| 2026-10-12 | P0.4 gate, short run (0.41 rev from the converged rev-20 state, jobs 11613044 D&S and 11613049 control, 96 ranks, dev): **stable**, no hub-transition instability. Control (Glauert tip+root, current lib) vs frozen Glauert: cp +2.4..2.7 %, all in r/R < 0.3 (root factor change of #19; r/R 0.3-1.0 within +-1 %). D&S vs control: cp +4.2..5.2 %, cd +5.3 %, localised at the tip (r/R 0.95-1.0 Fn x1.68, Ft x1.50, dalpha -0.96 deg; 0.90-0.95 x1.18; 0.7-0.9 x1.02; 0.3-0.7 within +0.5 %). Flow not relaxed after 0.4 rev, so the asymptote is not known: D&S transient cp 0.574 vs OLAF 0.5312 (+8 %). Confirmation run: job 11613058, 3 revs on `sequana_cpu` (`TURBINE_TOTAL_REVS=23`), reads with `tools/window_response.py` + `iea15mw/scripts/station_ratio.py`. |
