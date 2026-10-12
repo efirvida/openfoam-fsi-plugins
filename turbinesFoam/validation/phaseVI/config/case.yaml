@@ -74,6 +74,93 @@ sequence_s:
   tsr: 5.407
   rotor_speed_rpm: 71.867
   row: s0700000
+  # Every 0 deg yaw speed of the Sequence S archive (data/experiment/uae6-archive/
+  # sequence_S_performance.csv); the 7 m/s row above stays the default.
+  speeds:
+    5:
+      tsr: 7.550
+      rotor_speed_rpm: 71.685
+      row: s0500000
+    6:
+      tsr: 6.299
+      rotor_speed_rpm: 71.768
+      row: s0600000
+    7:
+      tsr: 5.407
+      rotor_speed_rpm: 71.867
+      row: s0700000
+    8:
+      tsr: 4.740
+      rotor_speed_rpm: 71.999
+      row: s0800000
+    9:
+      tsr: 4.219
+      rotor_speed_rpm: 72.098
+      row: s0900000
+    10:
+      tsr: 3.797
+      rotor_speed_rpm: 72.096
+      row: s1000000
+    11:
+      tsr: 3.452
+      rotor_speed_rpm: 72.099
+      row: s1100000
+    12:
+      tsr: 3.164
+      rotor_speed_rpm: 72.105
+      row: s1200000
+    13:
+      tsr: 2.921
+      rotor_speed_rpm: 72.094
+      row: s1300000
+    14:
+      tsr: 2.711
+      rotor_speed_rpm: 72.077
+      row: s1400000
+    15:
+      tsr: 2.530
+      rotor_speed_rpm: 72.062
+      row: s1500000
+    16:
+      tsr: 2.370
+      rotor_speed_rpm: 72.013
+      row: s1600000
+    17:
+      tsr: 2.231
+      rotor_speed_rpm: 72.007
+      row: s1700000
+    18:
+      tsr: 2.107
+      rotor_speed_rpm: 72.015
+      row: s1800000
+    19:
+      tsr: 1.996
+      rotor_speed_rpm: 72.017
+      row: s1900000
+    20:
+      tsr: 1.896
+      rotor_speed_rpm: 72.009
+      row: s2000000
+    21:
+      tsr: 1.807
+      rotor_speed_rpm: 72.043
+      row: s2100000
+    22:
+      tsr: 1.725
+      rotor_speed_rpm: 72.041
+      row: s2200000
+    23:
+      tsr: 1.651
+      rotor_speed_rpm: 72.116
+      row: s2300000
+    24:
+      tsr: 1.583
+      rotor_speed_rpm: 72.136
+      row: s2400002
+    25:
+      tsr: 1.520
+      rotor_speed_rpm: 72.162
+      row: s2500001
 
 # Domain extents in rotor diameters. x/y are measured from the rotor plane and
 # rotor axis; z is an offset from the hub. The reference free box is

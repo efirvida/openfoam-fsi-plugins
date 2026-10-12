@@ -65,6 +65,17 @@ def _speeds(cfg: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {str(int(key)): value for key, value in speeds.items()}
 
 
+def _sequence_s_speeds(cfg: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Sequence S rows by speed: the `speeds` table plus the default row."""
+    block = cfg.get("sequence_s")
+    if not block:
+        return {}
+    rows = {str(int(key)): value for key, value in block.get("speeds", {}).items()}
+    default = {k: block[k] for k in ("tsr", "rotor_speed_rpm", "row")}
+    rows.setdefault(f"{float(block['speed']):g}", default)
+    return rows
+
+
 def validate_config(cfg: dict[str, Any]) -> None:
     """Validate the structural invariants of the case configuration."""
     turbine = cfg["turbine"]
@@ -271,28 +282,24 @@ def assert_tsr_matches_experiment(
                 f"{key} m/s: configured TSR {configured} differs from the "
                 f"measured row TSR {derived:.6f} by more than {tolerance}"
             )
-    sequence_s = cfg.get("sequence_s")
-    if sequence_s:
-        speed = float(sequence_s["speed"])
-        path_s = EXPERIMENT_DIR / "sequence_S_performance.csv"
-        if path_s.exists():
-            with path_s.open(encoding="utf-8") as stream:
-                rows = list(csv.DictReader(stream))
-            match = [
-                row for row in rows
-                if math.isclose(
-                    float(row["wind_speed_m_s"]), speed, abs_tol=1e-9
-                )
-            ]
-            if not match:
-                raise ValueError(f"{path_s}: no measured row for {speed:g} m/s")
-            derived = tsr_from_rpm(
-                float(match[0]["rpm"]), speed, radius
-            )
-            configured = float(sequence_s["tsr"])
+    path_s = EXPERIMENT_DIR / "uae6-archive" / "sequence_S_performance.csv"
+    rows_s = _sequence_s_speeds(cfg)
+    if rows_s:
+        if not path_s.exists():
+            raise FileNotFoundError(f"Sequence S archive CSV not found: {path_s}")
+        with path_s.open(encoding="utf-8") as stream:
+            archive = {
+                f"{float(row['wind_speed_m_s']):g}": row
+                for row in csv.DictReader(stream)
+            }
+        for key, configured_row in rows_s.items():
+            if key not in archive:
+                raise ValueError(f"{path_s}: no measured row for {key} m/s")
+            derived = tsr_from_rpm(float(archive[key]["rpm"]), float(key), radius)
+            configured = float(configured_row["tsr"])
             if abs(configured - derived) > tolerance:
                 raise ValueError(
-                    f"Sequence S {speed:g} m/s: configured TSR {configured} "
+                    f"Sequence S {key} m/s: configured TSR {configured} "
                     f"differs from the measured row TSR {derived:.6f} by more "
                     f"than {tolerance}"
                 )
@@ -303,19 +310,20 @@ def select_speed(
 ) -> dict[str, Any]:
     """Return the kinematics entry for one supported wind speed.
 
-    `sequence="S"` selects the Sequence S repeat (7 m/s, s0700000); only a
-    speed with a configured `sequence_s` row is accepted.
+    `sequence="S"` selects a Sequence S point at 0 deg yaw (`sequence_s.speeds`,
+    7 m/s = s0700000 by default); only a speed with a configured row is
+    accepted.
     """
     key = f"{float(speed):g}"
     if sequence.upper() == "S":
-        row = cfg.get("sequence_s")
-        if not row or not math.isclose(float(row["speed"]), float(speed)):
+        row = _sequence_s_speeds(cfg).get(key)
+        if row is None:
             raise KeyError(
                 f"no Sequence S row for {speed!r} m/s; configured: "
-                f"{cfg.get('sequence_s', {}).get('speed')}"
+                f"{sorted(_sequence_s_speeds(cfg), key=float)}"
             )
         return {
-            "speed": float(row["speed"]),
+            "speed": float(key),
             "tsr": float(row["tsr"]),
             "rotor_speed_rpm": float(row["rotor_speed_rpm"]),
             "row": row["row"],
@@ -425,9 +433,11 @@ def hub_cell_size(cfg: dict[str, Any], mesh: str) -> float:
     return max(hub_adjacent)
 
 
-def tip_speed(cfg: dict[str, Any], speed: str | float | int) -> float:
+def tip_speed(
+    cfg: dict[str, Any], speed: str | float | int, sequence: str = "H"
+) -> float:
     """Blade tip speed Omega*R at the measured tip-speed ratio, in m/s."""
-    entry = select_speed(cfg, speed)
+    entry = select_speed(cfg, speed, sequence)
     return entry["tsr"] * entry["speed"]
 
 
@@ -444,17 +454,25 @@ def solver_delta_t(cfg: dict[str, Any], mesh: str, solver: str = "urans") -> flo
 
 
 def tip_displacement(
-    cfg: dict[str, Any], speed: str | float | int, mesh: str, solver: str = "urans"
+    cfg: dict[str, Any],
+    speed: str | float | int,
+    mesh: str,
+    solver: str = "urans",
+    sequence: str = "H",
 ) -> float:
     """Tip displacement per time step, in metres."""
-    return tip_speed(cfg, speed) * solver_delta_t(cfg, mesh, solver)
+    return tip_speed(cfg, speed, sequence) * solver_delta_t(cfg, mesh, solver)
 
 
 def assert_tip_constraint(
-    cfg: dict[str, Any], speed: str | float | int, mesh: str, solver: str = "urans"
+    cfg: dict[str, Any],
+    speed: str | float | int,
+    mesh: str,
+    solver: str = "urans",
+    sequence: str = "H",
 ) -> None:
     """Fail when the tip displacement per step reaches the hub-adjacent cell."""
-    displacement = tip_displacement(cfg, speed, mesh, solver)
+    displacement = tip_displacement(cfg, speed, mesh, solver, sequence)
     hub_cell = hub_cell_size(cfg, mesh)
     if displacement >= hub_cell:
         raise ValueError(
@@ -476,7 +494,7 @@ def kinematics(
     omega = entry["tsr"] * entry["speed"] / float(cfg["turbine"]["radius"])
     t_rev = 2.0 * math.pi / omega
     delta_t = solver_delta_t(cfg, mesh, solver)
-    assert_tip_constraint(cfg, speed, mesh, solver)
+    assert_tip_constraint(cfg, speed, mesh, solver, sequence)
     return {
         "speed": entry["speed"],
         "tsr": entry["tsr"],

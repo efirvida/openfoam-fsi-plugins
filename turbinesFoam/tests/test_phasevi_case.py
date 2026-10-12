@@ -39,6 +39,7 @@ from case_config import (  # noqa: E402
     solver_delta_t,
     speed_keys,
     tip_displacement,
+    tsr_from_rpm,
     validate_config,
 )
 from element_data import (  # noqa: E402
@@ -1514,3 +1515,63 @@ def test_generated_case_is_current(cfg):
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+S_ARCHIVE_PERFORMANCE = (
+    PACKAGE / "data" / "experiment" / "uae6-archive" / "sequence_S_performance.csv"
+)
+
+
+def _sequence_s_archive_rows():
+    import csv
+
+    with S_ARCHIVE_PERFORMANCE.open(encoding="utf-8") as stream:
+        return list(csv.DictReader(stream))
+
+
+def test_sequence_s_covers_the_21_zero_yaw_speeds(cfg):
+    """`-s S` accepts every 0 deg yaw speed of the archive, not just 7 m/s."""
+    rows = _sequence_s_archive_rows()
+    assert len(rows) == 21
+    for row in rows:
+        speed = float(row["wind_speed_m_s"])
+        entry = select_speed(cfg, speed, "S")
+        assert entry["row"] == row["file_name"]
+        derived = tsr_from_rpm(
+            float(row["rpm"]), speed, float(cfg["turbine"]["radius"])
+        )
+        assert abs(entry["tsr"] - derived) <= 0.002
+        assert abs(entry["rotor_speed_rpm"] - float(row["rpm"])) <= 0.001
+
+
+def test_sequence_s_keeps_the_7_ms_default_row(cfg):
+    entry = select_speed(cfg, "7", "S")
+    assert (entry["tsr"], entry["rotor_speed_rpm"], entry["row"]) == (
+        5.407,
+        71.867,
+        "s0700000",
+    )
+
+
+def test_sequence_s_rejects_a_speed_outside_the_archive(cfg):
+    with pytest.raises(KeyError):
+        select_speed(cfg, "30", "S")
+
+
+def test_sequence_h_selection_is_unchanged_by_the_s_table(cfg):
+    assert speed_keys(cfg) == ["7", "10", "13", "15", "20", "25"]
+    with pytest.raises(KeyError):
+        select_speed(cfg, "9", "H")
+
+
+def test_sequence_s_kinematics_render_for_every_archive_speed(cfg):
+    """The renderer path (kinematics + tip constraint) accepts all 21 speeds."""
+    for row in _sequence_s_archive_rows():
+        speed = float(row["wind_speed_m_s"])
+        for mesh in EXPECTED_CELLS:
+            values = kinematics(cfg, speed, mesh, "S")
+            assert values["rpm"] == pytest.approx(float(row["rpm"]), abs=0.001)
+            assert values["tsr"] == pytest.approx(
+                tsr_from_rpm(float(row["rpm"]), speed, float(cfg["turbine"]["radius"])),
+                abs=0.002,
+            )
