@@ -39,7 +39,7 @@ widths, but they move the elements away from the experimental stations (r/R 0.30
 
 ## Proposed work (to decide)
 
-- [x] **E1 (231a.. see log)** Loft/element resampling with a chosen `dz` tied to `h` (the rule is NOT settled: the table
+- [x] **E1 (cfaeeff)** Loft/element resampling with a chosen `dz` tied to `h` (the rule is NOT settled: the table
       above only measured fixed dz = 0.05 and 0.1 m; scan dz/h before choosing), exact S809 outboard, circle ->
       S809 morph kept in the root segments; surface area and chord/twist deviation vs the
       committed loft reported (area 4.88423 m^2 today).
