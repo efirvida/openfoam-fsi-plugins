@@ -16,7 +16,7 @@ absolute level is not claimed.
       `run.json`; test first.
 - [x] **K2 (submitted; results not read yet)** `scripts/slurm/asm-epsilon-sensitivity.slurm` (one script, `meshFactor` from an
       environment variable) and the four submissions; read `sacct` before reporting anything.
-- [ ] **K3** Read the four arms with the committed scripts; table in the plan log.
+- [x] **K3** Read the four arms with the committed scripts (2026-10-12; all COMPLETED, `run.json` mesh_factor matches); table below.
 
 ## Submitted 2026-10-12 (library built 09:04:58, includes the P0.1 prefilter fix)
 
@@ -35,3 +35,17 @@ and the `.out`/`.err` before anything else; then
 `python3 scripts/comparePhaseVI.py --run-dir runs/asm-U7-coarse-<label> --speed 7 --sequence H --allow-short-window`
 and `python3 scripts/compareSectionLoads.py --alm-dir runs/asm-U7-coarse-<label>`; the comparator arm is
 `runs/alm-U7-coarse-hubfix`. Check `run.json` has `mesh_factor` equal to the arm before trusting the label.
+
+## Result (K3, 2026-10-12; 4 revs, drift flag True on every arm, so arm-to-arm only)
+
+| arm | eps/h | P [kW] | P vs exp 5.946 | Q [Nm] | T [N] (exp 1132) |
+|---|---|---|---|---|---|
+| ALM hubfix | - | 5.305 | -10.8 % | 704.7 | 1127 |
+| ASM mf0.5 | 1 | 5.127 | -13.8 % | 681.1 | 1105 |
+| ASM mf1 | 2 | 5.311 | -10.7 % | 705.6 | 1127 |
+| ASM mf2 | 4 | 5.405 | -9.1 % | 718 | 1132 |
+| ASM mf4 | 8 | 5.575 | -6.2 % | 740.6 | 1127 |
+
+- ASM mf1 reproduces ALM within 0.1 % in P (consistent with the P0.1 fix).
+- Power is NOT eps-insensitive: +8.7 % from eps/h 1 to 8, monotonic; thrust flat (<2.5 %); section R_sim moves <2 %.
+- Wider kernel raises power toward the experiment, so the agreement at eps/h 8 could be a smoothing artefact, not better physics. Needs converged runs before any claim.
