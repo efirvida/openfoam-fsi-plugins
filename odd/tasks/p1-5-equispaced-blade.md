@@ -73,3 +73,10 @@ Pending: E1 STL (needs `blade_phasevi.py` to accept a station list; `N_STATIONS`
 Read with `comparePhaseVI.py --run-dir runs/<model>-U7-coarse-<label> --speed 7 --sequence H --allow-short-window`
 and `compareSectionLoads.py --alm-dir ...` (check `run.json` `blade_dz` first). Accept only if
 equispaced is within the ALM-ASM bound of the Model Definition.
+
+## Resume here (written 2026-10-12, end of session)
+
+- Branch `feat/phasevi-equispaced-blade` (commits cfaeeff, ecfe724, 8893814). Jobs 11613555-58 (`squeue`/`sacct` first; 11613558 was pending on AssocMaxJobsLimit).
+- Then: read the four arms (recipe above), write the table here, decide acceptance, close P1.5 in `validation-master-plan.md`, Model Definition v1.1 entry (E4), continue with P2.1.
+- Open decision: `validation/phaseVI/geometry/phaseVI_blade_dz0p05.{stl,json}` are untracked; proposal is to version them (0.5 MB).
+- Do not rebuild `libturbinesFoam` while any arm is queued or running.
