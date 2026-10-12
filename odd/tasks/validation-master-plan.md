@@ -65,7 +65,7 @@ Resume pack: `odd/tasks/phasevi-sequence-s-validation.md`,
 `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineElement/actuatorSurfaceElement.C`,
 Engram `turbinesfoam/code-review-2026-10-11`.
 
-- [ ] **P0.1** Fix `actuatorSurfaceElement.C:122`: `chordBox.inflate(projectionRadius)`
+- [x] **P0.1** (914aa72) Fix `actuatorSurfaceElement.C:122`: `chordBox.inflate(projectionRadius)`
       passes metres where OpenFOAM v2506 expects a factor (`boundBox::inflate`
       = `grow(factor*mag(span))`); use `grow(projectionRadius)`. The defect is
       scale dependent (kernel truncated when chord < 1 m, oversized prefilter
@@ -174,3 +174,4 @@ Resume pack: `odd/tasks/iea15mw-platform-freeze.md`, `odd/tasks/iea15mw-asm-l2-v
 | Date | Event |
 |---|---|
 | 2026-10-11 | Plan written. Decisions: tip correction frozen as D&S without Glauert tip loss; up to 4 concurrent jobs, parallel steps per job, `sequana_cpu_dev` for jobs of about 20 min. |
+| 2026-10-11 | P0.1 done (914aa72): RED 12/18 -> GREEN 0/18 in `tests/asmPrefilterBox`; a 0.4 m chord kept 69-74 % of the kernel before. `test_asm` chord-averaging tolerance 1e-5 -> 1e-7 (difference now 9e-7). Pre-existing failure found: `tests/axialFlowTurbineASMSource` aborts (`hubRadius` missing since CHANGELOG #19); fix in the P0 exit. |

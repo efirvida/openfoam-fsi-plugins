@@ -208,6 +208,25 @@ documented one, for chords of 0.4, 1 and 3 m, three epsilons and an axis-aligned
 and a skew chord (RED 12 of 18 cases failing before, 0 after). Phase VI ASM
 results taken before this change were computed with a truncated kernel.
 
+#### 21. Document the actuator surface element as a Yang-Sotiropoulos / Massie-Ouro hybrid
+
+**Files:**
+- `README.md`
+- `turbinesFoam/README.md`
+- `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineElement/actuatorSurfaceElement.H`
+
+**Problem:** the docs presented `actuatorSurfaceElement` as the model of Yang &
+Sotiropoulos (arXiv:1702.02108v4, Sec. 2.1). The element takes that paper's
+chord-averaged sampling and uniform chordwise force, but spreads the force with
+a spherical Gaussian and a mesh-based width, which is the actuator surface
+model of Massie, Ouro, Stoesser & Luo (2019, *Energies*, Eq. 13:
+`eps = max(c/4, 4*cbrt(V_cell))`), without its `c/4` branch.
+
+**Fix:** both READMEs and the class description name the two sources and state
+the width actually used: `eps = 2*cbrt(V)*meshFactor`, i.e. `4*cbrt(V)` at the
+default `meshFactor 2` and `2*cbrt(V)` where a case sets `meshFactor 1` (the
+Phase VI case). The prefilter-box note of #20 is documented there too.
+
 ### New Features
 
 #### 2. AeroDyn blade shape (prebend, sweep, curve angle) in the ALM

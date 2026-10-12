@@ -27,8 +27,11 @@ Class
 Description
     An actuator surface element: an actuator line element that averages the
     inflow velocity over \c nChordwise equal chord strips and distributes the
-    aerodynamic force uniformly across those strips, with a mesh-based
-    projection width (Yang & Sotiropoulos, arXiv:1702.02108v4, Sec. 2.1).
+    aerodynamic force uniformly across those strips (Yang & Sotiropoulos,
+    arXiv:1702.02108v4, Sec. 2.1), spread with a spherical Gaussian kernel
+    whose width is mesh-based (Massie, Ouro, Stoesser & Luo, Energies 2019;
+    this element keeps their mesh branch 4*cbrt(V) at the default meshFactor
+    and drops the c/4 branch). A hybrid of the two, not either paper's model.
 
     The blade element momentum force chain -- coefficient lookup, dynamic
     stall, added mass, end effects, and CSV output -- is inherited unchanged

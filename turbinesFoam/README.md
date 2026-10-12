@@ -109,11 +109,22 @@ actuator lines to any compatible solver or turbulence model, e.g.,
 ## Actuator surface model (ASM)
 
 An optional blade **actuator surface model** element
-(`actuatorSurfaceElement`, Yang & Sotiropoulos, arXiv:1702.02108v4, Sec. 2.1)
-can be selected per line/blade instead of the default actuator line element.
-It computes the same blade element momentum loads as the line model (same
-coefficient lookup, dynamic stall, added mass, end effects, and CSV output)
-but differs in three ways:
+(`actuatorSurfaceElement`) can be selected per line/blade instead of the
+default actuator line element. It is a **hybrid** of two published models, not
+the model of one paper:
+
+- the **chord-averaged sampling and the uniform chordwise force distribution**
+  follow Yang & Sotiropoulos (arXiv:1702.02108v4, Sec. 2.1);
+- the **force spreading** is a spherical Gaussian kernel,
+  `eta = exp(-(r/eps)^2)/(eps^3 pi^1.5)`, as in the actuator surface model of
+  Massie, Ouro, Stoesser & Luo (2019, *Energies*), whose width is
+  `eps = max(c/4, 4*cbrt(V_cell))` (after Mendoza et al.). The paper's own
+  smoothed four-point cosine delta kernel is not used here (see the
+  *Kernel adaptation* note).
+
+The element computes the same blade element momentum loads as the line model
+(same coefficient lookup, dynamic stall, added mass, end effects, and CSV
+output) but differs in three ways:
 
 1. **Chord-averaged inflow** — the inflow velocity is the arithmetic mean of
    the cell-interpolated velocity at the midpoint of each of `nChordwise`
@@ -123,7 +134,15 @@ but differs in three ways:
    strip), each projected with its own Gaussian kernel.
 3. **Mesh-based projection width** — epsilon is `2 * cbrt(V) * meshFactor`
    (cell volume and `GaussianCoeffs.meshFactor` only), with no chord-length
-   term, so the model couples to meshes finer than the chord.
+   term, so the model couples to meshes finer than the chord. The default
+   `meshFactor 2` gives `eps = 4*cbrt(V)`, the mesh branch of Massie et al.'s
+   `max(c/4, 4*cbrt(V))` **without** its `c/4` branch; a case that sets
+   `meshFactor 1` (the NREL Phase VI case does) uses `eps = 2*cbrt(V)`, half
+   of that. State the value used whenever a result is quoted.
+
+The cell loop that deposits the force is prefiltered with the chord bounding
+box grown by the kernel's truncation radius `eps*sqrt(ln 1000)` in metres; the
+Gaussian is dropped beyond it, where it is below 0.1 % of its peak.
 
 ### Configuration
 
@@ -147,9 +166,10 @@ runtime, while the ALM tutorial defaults to `0.5`.
 
 ### Notes
 
-- **Kernel adaptation:** the paper's 3D smoothed-cosine delta kernel
-  (5-cell) is not implemented; the existing Gaussian projection kernel is
-  reused and documented as the adaptation.
+- **Kernel adaptation:** Yang & Sotiropoulos's 3D smoothed-cosine delta
+  kernel (5-cell) is not implemented in this element; the Gaussian kernel of
+  Massie et al. is used instead and documented as the adaptation (the blade
+  surface distributor `bladeSurface` does implement the cosine kernel).
 - **Force preservation:** the Gaussian kernel is evaluated at cell centres
   and not discretely renormalized; total-force preservation is approximate
   and inherited from the line model.

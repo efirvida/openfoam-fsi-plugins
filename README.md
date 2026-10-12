@@ -52,8 +52,9 @@ No submodules are used. All code is self-contained and built with `wmake`.
     official OpenFOAM formatter) — the repository remains submodule-free.
   - **Fork extension:** optional blade **actuator surface model (ASM)**
     (`elementType actuatorSurfaceElement;` + `nChordwise` per line/blade)
-    with chord-averaged inflow and mesh-based projection width; ALM remains
-    the byte-identical default. HAWT tutorial at
+    with chord-averaged inflow and mesh-based projection width (a hybrid of
+    Yang & Sotiropoulos 2017 sampling and the Massie/Ouro 2019 Gaussian
+    kernel, not either paper's model); ALM remains the byte-identical default. HAWT tutorial at
     `tutorials/axialFlowTurbineASM/` with an ALM-vs-ASM comparison script.
   - **Fork extension:** mesh-backed blade **actuator surface over an imported
     triangulation** (`surfaceGeometry` in a blade subdict): the element load is
