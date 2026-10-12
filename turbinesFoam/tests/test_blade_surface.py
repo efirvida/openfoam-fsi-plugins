@@ -867,6 +867,92 @@ def test_deposit_partition_of_unity_under_rotation(tmp_path, parallel):
         assert_allclose(vec, -patch, rtol=1e-5, atol=1e-9)
 
 
+def _read_internal_field(path):
+    """The nonuniform `internalField` list of a written field as (n, ncomp)."""
+    lines = open(path).read().split("\n")
+    start = [i for i, l in enumerate(lines) if l.startswith("internalField")][0]
+    count = int(lines[start + 1])
+    body = lines[start + 3:start + 3 + count]
+    return np.array(
+        [[float(v) for v in l.strip("()").split()] for l in body]
+    ).reshape(count, -1)
+
+
+def _write_cell_geometry(case_dir):
+    """Write the cell centres (`0/C`) and volumes (`0/V`) of the case mesh."""
+    for func in ("writeCellCentres", "writeCellVolumes"):
+        proc = subprocess.run(
+            ["postProcess", "-func", func, "-time", "0"],
+            cwd=case_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True,
+        )
+        assert proc.returncode == 0, proc.stdout[-2000:]
+    return (
+        _read_internal_field(os.path.join(case_dir, "0", "C")),
+        _read_internal_field(os.path.join(case_dir, "0", "V"))[:, 0],
+    )
+
+
+# Measured at t = 0.005 ... 0.02 s (15 to 153 deg): moment_field / -moment_nodes
+# = 0.99999989, 0.99999985, 0.99999991, 1.00000003, i.e. exact to the 6-digit
+# precision of the written field (the cosine kernel is symmetric about its node
+# on the uniform mesh, so its first moment is exact, not just its zeroth).
+DEPOSIT_MOMENT_RTOL = 1e-5
+
+
+def test_deposit_moment_about_rotor_axis(tmp_path):
+    """The deposited field has minus the node moment about the rotor axis.
+
+    Force conservation alone passes a deposit that puts the right total at the
+    wrong radius; the moment of the field, ``sum_cells V (C x f)``, must equal
+    minus ``sum_i X_i x F_i`` of the per-node CSV at every azimuth. The fixture
+    has one blade and no hub or tower, so the written ``force.turbine`` is the
+    blade force (checked against the blade-field integral). The axis passes
+    through the origin of the global frame (the node CSV frame).
+    """
+    case_dir = _copy_case(AFTAL_CASE_DIR, str(tmp_path / "rotating"))
+    _run_aftal_rotating(case_dir)
+    centres, volumes = _write_cell_geometry(case_dir)
+
+    nodes = _read_aftal_nodes(case_dir)
+    element = _read_aftal_element(case_dir)
+    integral = _read_force_integral(case_dir)
+    assert len(integral) == AFTAL_ROTATION_STEPS
+
+    for time, blade_integral in integral:
+        field = _read_internal_field(
+            os.path.join(case_dir, "%g" % time, "force.turbine")
+        )
+        weighted = volumes[:, None] * field
+        assert_allclose(weighted.sum(axis=0), blade_integral, rtol=1e-5, atol=1e-9)
+        field_moment = np.sum(np.cross(centres, field) * volumes[:, None], axis=0)
+
+        d = nodes[nodes.time == time]
+        X = _columns(d, ("x", "y", "z"))
+        F = _columns(d, ("fx", "fy", "fz"))
+        node_moment = np.sum(np.cross(X, F), axis=0)
+
+        axial = field_moment @ ROTOR_AXIS
+        assert abs(node_moment @ ROTOR_AXIS) > 0.0
+        ratio = axial / (-(node_moment @ ROTOR_AXIS))
+        print("time %g moment_field/-moment_nodes %.8f" % (time, ratio))
+        assert_allclose(ratio, 1.0, rtol=DEPOSIT_MOMENT_RTOL, atol=0.0)
+        assert_allclose(
+            field_moment, -node_moment, rtol=DEPOSIT_MOMENT_RTOL,
+            atol=DEPOSIT_MOMENT_RTOL * np.linalg.norm(node_moment),
+        )
+
+        # Lower bound on sensitivity: the same total force deposited at the
+        # element position has a moment more than 5 % away
+        e = element[element.time == time].iloc[0]
+        element_moment = np.cross(
+            [float(e.x), float(e.y), float(e.z)], weighted.sum(axis=0)
+        )
+        assert abs(element_moment @ ROTOR_AXIS - axial) > 0.05 * abs(axial)
+
+
 def test_parallel_total_preserved(surface_case, tmp_path):
     """Two ranks: the distributed total is preserved across the split.
 

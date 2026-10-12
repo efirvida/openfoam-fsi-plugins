@@ -19,6 +19,10 @@ sign: the field is the force on the flow, so `integral = -sum(element forces)`.
       Result (tests `test_multi_element_{alm,asm}_conserves_force`, 4 lifting elements on the
       `bladeSurface` fixture, serial): integral/sum = 0.999795 (ALM), 0.999574 (ASM), rtol 1e-3.
       RED observed: reverting the P0.1 fix gives 0.2303 for ASM (ALM unchanged 0.9998).
-- [ ] **T4** ASM+mesh: moment about the rotor axis of the deposited field vs node
+- [x] **T4** ASM+mesh: moment about the rotor axis of the deposited field vs node
       moment / torque. Measure the first-moment tolerance first, then fix it.
+      Result (`test_deposit_moment_about_rotor_axis`, rotating AFTAL, 4 steps): moment_field /
+      -moment_nodes = 0.99999989 .. 1.00000003, rtol 1e-5 (expected ~1e-2; a well-resolved cosine
+      kernel on a uniform mesh has an almost exact lattice first moment). Catches a deposit that
+      keeps the total force at the wrong radius or azimuth.
 - [ ] **T5** Changelog entry, mark P1.1 in the master plan, full relevant suite green.

@@ -106,7 +106,7 @@ tests; full suite green; the pattern for batched jobs proven.
 Resume pack: Phase 0 outputs, `src/fvOptions/bladeSurface/*`,
 `odd/tasks/iea15mw-asm-mesh-cp-diagnosis.md`, Engram `turbinesfoam/madsen-1988-actuator-surface`.
 
-- [ ] **P1.1** Conservation tests per method: injected force equals the sum of
+- [x] **P1.1** (538f9d2 + the moment test; ratios 0.9998 ALM, 0.9996 ASM, 1.0000 moment) Conservation tests per method: injected force equals the sum of
       element forces; for ASM+mesh also the moment about the axis. Already
       established by reading (partition of unity 1.000 +-0.4 % on the coarse
       mesh; moment frame consistent), still to become tests.
@@ -183,3 +183,4 @@ Resume pack: `odd/tasks/iea15mw-platform-freeze.md`, `odd/tasks/iea15mw-asm-l2-v
 | 2026-10-12 | Owner chose option (b) for D&S on IEA: keep D&S, re-centre the IEA band after a 3-rev Glauert control and the P3.1 root fix. Control job 11613092 (`runs/iea15mw-l2-ctrl`, to 23 revs, `sequana_cpu`). Decisions 1 (RA off) and 2 (bands) still unanswered; the Model Definition stays DRAFT. |
 | 2026-10-12 | Owner delegated decisions 1-2 to physical judgment. Model Definition v1 frozen except the IEA cp band: RA off (RA-on S-curve as pre-registered variant, stall onset only); Phase VI `abs(%P)` <= 10 %, `abs(%T)` <= 15 %, `c_n` +-10 % (0.47-0.80) / +-15 % (0.30); ASM-ALM <= 2 % Phase VI, <= 3 % IEA. Phase VI D&S numbers in RESULTS.md predate 4c49dc3 -> P2.1 re-baselines. |
 | 2026-10-12 | P0.4 control read (job 11613092, Glauert tip+root, revs 21-23): cp 0.5375 -> 0.5473 -> 0.5448, plateau 0.5461, drift +0.69 %/rev; ct 0.0613. D&S at the same horizon (11613058) 0.565, so D&S adds about +3.5 % over a control already +2.8 % over OLAF 0.5312; half of the excess over the references is not the tip model (root factor / flow relaxation, the P3.1 root polar is the suspect). Order decision (owner): the plan is followed in order; the IEA cp band stays provisional [0.476, 0.546] and is re-centred in P3.1/P3.3, not now. Phase 0 closes with that one explicit exception; next is P1.1. |
+| 2026-10-12 | P1.1 done: `test_multi_element_{alm,asm}_conserves_force` and `test_deposit_moment_about_rotor_axis` in `tests/test_blade_surface.py`. Integral/sum 0.999795 (ALM), 0.999574 (ASM, nChordwise 5); with the P0.1 fix reverted the ASM ratio is 0.2303, so the test catches that bug. Deposited moment about the axis / node moment 1.0000 +-2e-7. Env: parallel tests cannot run here (`libkahip.so` missing for `decomposePar`); the shell env needs Int64 `WM_OPTIONS`, the Int64 bin in `PATH` and `FOAM_USER_APPBIN` (the exact exports are in Engram `turbinesfoam/test-env-int64`). Next: P1.2. |
