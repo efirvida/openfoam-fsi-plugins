@@ -14,6 +14,24 @@ absolute level is not claimed.
 
 - [x] **K1** `--mesh-factor F` in `tools/generate_case.py` and `scripts/runPhaseVI.sh`, recorded in
       `run.json`; test first.
-- [ ] **K2** `scripts/slurm/asm-epsilon-sensitivity.slurm` (one script, `meshFactor` from an
+- [x] **K2 (submitted; results not read yet)** `scripts/slurm/asm-epsilon-sensitivity.slurm` (one script, `meshFactor` from an
       environment variable) and the four submissions; read `sacct` before reporting anything.
 - [ ] **K3** Read the four arms with the committed scripts; table in the plan log.
+
+## Submitted 2026-10-12 (library built 09:04:58, includes the P0.1 prefilter fix)
+
+| meshFactor | eps/h | label | job | out | run dir (expected) |
+|---|---|---|---|---|---|
+| 1 | 2 | `asm-mf1` | 11613259 | `runs/asm-mf1.out` | `runs/asm-U7-coarse-asm-mf1` |
+| 0.5 | 1 | `asm-mf0p5` | 11613260 | `runs/asm-mf0p5.out` | `runs/asm-U7-coarse-asm-mf0p5` |
+| 2 | 4 | `asm-mf2` | 11613261 | `runs/asm-mf2.out` | `runs/asm-U7-coarse-asm-mf2` |
+| 4 | 8 | `asm-mf4` | 11613262 | `runs/asm-mf4.out` | `runs/asm-U7-coarse-asm-mf4` |
+
+Submit line: `sbatch --export=ALL,MESH_FACTOR=<f>,RUN_LABEL=<label> --output=runs/<label>.out --error=runs/<label>.err scripts/slurm/asm-epsilon-sensitivity.slurm`.
+Do NOT rebuild `libturbinesFoam` while any of these is queued or running.
+
+**K3 recipe (after the jobs end).** For each arm read `sacct -j <job> --format=JobID,State,Elapsed,ExitCode,MaxRSS`
+and the `.out`/`.err` before anything else; then
+`python3 scripts/comparePhaseVI.py --run-dir runs/asm-U7-coarse-<label> --speed 7 --sequence H --allow-short-window`
+and `python3 scripts/compareSectionLoads.py --alm-dir runs/asm-U7-coarse-<label>`; the comparator arm is
+`runs/alm-U7-coarse-hubfix`. Check `run.json` has `mesh_factor` equal to the arm before trusting the label.
