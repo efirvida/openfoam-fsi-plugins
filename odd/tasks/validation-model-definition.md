@@ -72,13 +72,23 @@ results. They are proposals until decision 2 is taken.
 
 ## Open items
 
-- **D&S asymptote on the IEA rotor (P0.4).** The 0.41-revolution gate from the
-  converged state was stable but the flow had not relaxed (D&S arm cp 0.574, +5 %
-  over the Glauert control, localised at r/R > 0.9). Job 11613058 continues it for
-  3 revolutions; its plateau decides decision 3. If the plateau sits outside the
-  IEA cp band, the owner chooses between: keep D&S and widen nothing (the IEA band
-  then fails and is reported as such), keep D&S with a per-pillar epsilon, or keep
-  the Glauert tip loss for IEA (violates "one definition").
+- **D&S asymptote on the IEA rotor (P0.4) -- measured, and it fails the proposed
+  IEA band.** Job 11613058 continued the D&S arm for 3 revolutions from the
+  converged rev-20 state. cp per 120 deg window: 0.5748 -> 0.5721 -> 0.5702 ->
+  0.5688 -> 0.5677 -> 0.5668 -> 0.5661 -> 0.5655 -> 0.5650 (steps -2.76e-3 ...
+  -0.51e-3, still falling; an Aitken estimate on the last three windows gives
+  about 0.562, a power-law tail would go lower). Reference points: OLAF 0.5312,
+  CCBlade 0.4910, Glauert control (same library, 0.4 rev only) 0.5476, previous
+  platform 0.534. So D&S is stable and its effect is where it should be (tip
+  band r/R 0.95-1.0: normal force x1.68, tangential x1.49, alpha -0.97 deg), but
+  on this rotor it adds about +3 % cp to a Glauert control that is already +3 %
+  over OLAF, ending near +5.5...6 % over OLAF, outside the proposed band
+  [0.476, 0.546]. The control was run 0.4 rev only; the +3 % split between tip
+  model and flow relaxation is not separated until a 3-rev control exists.
+  The owner decides (decision 3): (a) keep D&S frozen and accept that the IEA
+  band fails, reporting it; (b) keep D&S and re-centre the IEA band on the
+  evidence of a 3-rev control plus the P3.1 root fix, which also moves cp; (c) keep
+  the Glauert tip loss for the IEA pillar, which breaks "one definition".
 - **IEA stalled-root polar (P3.1)** and the **ASM+mesh arm** are Phase 3 work.
 - **Frozen IEA numbers are stale.** The L2 platform (cp 0.534) was run before
   `4c49dc3`; with the current library and the same Glauert tip the control reads
