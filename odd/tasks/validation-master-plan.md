@@ -76,7 +76,7 @@ Engram `turbinesfoam/code-review-2026-10-11`.
       sampling + a Gaussian spreading kernel as in Massie/Ouro 2019
       (eps = max(c/4, 4*cbrt(V)); the code default `meshFactor 2` equals 4h, the
       Phase VI case overrides it to 1). Fix the README claim that it is the paper's model.
-- [ ] **P0.3** Write `odd/tasks/validation-model-definition.md` (the frozen v1) with:
+- [ ] **P0.3** (DRAFT in `odd/tasks/validation-model-definition.md`, awaiting owner confirmation) Write `odd/tasks/validation-model-definition.md` (the frozen v1) with:
       tip correction = **Dag & Sorensen, Glauert tip loss off** (user decision
       2026-10-11); root = Prandtl hub loss with `hubRadius`; rotational
       augmentation, epsilon rule, velocity sampling, polars; the knobs that differ
@@ -94,7 +94,7 @@ Engram `turbinesfoam/code-review-2026-10-11`.
       fallback options; do not freeze silently.
 - [x] **P0.5** (c0a409b) Smoke-test the parallel-steps-in-one-job pattern on `sequana_cpu_dev`
       (two 48-rank steps on two nodes, one node each).
-- [ ] **P0.6** Read the Du-Selig A/B on the IEA L2 (commit `ff58337`) and decide
+- [x] **P0.6** (recommendation: off in both pillars; decision 1 of the Model Definition) Read the Du-Selig A/B on the IEA L2 (commit `ff58337`) and decide
       whether augmentation is on in both pillars (physics should not change
       between pillars; its effect on the attached IEA rotor is what the A/B measures).
 
