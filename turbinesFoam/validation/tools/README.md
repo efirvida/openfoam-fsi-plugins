@@ -109,6 +109,40 @@ change the run never held.
 Exit codes: `1` no `postProcessing/turbines` under the run dir, or a `turbine.csv`
 missing a column.
 
+### `induction_closure.py` — how far is the applied thrust from `2 rho U² a (1-a)`?
+
+```sh
+python3 turbinesFoam/validation/tools/induction_closure.py write-dict \
+    --origin 0 0 12.192 --axis 1 0 0 --wind 1 0 0 --radius 5.029 --out system/inductionClosureSample
+postProcess -func inductionClosureSample -latestTime
+python3 turbinesFoam/validation/tools/induction_closure.py analyse \
+    runs/X/postProcessing/inductionClosureSample runs/X \
+    --rho 1 --u-inf 7 --radius 5.029 --wind 1 0 0 --origin 0 0 12.192 --axis -1 0 0 --t-from 2.9 --t-to 3.339 --json --csv /tmp/closure.csv
+```
+
+Momentum closure of an actuator rotor (Madsen 1988). `write-dict` writes a
+`sample` dictionary of `circle` sets (uniform `dTheta`, raw format) at N radii
+between 0.05 R and 1.3 R on planes at signed offsets along the wind (default 0,
+-0.25, -1 R; negative = upstream). `analyse` takes the azimuthal mean of the
+axial velocity per ring (`a = 1 - u/U_inf`) and compares, per element radius, the
+thrust the blades applied per unit radius (sum over blades of the time-mean
+`fx` / `dr`, element histories united in numeric folder order; the element
+radius is its distance from the rotor axis, from the `x y z` columns, since
+`root_dist` is a 0..1 span fraction and never read) with
+`2 rho U_inf² a (1-a) 2 pi r`. It reports a ratio per radius and per plane plus
+the integrated ratio, **never a pass/fail**: the relation degrades with loading,
+and rows with `a >= 0.4` are flagged as outside its validity. Without
+`--t-from`/`--t-to` the last half of the available span is used and the output
+says so.
+
+`--rho` is required. The incompressible solver writes kinematic forces
+(N/rho), so the Phase VI case uses `--rho 1`; a physical density applies only
+to compressible runs whose CSV forces are in newtons.
+
+Exit codes: `1` a sample directory, run directory, ring file or element CSV is
+missing; `2` usage error (e.g. `--rho` omitted); `3` unusable data (empty time
+window, malformed file).
+
 ## Adding a tool
 
 Follow the `validation-analysis-tools` skill. The short form: check what exists,
