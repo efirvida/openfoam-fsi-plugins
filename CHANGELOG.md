@@ -227,6 +227,26 @@ the width actually used: `eps = 2*cbrt(V)*meshFactor`, i.e. `4*cbrt(V)` at the
 default `meshFactor 2` and `2*cbrt(V)` where a case sets `meshFactor 1` (the
 Phase VI case). The prefilter-box note of #20 is documented there too.
 
+#### 22. Render `hubRadius` in the IEA 15 MW case when the Glauert end effects are on
+
+**Files:**
+- `turbinesFoam/validation/iea15mw/tools/generate_case.py`
+- `turbinesFoam/tests/test_iea15mw_case.py`
+
+**Problem:** since #19 the Glauert root factor is the Prandtl hub loss and the
+solver aborts with `FatalErrorInFunction` when `rootEffects` is on and the
+rotor coefficients carry no positive `hubRadius`. The Phase VI generator was
+updated; the IEA generator was not, so the frozen L2 platform recipe
+(`TURBINE_END_EFFECTS=on`, tip and root on) could no longer start on the
+current library. The failure appears only at run time, after the mesh and the
+decomposition are in place; the string tests did not see it.
+
+**Fix:** the render emits `hubRadius 3.97` (`blade_geometry.HUB_RADIUS`, the
+published hub radius at which the blade root sits) beside `rotorRadius`
+whenever `endEffects` is active, and not otherwise, so the committed default
+render and its `--check` gate are unchanged. `test_iea15mw_case.py` asserts the
+key is the only difference between the default and the Glauert render.
+
 ### New Features
 
 #### 2. AeroDyn blade shape (prebend, sweep, curve angle) in the ALM

@@ -1286,6 +1286,16 @@ def render_fv_options(
     rotation_dir = -1.0 if rotation == "cw" else 1.0
     sampling_keys = _sampling_keys(velocity_sample_radius, n_velocity_samples)
     end_effects = _end_effects_block(end_effects_active, tip_effects, root_effects)
+    # The Glauert root factor is the Prandtl hub loss built from the hub surface
+    # radius, so the solver aborts on `rootEffects on` without a positive
+    # `hubRadius` (CHANGELOG #19). The radius is a rotor property; it is
+    # rendered whenever the end effects are active, and not otherwise so that
+    # the committed default render stays byte-identical.
+    hub_radius_key = (
+        f"        hubRadius {blade_geometry.HUB_RADIUS:.8g};\n"
+        if end_effects_active == "on"
+        else ""
+    )
     rotational_augmentation_block = _rotational_augmentation_block(
         rotational_augmentation
     )
@@ -1386,7 +1396,7 @@ def render_fv_options(
         freeStreamVelocity {foam_vector(free_stream)};
         tipSpeedRatio {tsr:.8g};
         rotorRadius {ROTOR_RADIUS:.8g};
-        rotationDirection {rotation_dir:.8g};
+{hub_radius_key}        rotationDirection {rotation_dir:.8g};
         azimuthalOffset 0;
         coneAngle {float(cone_angle):.8g};
 {sampling_keys}

@@ -1997,6 +1997,24 @@ class TestEndEffects:
         for key in default:
             if key != "endEffects":
                 assert default[key] == glauert[key], key
+        # The Prandtl hub loss needs the rotor-level hub radius; nothing else
+        # differs.
+        assert set(glauert) - set(default) == {"hubRadius"}
+
+    def test_glauert_render_carries_the_hub_radius(self, monkeypatch):
+        """`rootEffects on` aborts the solver without a positive `hubRadius`
+        (the root factor is the Prandtl hub loss built from the hub surface
+        radius, CHANGELOG #19), so the render must carry it, and only when the
+        end effects are active so the default render stays byte-identical."""
+        _clear_tip_loss_env(monkeypatch)
+        default = _coeffs(_parse_foam(generate_case.render_fv_options()))
+        glauert = _coeffs(
+            _parse_foam(generate_case.render_fv_options(end_effects_active="on"))
+        )
+        assert "hubRadius" not in default
+        assert float(glauert["hubRadius"]) == pytest.approx(
+            blade_geometry.HUB_RADIUS
+        )
 
     def test_flag_reaches_every_twin(self, tmp_path, monkeypatch):
         _clear_tip_loss_env(monkeypatch)
