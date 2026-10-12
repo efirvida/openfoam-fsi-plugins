@@ -76,7 +76,7 @@ Engram `turbinesfoam/code-review-2026-10-11`.
       sampling + a Gaussian spreading kernel as in Massie/Ouro 2019
       (eps = max(c/4, 4*cbrt(V)); the code default `meshFactor 2` equals 4h, the
       Phase VI case overrides it to 1). Fix the README claim that it is the paper's model.
-- [ ] **P0.3** (DRAFT in `odd/tasks/validation-model-definition.md`, awaiting owner confirmation) Write `odd/tasks/validation-model-definition.md` (the frozen v1) with:
+- [ ] **P0.3** (v1 frozen except the IEA cp band, `odd/tasks/validation-model-definition.md`) Write `odd/tasks/validation-model-definition.md` (the frozen v1) with:
       tip correction = **Dag & Sorensen, Glauert tip loss off** (user decision
       2026-10-11); root = Prandtl hub loss with `hubRadius`; rotational
       augmentation, epsilon rule, velocity sampling, polars; the knobs that differ
@@ -94,7 +94,7 @@ Engram `turbinesfoam/code-review-2026-10-11`.
       fallback options; do not freeze silently.
 - [x] **P0.5** (c0a409b) Smoke-test the parallel-steps-in-one-job pattern on `sequana_cpu_dev`
       (two 48-rank steps on two nodes, one node each).
-- [x] **P0.6** (recommendation: off in both pillars; decision 1 of the Model Definition) Read the Du-Selig A/B on the IEA L2 (commit `ff58337`) and decide
+- [x] **P0.6** (off in both pillars, plus a pre-registered RA-on variant of the S curve in P2) Read the Du-Selig A/B on the IEA L2 (commit `ff58337`) and decide
       whether augmentation is on in both pillars (physics should not change
       between pillars; its effect on the attached IEA rotor is what the A/B measures).
 
@@ -181,3 +181,4 @@ Resume pack: `odd/tasks/iea15mw-platform-freeze.md`, `odd/tasks/iea15mw-asm-l2-v
 | 2026-10-12 | P0.4 gate, short run (0.41 rev from the converged rev-20 state, jobs 11613044 D&S and 11613049 control, 96 ranks, dev): **stable**, no hub-transition instability. Control (Glauert tip+root, current lib) vs frozen Glauert: cp +2.4..2.7 %, all in r/R < 0.3 (root factor change of #19; r/R 0.3-1.0 within +-1 %). D&S vs control: cp +4.2..5.2 %, cd +5.3 %, localised at the tip (r/R 0.95-1.0 Fn x1.68, Ft x1.50, dalpha -0.96 deg; 0.90-0.95 x1.18; 0.7-0.9 x1.02; 0.3-0.7 within +0.5 %). Flow not relaxed after 0.4 rev, so the asymptote is not known: D&S transient cp 0.574 vs OLAF 0.5312 (+8 %). Confirmation run: job 11613058, 3 revs on `sequana_cpu` (`TURBINE_TOTAL_REVS=23`), reads with `tools/window_response.py` + `iea15mw/scripts/station_ratio.py`. |
 | 2026-10-12 | P0.4 confirmation (job 11613058, 3 revs): D&S stable throughout; cp 0.5748 -> 0.5650 over 9 windows of 120 deg and still falling (~0.562 by Aitken). IEA D&S plateau is about +5.5..6 % over OLAF 0.5312, outside the proposed band [0.476, 0.546]; the Glauert control (0.4 rev) reads 0.5476. Gate "inconsistent" -> brought to the owner, not frozen silently. Full suite after the fixes: only `test_al.py::test_parallel` fails, an environment limit (no scotch in the module). |
 | 2026-10-12 | Owner chose option (b) for D&S on IEA: keep D&S, re-centre the IEA band after a 3-rev Glauert control and the P3.1 root fix. Control job 11613092 (`runs/iea15mw-l2-ctrl`, to 23 revs, `sequana_cpu`). Decisions 1 (RA off) and 2 (bands) still unanswered; the Model Definition stays DRAFT. |
+| 2026-10-12 | Owner delegated decisions 1-2 to physical judgment. Model Definition v1 frozen except the IEA cp band: RA off (RA-on S-curve as pre-registered variant, stall onset only); Phase VI `abs(%P)` <= 10 %, `abs(%T)` <= 15 %, `c_n` +-10 % (0.47-0.80) / +-15 % (0.30); ASM-ALM <= 2 % Phase VI, <= 3 % IEA. Phase VI D&S numbers in RESULTS.md predate 4c49dc3 -> P2.1 re-baselines. |

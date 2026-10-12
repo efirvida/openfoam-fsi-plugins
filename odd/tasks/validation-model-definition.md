@@ -1,29 +1,31 @@
 # Validation Model Definition v1 — ALM / ASM / ASM+mesh
 
-**Status:** DRAFT until the owner confirms the three decisions below and the P0.4
-tip-correction asymptote is read (see "Open items"). It becomes **v1 frozen** when
-the status line is changed and the commit is tagged in the master plan.
+**Status:** **v1 FROZEN except the IEA cp band** (2026-10-12). The owner delegated decisions 1
+and 2 to the agent's physical judgment and chose option (b) for decision 3. The IEA cp
+band is re-centred after the 3-rev Glauert control (job 11613092) and the P3.1 root fix.
 **Plan:** `odd/tasks/validation-master-plan.md` (P0.3) · **Date:** 2026-10-12
 
 One definition serves both pillars (Phase VI against the experiment, IEA 15 MW
 against OLAF/BEM). A knob that differs between pillars is listed in "Knobs that
 differ" with its reason; nothing else may differ.
 
-## Decisions to confirm (owner)
+## Decisions taken
 
-1. **Rotational augmentation off in both pillars** (recommended). Evidence: the
-   Du-Selig A/B on the frozen IEA L2 (`ff58337`, `odd/tasks/iea15mw-platform-freeze.md`)
-   moves cp by +0.74 % and acts only at the stalled root (alpha 52-56 deg,
-   r/R < 0.1); it does not reproduce the +49...+71 % inboard tangential force of the
-   URANS-vs-BEM paper pairs, and needs coefficients fitted per profile, which this
-   plan forbids (rule: no free-parameter calibration). The Phase VI acceptance points
-   (7 and 10 m/s) are attached flow. Consequence to state in every result: the
-   stall onset on the 21-point Sequence S curve is read **without** stall delay,
-   so a late measured onset is a known limit, not a failure; an RA-on variant of
-   that curve is an ablation, labelled as such.
-2. **The bands below** (written before the v1 runs; see the caveat under them).
-3. **Which D&S status counts as "frozen"** if the P0.4 asymptote is inconsistent
-   (see "Open items").
+1. **Rotational augmentation off in both pillars, with a pre-registered RA-on
+   variant.** Evidence: on Phase VI at 7 m/s with D&S and the root effect on,
+   augmentation off gives %P +0.45 and Du-Selig on gives +6.24
+   (`campaign-results/RESULTS.md`, those runs predate `4c49dc3`); on the frozen
+   IEA L2 it moves cp +0.74 % and acts only at the stalled root, with
+   coefficients that would need per-profile fitting (forbidden here). The
+   acceptance points (7 and 10 m/s) are attached flow. The 21-point Sequence S
+   curve is run in P2 **twice**, RA off (the definition) and RA on with the
+   paper constants (a = b = d = 1, no fitting), both fixed before the run. The
+   RA-on curve is judged only on stall onset (>= 10 m/s) and reported beside the
+   definition, never replacing it.
+2. **Bands: tightened where the physics supports it** (below). A band is only as
+   precise as the reference it is judged against, so each carries its reason.
+3. **D&S on IEA: option (b).** Keep D&S; re-centre the IEA cp band after the 3-rev
+   Glauert control and the P3.1 root fix, then freeze it before the v1 IEA runs.
 
 ## Frozen knobs (both pillars)
 
@@ -52,23 +54,25 @@ differ" with its reason; nothing else may differ.
 
 ## Pre-registered bands
 
-Written on 2026-10-12, **before** any run with this definition. Caveat: the
-owner and the agent had already seen the previous-platform numbers (IEA frozen ALM
+Written on 2026-10-12, **before** any run with this definition. Caveat: both of us had already seen the previous-platform numbers (IEA frozen ALM
 cp 0.534, ASM 0.574, Phase VI 7 m/s torque -7.6 % with Glauert tip), so the
 bands are justified from the references and the published spread, not from those
-results. They are proposals until decision 2 is taken.
+results. They are frozen except the IEA cp centre.
 
 | Pillar | Quantity | Band | Justification |
 | --- | --- | --- | --- |
-| Phase VI | `abs(%P)` and `abs(%T)` at 7 and 10 m/s, Sequence S, no configuration change after Sequence H | <= 15 % | measurement uncertainty plus the spread among published ALM validations of this rotor; deep stall excluded |
-| Phase VI | spanwise `c_n` at r/R 0.30, 0.47, 0.63, 0.80 | within +-15 % of the experiment | station uncertainty of the pressure-tap sections |
+| Phase VI | `abs(%P)` at 7 and 10 m/s, Sequence S, no configuration change after Sequence H | <= 10 % | attached flow, the regime the formulation claims; the previous-platform D&S + Prandtl run reached +0.45 % at 7 m/s, so 15 % would not discriminate |
+| Phase VI | `abs(%T)` at 7 and 10 m/s | <= 15 % | thrust is the blade-root flap force, derived through a moment arm, so it carries more experimental uncertainty than torque |
+| Phase VI | spanwise `c_n` at r/R 0.47, 0.63, 0.80 | within +-10 % of the experiment | the section loading matched within +-6 % there in the D&S diagnosis |
+| Phase VI | spanwise `c_n` at r/R 0.30 | within +-15 % | inboard, root-effect region, wider scatter in the pressure-tap sections |
 | Phase VI | r/R 0.95 | reported, not an acceptance criterion | inside one epsilon of the tip (eps = 0.63 m on the coarse mesh) |
 | Phase VI | 13-25 m/s | reported, not a criterion | deep stall is a known limit of the formulation |
-| IEA | rotor `cp` at rated | between the committed CCBlade/BEM value 0.4910 and the OLAF free wake 0.5312, widened by 0.015 on each side: **[0.476, 0.546]** | the two committed references bracket the answer; the width is 3 % of their midpoint |
+| IEA | rotor `cp` at rated | **to be re-centred** (decision 3b); until then the provisional [0.476, 0.546] = the committed CCBlade/BEM 0.4910 and OLAF 0.5312 widened by 3 % of their midpoint | the references bracket the answer; the centre is moved only by physical corrections (3-rev control, P3.1 root), never by the v1 result |
 | IEA | spanwise `c_n` per band r/R 0.3-0.5, 0.5-0.7, 0.7-0.9 | within +-10 % of OLAF | the frozen ALM sat +2.7 % over BEM and within +-6 % of OLAF (reference/ours 1.06, 1.04, 0.99 in the three bands) |
 | IEA | tip band r/R 0.9-1.0 | reported against OLAF, not an acceptance criterion until an OLAF tip reference is committed | `spanwise-references.csv` stops at 0.9 |
-| Both | `abs(cp_ASM - cp_ALM) / cp_ALM` | <= 3 % | ten times the 0.3 % that Santoni et al. 2024 publish; Phase VI showed 0.3 %. The IEA ASM measured +7.05 % on the previous platform: P3.4 explains it, and the band stands |
-| Both | ASM+mesh against ALM | same bands as ASM | the mesh is a different realisation of the same loading |
+| Phase VI | `abs(cp_ASM - cp_ALM) / cp_ALM` | <= 2 % | the published difference is 0.3 % (Santoni et al. 2024) and Phase VI showed 0.3 %; 2 % leaves room for the corrected kernel (`914aa72`) |
+| IEA | `abs(cp_ASM - cp_ALM) / cp_ALM` | <= 3 % | chord is only about 2.7 cells there, so the surface and the line resolve differently; the previous-platform +7.05 % is explained by P3.4 and the band stands |
+| Both | ASM+mesh against ALM | same band as the ASM of its pillar | the mesh is a different realisation of the same loading |
 
 ## Open items
 
@@ -94,3 +98,6 @@ results. They are proposals until decision 2 is taken.
   `4c49dc3`; with the current library and the same Glauert tip the control reads
   cp +2.4..2.7 % higher (root band only). Every IEA number quoted in this plan
   from before 2026-10-12 is labelled "previous platform".
+- **Phase VI baselines are stale too.** The D&S results in `RESULTS.md` (+0.45 % at
+  7 m/s) predate `4c49dc3`; P2.1 re-baselines them with the current root factor
+  before any band is judged.
