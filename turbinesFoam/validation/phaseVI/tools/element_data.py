@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from blade_resample import resample_blade
 from case_config import (
     ROOT_CUTOUT_RADIUS,
     ROOT_CYLINDER_END,
@@ -28,11 +29,30 @@ from case_config import (
 # diameter is twice the blade root station (TP-500-29955 has no hub table).
 HUB_DIAMETER = 2.0 * ROOT_CUTOUT_RADIUS
 
+# Outer radius of the `cylinder` elements of the committed 50-element layout (the first
+# 8 elements, i.e. the first 4 table segments, end at the station 1.0675 m). The
+# equispaced layout (`turbine.blade_dz`) keeps this boundary.
+ELEMENT_CYLINDER_END = 1.0675
+
+
+def blade_stations(cfg: dict[str, Any], blade: list[dict[str, float]] | None = None) -> list[dict[str, float]]:
+    """The station table the elements follow: committed, or equispaced when `turbine.blade_dz` is set."""
+    stations = blade if blade is not None else read_blade()
+    dz = cfg["turbine"].get("blade_dz")
+    return resample_blade(stations, float(dz)) if dz else stations
+
+
+def blade_element_count(cfg: dict[str, Any]) -> int | None:
+    """One element per table segment of the equispaced layout; None keeps the configured count."""
+    if not cfg["turbine"].get("blade_dz"):
+        return None
+    return len(blade_stations(cfg)) - 1
+
 
 def blade_element_rows(cfg: dict[str, Any], blade: list[dict[str, float]] | None = None) -> list[list[float]]:
     """Element data rows for one blade, in turbinesFoam column order."""
     pitch = float(cfg["turbine"]["pitch_deg"])
-    stations = blade if blade is not None else read_blade()
+    stations = blade_stations(cfg, blade)
     rows = []
     for station in stations:
         # NREL twist/pitch is positive towards feather; the axial-flow element
@@ -57,6 +77,11 @@ def blade_element_profiles(cfg: dict[str, Any], blade: list[dict[str, float]] | 
     The count of cylinder elements follows the element interpolation used by
     `axialFlowTurbineALSource`, matching the shared scaffold.
     """
+    if cfg["turbine"].get("blade_dz"):
+        table = blade_stations(cfg, blade)
+        mids = [(a["radius"] + b["radius"]) / 2.0 for a, b in zip(table, table[1:])]
+        n_root = sum(1 for mid in mids if mid < ELEMENT_CYLINDER_END)
+        return ["cylinder"] * n_root + ["S809"] * (len(mids) - n_root)
     stations = blade if blade is not None else read_blade()
     n_elements = int(cfg["turbine"]["n_elements"])
     radius = float(cfg["turbine"]["radius"])

@@ -44,6 +44,7 @@ from case_config import (
     turbine_origin,
 )
 from element_data import (
+    blade_element_count,
     blade_element_profiles,
     hub_element_rows,
     render_blade_element_data,
@@ -661,7 +662,12 @@ def render_fv_options(
         raise ValueError("nChordwise must be a positive integer")
     else:
         n_chordwise = int(n_chordwise)
-    if n_elements is None:
+    equispaced_count = blade_element_count(cfg)
+    if equispaced_count is not None:
+        if n_elements is not None:
+            raise ValueError("--n-elements cannot be combined with --blade-dz (one element per table segment)")
+        n_elements = equispaced_count
+    elif n_elements is None:
         n_elements = int(actuator["n_elements"])
     elif int(n_elements) <= 0:
         raise ValueError("nElements must be a positive integer")
@@ -1266,6 +1272,17 @@ def main(argv: list[str] | None = None) -> int:
              "support 2.5*h of the cell)",
     )
     parser.add_argument(
+        "--blade-dz",
+        type=_positive_float,
+        default=None,
+        metavar="DZ",
+        help="render the blade at constant spanwise spacing DZ [m] outboard of the "
+             "airfoil start (tools/blade_resample.py): the element table is "
+             "resampled and nElements becomes one element per table segment (not "
+             "combinable with --n-elements). Rule: DZ = min(0.05, h/2). Absent, "
+             "the committed 26-station table governs and the render is unchanged",
+    )
+    parser.add_argument(
         "--mesh-factor",
         type=_positive_float,
         default=None,
@@ -1304,6 +1321,8 @@ def main(argv: list[str] | None = None) -> int:
         # applied first so that the refine-level scaling multiplies it.
         if args.mesh_factor is not None:
             cfg["turbine"]["gaussian_mesh_factor"] = float(args.mesh_factor)
+        if args.blade_dz is not None:
+            cfg["turbine"]["blade_dz"] = float(args.blade_dz)
         if args.refine_level:
             cfg["turbine"]["gaussian_mesh_factor"] = float(
                 cfg["turbine"]["gaussian_mesh_factor"]

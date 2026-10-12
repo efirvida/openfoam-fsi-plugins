@@ -10,6 +10,7 @@
 #                 [--end-revs FLOAT] [--run-label WORD] [--stage0]
 #                 [--restart] [--rotational-augmentation on|off]
 #                 [--root-effects on|off] [--refine-level N] [--mesh-factor F]
+#                 [--blade-dz DZ]
 #                 [--run] [--submit]
 #
 # -m/-u select the model and the per-speed measured TSR from config/case.yaml.
@@ -39,6 +40,11 @@
 # scaling and the effective value is recorded as `mesh_factor` in run.json. The
 # shared mesh directory keys on the refine level only: the mesh is the same for
 # every mesh factor.
+# --blade-dz DZ renders the blade at constant spanwise spacing DZ [m] outboard of the
+# airfoil start (P1.5; positive number, exit 2 otherwise; not combinable with
+# --n-elements). Elements, and for asm-mesh the lofted STL staged into the run
+# directory, follow the resampled table; run.json records `blade_dz`. Rule:
+# DZ = min(0.05, h/2). Absent, the committed layout is used unchanged.
 # --run-label WORD appends -WORD to the run id (`runs/<id>-WORD`) and records it
 # in run.json, so two render variants of the same (model, speed, mesh) live in
 # separate, independently restartable directories (the two-arm campaign uses it
@@ -66,7 +72,7 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/.." && pwd)
 
 usage() {
-    sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,68p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 model=""
@@ -86,6 +92,7 @@ div_phi_u=""
 polar=""
 refine_level=0
 mesh_factor=""
+blade_dz=""
 delta_t=""
 end_revs=""
 run_label=""
@@ -112,6 +119,7 @@ while [ $# -gt 0 ]; do
         --polar) polar="$2"; shift ;;
         --refine-level) refine_level="$2"; shift ;;
         --mesh-factor) mesh_factor="$2"; shift ;;
+        --blade-dz) blade_dz="$2"; shift ;;
         --delta-t) delta_t="$2"; shift ;;
         --end-revs) end_revs="$2"; shift ;;
         --run-label) run_label="$2"; shift ;;
@@ -221,6 +229,14 @@ if [ -n "$mesh_factor" ]; then
     # Positive finite number; the generator re-validates it, this fails early.
     if ! python3 -c 'import math, sys; v = float(sys.argv[1]); sys.exit(0 if v > 0 and math.isfinite(v) else 1)' "$mesh_factor" 2>/dev/null; then
         echo "ERROR: --mesh-factor must be a positive number" >&2; exit 2
+    fi
+fi
+if [ -n "$blade_dz" ]; then
+    if ! python3 -c 'import math, sys; v = float(sys.argv[1]); sys.exit(0 if v > 0 and math.isfinite(v) else 1)' "$blade_dz" 2>/dev/null; then
+        echo "ERROR: --blade-dz must be a positive number" >&2; exit 2
+    fi
+    if [ -n "$n_elements" ]; then
+        echo "ERROR: --blade-dz and --n-elements are mutually exclusive" >&2; exit 2
     fi
 fi
 if [ -n "$delta_t" ]; then
@@ -348,6 +364,9 @@ render_args=(--mesh "$mesh" --speed "$speed" --domain "$domain" --sequence "$seq
 if [ -n "$mesh_factor" ]; then
     render_args+=(--mesh-factor "$mesh_factor")
 fi
+if [ -n "$blade_dz" ]; then
+    render_args+=(--blade-dz "$blade_dz")
+fi
 if [ -n "$delta_t" ]; then
     render_args+=(--delta-t "$delta_t")
 fi
@@ -419,6 +438,15 @@ staged_stl_sha256=""
 if [ "$model" = "asm-mesh" ]; then
     stl_src="$root/../../geometry/stl/phaseVI_blade.stl"
     meta="$root/../../geometry/metadata/phaseVI_blade.json"
+    if [ -n "$blade_dz" ]; then
+        eq_dir="$run_dir/.blade-equispaced"
+        if ! python3 "$root/tools/make_equispaced_blade.py" --dz "$blade_dz" --out-dir "$eq_dir" >/dev/null; then
+            echo "ERROR: failed to loft the equispaced blade (dz $blade_dz)" >&2
+            exit 3
+        fi
+        stl_src="$eq_dir/phaseVI_blade.stl"
+        meta="$eq_dir/phaseVI_blade.json"
+    fi
     if ! staged_stl_sha256=$(python3 "$root/tools/stage_blade_stl.py" \
             --run-dir "$run_dir" --stl "$stl_src" --metadata "$meta"); then
         echo "ERROR: failed to stage the blade STL into $run_dir" >&2
@@ -446,7 +474,7 @@ echo "Linked shared $mesh mesh (refinement level $refine_level) from $mesh_dir"
 
 python3 - "$run_dir" "$root" "$model" "$speed_token" "$mesh" "$domain" "$sequence" \
     "$stage0" "$solver" "$nchordwise" "$ranks" "$staged_stl_sha256" "$run_label" \
-    "$mesh_factor" "$refine_level" <<'PY'
+    "$mesh_factor" "$refine_level" "$blade_dz" <<'PY'
 import datetime
 import hashlib
 import json
@@ -470,7 +498,8 @@ from pathlib import Path
     run_label,
     mesh_factor,
     refine_level,
-) = sys.argv[1:16]
+    blade_dz,
+) = sys.argv[1:17]
 run_dir = Path(run_dir)
 root = Path(root)
 
@@ -507,6 +536,7 @@ payload = {
     "solver": solver,
     "n_chordwise": int(nchordwise) if nchordwise else None,
     "mesh_factor": effective_mesh_factor,
+    "blade_dz": float(blade_dz) if blade_dz else None,
     "ranks": int(ranks),
     "run_label": run_label or None,
     "stage0": stage0 == "1",

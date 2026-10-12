@@ -67,3 +67,15 @@ def deviation(
         previous = (r, a["chord"], b["chord"])
     worst["chord_area"] = abs(area[1] - area[0]) / area[0]
     return worst
+
+
+def render_csv(rows: list[dict[str, float]], dz: float) -> str:
+    """The `phaseVI_blade.csv` text of a resampled table (same columns, `#` header)."""
+    lines = [
+        f"# Equispaced resample of NREL/TP-500-29955 Table A-1 (dz <= {dz:g} m outboard of {AIRFOIL_RADIUS} m)",
+        "# radius_m,chord_m,twist_deg_report,chord_mount",
+    ]
+    lines += [
+        f"{r['radius']:.6f},{r['chord']:.6f},{r['twist']:.6f},{r['mount']:.6f}" for r in rows
+    ]
+    return "\n".join(lines) + "\n"

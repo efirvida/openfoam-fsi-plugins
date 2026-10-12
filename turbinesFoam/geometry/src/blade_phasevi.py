@@ -158,16 +158,18 @@ def _data_rows(path: Path) -> list[str]:
     ]
 
 
-def load_stations(path: Path = BLADE_CSV) -> tuple[Station, ...]:
-    """Parse the committed 26-station blade geometry (strictly increasing r)."""
+def load_stations(
+    path: Path = BLADE_CSV, expected: int | None = N_STATIONS
+) -> tuple[Station, ...]:
+    """Parse a blade station table (strictly increasing r); `expected=None` accepts any count."""
     stations = []
     for row in csv.reader(_data_rows(path)):
         if len(row) != 4:
             raise ValueError(f"{path}: expected 4 columns, got {len(row)}")
         stations.append(Station(*(float(value) for value in row)))
-    if len(stations) != N_STATIONS:
+    if expected is not None and len(stations) != expected:
         raise ValueError(
-            f"{path}: expected {N_STATIONS} radial stations, got {len(stations)}"
+            f"{path}: expected {expected} radial stations, got {len(stations)}"
         )
     if any(b.radius <= a.radius for a, b in zip(stations, stations[1:])):
         raise ValueError(f"{path}: radial stations must be strictly increasing")
@@ -387,14 +389,14 @@ def node_metadata(index: int, triangle: Triangle) -> dict:
     return entry
 
 
-def input_sha256(blade_bytes: bytes, s809_bytes: bytes) -> str:
+def input_sha256(blade_bytes: bytes, s809_bytes: bytes, n_stations: int = N_STATIONS) -> str:
     """sha256 over the committed input bytes and the canonical parameters."""
     payload = (
         blade_bytes
         + b"\0"
         + s809_bytes
         + b"\0"
-        + json.dumps(PARAMETERS, sort_keys=True, separators=(",", ":")).encode()
+        + json.dumps({**PARAMETERS, "n_stations": n_stations}, sort_keys=True, separators=(",", ":")).encode()
     )
     return hashlib.sha256(payload).hexdigest()
 
@@ -439,11 +441,12 @@ def build(
     *,
     blade_csv: Path = BLADE_CSV,
     s809_csv: Path = S809_CSV,
+    expected_stations: int | None = N_STATIONS,
 ) -> tuple[str, str]:
     """Generate the STL and metadata; return `(metadata text, summary)`."""
     from makeGeometry import stl_statistics, write_binary_stl
 
-    stations = load_stations(blade_csv)
+    stations = load_stations(blade_csv, expected_stations)
     upper, lower = load_s809(s809_csv)
     profile = closed_profile(upper, lower)
     fractions = perimeter_fractions(profile)
@@ -467,7 +470,7 @@ def build(
             "pitch_deg": PITCH_DEG,
         },
         "input_sha256": input_sha256(
-            blade_csv.read_bytes(), s809_csv.read_bytes()
+            blade_csv.read_bytes(), s809_csv.read_bytes(), len(stations)
         ),
         "units": UNITS,
         "n_triangles": len(records),
