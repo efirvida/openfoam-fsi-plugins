@@ -164,3 +164,16 @@ decide reader vs metric producer, write the test first in `turbinesFoam/tests/`,
 implement it read-only with typed errors, then register it here, in
 `TOOL_COVERAGE` inside `tools/analysis_gap.py`, and in the root `CHANGELOG.md`
 with the numbers observed on a real run.
+
+### `pdf_find.py` — what does the reference say?
+
+```sh
+python3 turbinesFoam/validation/tools/pdf_find.py turbinesFoam/articles/29955.pdf "Sequence [A-Z]\b" --context 1
+python3 turbinesFoam/validation/tools/pdf_find.py turbinesFoam/articles/29955.pdf --page 27
+```
+
+Searches the text layer of a reference PDF (case-insensitive regular expression) and prints
+each match with its 1-based page and line, or prints one whole page. It reads text only: a
+scanned PDF (for example the Madsen 1988 chapter) has no text layer and exits 1 instead of
+guessing. Exit codes: 0 match or page printed, 1 unreadable / no text layer / page out of
+range, 2 no match.
