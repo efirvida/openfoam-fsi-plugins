@@ -91,16 +91,19 @@ def check_chord_averaging(alm_rel_vel_mag, asm_rel_vel_mag):
     """The ASM inflow is the arithmetic mean of samples at the 5 chord strip
     midpoints, while the ALM samples a single point at the quarter chord, so
     on the same flow the chord-averaged relative velocity must differ from
-    the single-point sample. Tolerance is stated explicitly (0.001% relative
-    -- the induction deficit on this case is small, ~4e-5); both values are
-    printed for diagnosis."""
+    the single-point sample. Tolerance is stated explicitly (1e-7 relative):
+    the induction deficit on this case is tiny, and the difference is that
+    deficit seen from two sampling schemes. It exceeded 1e-5 while the ASM
+    kernel was truncated by a prefilter box that was too small (fixed in CHANGELOG
+    #20); with the whole kernel deposited, ASM and ALM spread the same force
+    and the difference is 9e-7. Both values are printed for diagnosis."""
     print("ALM rel_vel_mag (single-point): {:.8f}".format(alm_rel_vel_mag))
     print("ASM rel_vel_mag (chord-averaged): {:.8f}".format(asm_rel_vel_mag))
     assert np.isfinite(alm_rel_vel_mag)
     assert np.isfinite(asm_rel_vel_mag)
     rel_diff = abs(asm_rel_vel_mag - alm_rel_vel_mag) / abs(alm_rel_vel_mag)
     print("Relative difference: {:.3e}".format(rel_diff))
-    assert rel_diff > 1e-5
+    assert rel_diff > 1e-7
 
 
 def chord_strip_mean(func, n):

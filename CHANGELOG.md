@@ -178,6 +178,36 @@ runs the rotating fixture to 153 deg of azimuth and asserts the flow-side force
 integral equals minus the reported patch total at every step: 33 % / 0.1 % / 0 / 0
 before the fix, equal to machine precision after.
 
+#### 20. Size the actuator surface element's cell prefilter in metres, not as a span fraction
+
+**Files:**
+- `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineElement/actuatorSurfaceElement.C`
+- `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineElement/actuatorSurfaceElement.H`
+- `turbinesFoam/tests/asmPrefilterBox/` (new unit check)
+- `turbinesFoam/tests/test_asm_prefilter.py`
+- `turbinesFoam/tests/conftest.py`
+
+**Problem:** `applyForceField()` prefilters the cell loop with the chord
+bounding box and called `chordBox.inflate(projectionRadius)`. In OpenFOAM v2506
+`boundBox::inflate(factor)` grows the box by `factor*mag(span)`, a fraction of
+the box span, so the margin was `projectionRadius*chord` metres instead of
+`projectionRadius`. The defect depends on the chord: for a chord below 1 m the
+margin was smaller than the kernel truncation radius and cells inside it were
+dropped; for a chord above 1 m the box was oversized (3x at 3 m, time only).
+Measured per strip with the separable-Gaussian kept fraction
+(`asmPrefilterBox`): a 0.4 m chord kept 69-74 % of the kernel (74-93 % for a
+skew chord) at epsilon 0.05-0.63 m, so the deposited force was short by the
+same amount; chords near 1 m were unaffected. It hit the NREL Phase VI blade
+(chord 0.4-0.7 m) and left most of the IEA 15 MW span (chord 3-5 m) alone.
+
+**Fix:** the box is built by the new static `chordPrefilterBox()` with
+`boundBox::grow(projectionRadius)`, which takes metres. The unit check
+`asmPrefilterBox` (run by `tests/test_asm_prefilter.py`) requires every strip
+to keep at least 99.9 % of its kernel and the margin not to exceed the
+documented one, for chords of 0.4, 1 and 3 m, three epsilons and an axis-aligned
+and a skew chord (RED 12 of 18 cases failing before, 0 after). Phase VI ASM
+results taken before this change were computed with a truncated kernel.
+
 ### New Features
 
 #### 2. AeroDyn blade shape (prebend, sweep, curve angle) in the ALM

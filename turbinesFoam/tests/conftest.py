@@ -17,6 +17,7 @@ import shutil
 SOLVER_DRIVEN = (
     "test_aftal.py",
     "test_aftal_asm.py",
+    "test_asm_prefilter.py",
     "test_al.py",
     "test_asm.py",
     "test_blade_surface.py",

@@ -94,6 +94,21 @@ public:
     TypeName("actuatorSurfaceElement");
 
 
+    // Static Member Functions
+
+        //- Return the cell-loop prefilter box of a chord line: the bounding
+        //  box of the segment a-b grown by projectionRadius metres in every
+        //  direction. A cell outside it is farther than projectionRadius
+        //  from every chord point, where the Gaussian kernel is already
+        //  below exp(-ln(1000)) of its peak
+        static boundBox chordPrefilterBox
+        (
+            const point& a,
+            const point& b,
+            const scalar projectionRadius
+        );
+
+
     //- Constructor
     actuatorSurfaceElement
     (

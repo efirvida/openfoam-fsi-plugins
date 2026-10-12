@@ -100,6 +100,23 @@ Foam::scalar Foam::fv::actuatorSurfaceElement::calcProjectionEpsilon()
 }
 
 
+Foam::boundBox Foam::fv::actuatorSurfaceElement::chordPrefilterBox
+(
+    const point& a,
+    const point& b,
+    const scalar projectionRadius
+)
+{
+    pointField chordEndpoints(2);
+    chordEndpoints[0] = a;
+    chordEndpoints[1] = b;
+    boundBox chordBox(chordEndpoints, false);
+    // grow() takes metres; inflate() takes a fraction of the box span
+    chordBox.grow(projectionRadius);
+    return chordBox;
+}
+
+
 void Foam::fv::actuatorSurfaceElement::applyForceField
 (
     volVectorField& forceField
@@ -115,11 +132,15 @@ void Foam::fv::actuatorSurfaceElement::applyForceField
     // Bounding box around the chord line, inflated by the projection radius,
     // used as a prefilter for the cell loop
     vector chordUnit = chordDirection_/mag(chordDirection_);
-    pointField chordEndpoints(2);
-    chordEndpoints[0] = position_ + chordMount_*chordLength_*chordUnit;
-    chordEndpoints[1] = position_ - (1.0 - chordMount_)*chordLength_*chordUnit;
-    boundBox chordBox(chordEndpoints, false);
-    chordBox.inflate(projectionRadius);
+    const boundBox chordBox
+    (
+        chordPrefilterBox
+        (
+            position_ + chordMount_*chordLength_*chordUnit,
+            position_ - (1.0 - chordMount_)*chordLength_*chordUnit,
+            projectionRadius
+        )
+    );
 
     if (debug)
     {
