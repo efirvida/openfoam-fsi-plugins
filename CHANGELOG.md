@@ -247,6 +247,35 @@ whenever `endEffects` is active, and not otherwise, so the committed default
 render and its `--check` gate are unchanged. `test_iea15mw_case.py` asserts the
 key is the only difference between the default and the Glauert render.
 
+#### 23. Phase 0 gate tooling: azimuth-window and station-ratio readers, one-node-per-step launcher
+
+**Files:**
+- `turbinesFoam/validation/tools/window_response.py`
+- `turbinesFoam/validation/tools/run_parallel_steps.sh`
+- `turbinesFoam/validation/tools/parallel_steps_smoke.slurm`
+- `turbinesFoam/validation/iea15mw/scripts/station_ratio.py`
+- `turbinesFoam/validation/iea15mw/scripts/slurm/l2-ds-gate.slurm`
+- `turbinesFoam/tests/test_window_response.py`
+- `turbinesFoam/tests/test_station_ratio.py`
+- `turbinesFoam/validation/tools/README.md`
+
+**Problem:** judging a tip model switched on at a restart needs a fraction of a
+revolution and the root and tip bands, which `rev_history.py` (whole
+revolutions) and `compare_spanwise.py --compare-with` (r/R 0.3-0.9) do not
+give. Running several single-node cases inside one allocation had no tested
+launcher, and the first attempt showed why: `mpirun --host <node>` alone gives
+the node one slot under Slurm, so a 48-rank step aborts with "not enough slots".
+
+**Fix:** `window_response.py` averages `cp`/`cd`/`ct` in `angle_deg` windows;
+`station_ratio.py` pools two spanwise profiles in r/R bands including root and
+tip; `run_parallel_steps.sh` runs one command per node with
+`TURBINE_MPI_MCA="--host <node>:<ranks> --map-by ppr:<ranks>:node ..."` and
+returns the number of failed steps (`parallel_steps_smoke.slurm` passed on
+`sequana_cpu_dev`: two 48-rank steps, one node each, overlapping, every rank on
+its node). `l2-ds-gate.slurm` resumes the converged frozen L2 state with the
+Dag & Sorensen correction on (or, with two environment overrides, the control
+arm of Glauert tip and root).
+
 ### New Features
 
 #### 2. AeroDyn blade shape (prebend, sweep, curve angle) in the ALM

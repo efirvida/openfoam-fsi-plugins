@@ -50,10 +50,36 @@ Related tools outside this directory:
 | --- | --- |
 | `phaseVI/scripts/comparePhaseVI.py` | simulation vs measured WDH data, with metric definitions fixed against the NREL report |
 | `iea15mw/scripts/compare_spanwise.py` | spanwise diagnosis of an IEA 15 MW ALM run, and a two-run per-band comparison (`--compare-with`); `--references` adds each reference model's band stations/means and its `cn`/`ct` ratios **to run A** (`--reference-source`, `analysis/spanwise-references.csv`) |
+| `iea15mw/scripts/station_ratio.py` | ratio of two `compare_spanwise.py --out` profiles pooled in r/R bands, including the root and tip bands that `--compare-with` leaves out |
 | `iea15mw/scripts/import_olaf_reference.py` | the `olaf-fvw` OLAF free-vortex-wake spanwise block in `analysis/spanwise-references.csv` (`alpha_deg`/`cn`/`ct` per node), regenerated from the gitignored OpenFAST CSV |
 | `nacelle-asn/scripts/compareNacelle.py` | nacelle actuator-surface comparison |
 | `phaseVI/tools/generate_case.py` | renders the committed case; `--check` is non-destructive |
 | `phaseVI/tools/case_config.py` | loads and validates `config/case.yaml` |
+
+### `window_response.py` — what did a model switched on at a restart do, window by window?
+
+```sh
+python3 turbinesFoam/validation/tools/window_response.py --from-deg 7200 --to-deg 7330 \
+    --window-deg 60 runs/iea15mw-screen-m3-l2 runs/iea15mw-l2-ds
+```
+
+Mean `cp`/`cd`/`ct` of each run in windows of the cumulative `angle_deg`, so
+runs that share a restart state line up window by window (`--window-deg 120` is
+one blade-passing period of a three-bladed rotor). Use it where
+`rev_history.py` is too coarse: a tip or end-effect model judged over a fraction
+of a revolution. Reader only: the columns are the module's own.
+
+### `run_parallel_steps.sh` — several single-node steps inside one job
+
+```sh
+run_parallel_steps.sh -n 48 -- "cmd for step 0" -- "cmd for step 1"
+```
+
+Runs each command concurrently on its own node of the Slurm allocation and
+returns the number of failed steps. A step sees `STEP_NODE`, `STEP_RANKS` and a
+`TURBINE_MPI_MCA` that confines its `mpirun` to that node (multi-node
+`MPI_Init` was intermittent on this cluster). `parallel_steps_smoke.slurm` is
+the development-partition check of the pattern.
 
 ### `rev_history.py` — what did the run converge to, revolution by revolution?
 
