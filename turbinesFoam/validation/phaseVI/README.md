@@ -126,7 +126,7 @@ refines z like x/y); recorded in `design.md` §5 and `config/case.yaml`.
 scripts/runPhaseVI.sh -m alm|asm|asm-mesh -u <speed> [-mesh coarse|fine|ultra]
                       [--domain long|squat] [-s H|S] [--solver urans|iddes]
                       [--nchordwise N] [--ranks N] [--run-label WORD]
-                      [--stage0] [--restart] [--refine-level N] [--mesh-factor F]
+                      [--stage0] [--restart] [--refine-level N] [--mesh-factor F] [--blade-dz DZ]
                       [--rotational-augmentation on|off] [--root-effects on|off]
                       [--run] [--submit]
 ```
@@ -151,6 +151,11 @@ commit, OpenFOAM version, config sha256, variant, solver, `n_chordwise`,
 - `--refine-level N` selects the castellated refinement level of the rotor-disk
   cylinder (each level halves the cell there) and scales `meshFactor` by `2**N`
   so the projection width stays fixed in metres; the shared mesh is keyed on `N`.
+- `--blade-dz DZ` (positive number, exit 2 otherwise; not combinable with `--n-elements`) renders the
+  blade at constant spanwise spacing `DZ` metres outboard of 1.0085 m (root stations kept):
+  `nElements` becomes one element per table segment and, for `asm-mesh`, the staged STL is lofted from
+  the same table (`tools/make_equispaced_blade.py`). Rule: `DZ = min(0.05, h/2)`; see
+  `scripts/scanEquispacedDz.py`. Recorded as `blade_dz` in `run.json`.
 - `--mesh-factor F` (positive number, exit 2 otherwise) overrides
   `turbine.gaussian_mesh_factor` (1.0) so the ALM / no-mesh-ASM projection width
   `eps = 2*cbrt(V)*meshFactor` varies per run **without changing the mesh**: the

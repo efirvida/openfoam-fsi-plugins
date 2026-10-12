@@ -2,6 +2,22 @@
 
 ## [Unreleased] — 2026-10-01
 
+### Features
+
+#### Equispaced Phase VI blade (`--blade-dz`)
+
+**Files:**
+- `turbinesFoam/validation/phaseVI/tools/{blade_resample,make_equispaced_blade,element_data,generate_case}.py`
+- `turbinesFoam/validation/phaseVI/scripts/{runPhaseVI.sh,scanEquispacedDz.py,slurm/equispaced-blade.slurm}`
+- `turbinesFoam/geometry/src/blade_phasevi.py`
+
+**Problem:** the committed blade follows the 26-station NREL table (segments 0.013 to 0.305 m), so the
+ASM+mesh deposit becomes a spanwise comb once the cell size falls below the node spacing.
+
+**Fix:** opt-in `--blade-dz DZ` resamples the table at constant spacing outboard of 1.0085 m (rule
+`DZ = min(0.05, h/2)`); elements (one per segment) and the ASM-mesh STL follow it. Default renders are
+byte-identical. `blade_phasevi.load_stations` / `build` accept a station count other than 26.
+
 ### Bug Fixes
 
 #### 1. Guard `profileData::interpolate` against a constant table
@@ -177,6 +193,51 @@ the per-step path are now cheaper than before. New regression test
 runs the rotating fixture to 153 deg of azimuth and asserts the flow-side force
 integral equals minus the reported patch total at every step: 33 % / 0.1 % / 0 / 0
 before the fix, equal to machine precision after.
+
+#### 19. Use the Prandtl hub loss for the rotor-level root effect
+
+**Files:**
+- `turbinesFoam/src/fvOptions/axialFlowTurbineALSource/axialFlowTurbineALSource.C`
+- `turbinesFoam/src/fvOptions/axialFlowTurbineALSource/axialFlowTurbineALSource.H`
+- `turbinesFoam/validation/phaseVI/tools/generate_case.py`
+- `turbinesFoam/validation/phaseVI/config/case.yaml`
+- `turbinesFoam/validation/phaseVI/case/system/fvOptions.ALM`
+- `turbinesFoam/validation/phaseVI/case/system/fvOptions.ASM`
+- `turbinesFoam/validation/phaseVI/case/system/fvOptions.ASM-MESH`
+- `turbinesFoam/tests/test_phasevi_case.py`
+- `turbinesFoam/README.md`
+
+**Problem:** the Glauert root branch of `calcEndEffects()` built its Prandtl
+constant from `tipDist = 1 - rootDist`, so it was the tip constant reflected
+about the mid radius, `(B/2)*(r - r_root)/(R - r)`, which no source supports.
+Measured on `runs/alm-U7-coarse-r1` the two constants stand in a ratio of about
+7 and the wrong root factor removed 44 % of the lift at r/R = 0.275 where the
+model it names removes 2.5 % (and 6-7x more across r/R = 0.28-0.40). The tip
+factor is untouched: the `rootDist`-based tip constant differs from AeroDyn's by
+only 5-12 % near the tip and the run's tip station already agrees with the
+experiment to +0.0 % in the tangential coefficient, so a change there would be
+unmeasured and unjustified. Separately, `config/case.yaml` carried
+`profile.lift_re_corr_exp: 0.23` while its own comment said the Phase VI
+validation sets 0.
+
+**Fix:** the root branch is now the Prandtl hub loss as AeroDyn builds it
+(`BEMT.f90` lines 244-246), `f_hub = (B/2)*(r - rHub)/rHub`, with the local
+radius recovered from the blade-arc fraction `rootDist` and the new rotor-level
+`hubRadius` key; the blade root station is taken to be the hub surface. A
+`rootEffects on` case with no positive `hubRadius` now aborts with
+`FatalErrorInFunction` instead of inventing a constant, so `rootEffects`
+requires `hubRadius`. The Phase VI generator renders `hubRadius 0.5083` at the
+rotor-coefficients level beside `rotorRadius` whenever `actuator.hub_radius` is
+configured, independent of the root-effect toggle (the radius is a rotor
+property), and `config/case.yaml` now sets `lift_re_corr_exp: 0.0`, matching its
+comment: the declared `Re 1e6` polar sits above the run's own Reynolds number
+(0.61e6 at 30 % span to 0.95e6 at 70 %), so the upstream correction reduces lift
+by 5.8 % on the mean and 10.7 % at r/R = 0.29
+(`scripts/quantifyPolarReScaling.py`).
+
+**Known follow-up:** the `Shen` model's root branch still reflects its tip
+constant; no source defines a Shen hub loss, so its math is left unchanged and
+unmeasured in this change. Only the committed `Glauert` model was corrected.
 
 #### 20. Size the actuator surface element's cell prefilter in metres, not as a span fraction
 
@@ -559,6 +620,273 @@ surface is actually sampled (`asm-mesh`); blade2/blade3 inherit it through
 blade per step, written every step), so it is only usable for a very short
 capture run. The default `alm` render stays byte-identical, the committed case
 is not regenerated, and `--check` still passes.
+
+### Tooling
+
+#### 16. Measure the real token cost of the agent workflow
+
+**Files:**
+- `tools/session_cost.py` (new)
+- `tools/README.md` (new)
+- `AGENTS.md`
+- `odd/tasks/token-economy.md` (new)
+
+**Problem:** the campaigns are driven through Pi in sessions that run for
+hundreds of model calls, and nothing in the repository reported what that cost.
+Reading the stored session transcripts (156 MB over 25/09–09/10/2026) showed the
+cost is neither evenly spread nor where it looks: 303 of 3292 calls (9.2 %)
+carried 149.4 M of the 155 M input tokens (96.4 %) and $13.97 of the $19.91
+total. Those calls are full prompt-cache misses — the provider cache expires
+during the long waits a CFD campaign is full of, and the entire context is
+re-billed at full input price. The largest session reached a 982 288-token
+prefix, of which the `chars/4` estimate attributes ~60 % to retained assistant
+reasoning blocks (the estimate tracks the measured prefix at 0.91 with them and
+0.37 without, so they are re-sent on every later call), ~15 % to `edit`/`write`
+arguments and ~13 % to `bash` output.
+
+The obvious suspects were wrong and were measured as such: the 76.9 M characters
+of stored image base64 are resized by Pi before sending (median prefix growth
+3.1 K tokens per image), so they are transcript weight, not token cost; the 55
+delegated subagent runs returned 299 K characters in total, an average of 5.4 K,
+making them a context saving; and re-reading text files is negligible against the
+155 M input tokens.
+
+**Fix:** `tools/session_cost.py` re-derives the report from the session
+transcripts — per-session and total input/output/cache tokens and cost, the
+cache-miss concentration by threshold, and the context composition of the
+largest session — so the diagnosis is re-runnable instead of a one-off analysis.
+It reads only `$PI_CODING_AGENT_DIR/sessions`, never writes, and exits non-zero
+with an explicit message if the transcript schema stops carrying `usage` rather
+than printing zeros. `AGENTS.md` gained a "Agent workflow and context economy"
+section with the four rules the measurements justify: one session per work unit,
+payloads kept out of the transcript, reuse of the existing analysis entry
+points, and measurement instead of assumption. No project-level Pi setting was
+changed in that round.
+
+**Second round (global, explicitly authorized).** The measured 982 288-token
+ceiling turned out to be Pi's own auto-compaction threshold, not a model limit:
+the transcripts hold four `compaction` entries, one with `tokensBefore: 984807`,
+which is exactly `contextWindow (1000000) - reserveTokens (16384)`. Compaction
+already existed; it simply fired too late. `~/.pi/agent/settings.json` now sets
+`compaction.modelOverrides` with `reserveTokens: 600000` for
+`nan/deepseek-v4-flash`, `opencode-go/deepseek-v4.1-flash` and
+`opencode-go/glm-5.3`, moving the trigger to ~400 000 tokens, plus
+`compaction.keepRecentTokens: 50000` and `showCacheMissNotices: true`. A global
+`reserveTokens` was rejected on evidence: the smallest catalog window is
+204 800 (minimax-m2.7), so 600 000 would exceed it and compact unconditionally.
+Only models whose window is measured or declared large enough were overridden —
+`opencode-go/kimi-k2.6` was deliberately left alone, because its observed maximum
+prefix of 88 221 proves nothing about its window. `cacheWarming: "idle"` was not
+enabled: no model in the catalog declares `promptCache`, and the measured
+miss-versus-gap curve (2.6 % at ≤60 s, 7.2 % at ≤300 s, 10.9 % overall) has no
+clean TTL to encode, so guessing one would buy full-price refreshes. The
+`rtk` hook was not installed either: `rtk init -g` targets Claude Code and
+Cursor, while the Pi side is already covered by the installed
+`pi-rtk-optimizer` extension.
+
+#### 17. Read a run's state with a pure cursor instead of ad-hoc snippets
+
+**Files:**
+- `turbinesFoam/validation/tools/case_state.py` (new)
+- `turbinesFoam/tests/test_case_state.py` (new)
+
+**Problem:** asking "how far did this run get, and what does the last window
+look like?" was answered with a fresh inline `python3 - <<PY` snippet each time
+— 130 of them across the recorded sessions, plus 38 separate inline uses of
+`fitz` for PDF pages. Each snippet stayed in the agent context for the rest of
+the session (tool arguments were ~15 % of the largest session's context), and
+they re-typed experimental constants (`meas = {7:(5.9458, 789.8572, 1132.0692,
+1.2337256), ...}`) that already live in `data/experiment/` and are fixed against
+the NREL report by `scripts/comparePhaseVI.py`. Duplicating those literals is a
+reproducibility hazard, not just a token cost.
+
+**Fix:** `validation/tools/case_state.py` reports only what the run itself
+wrote: the `postProcessing` source used, its row count, the first and last
+`time`, revolutions when `--rpm` is supplied, and the mean of the last
+`--mean-last` rows for each numeric column present. It computes no `cp`, `P`,
+`Q` or `T`, holds no reference data, omits absent columns rather than
+synthesising them, excludes the wrapping `angle_deg` from any mean, and is
+read-only. `CaseStateError` carries the exit code (1 missing directory, 2 no
+`postProcessing` yet) and the CLI prints it without a traceback. Ten tests cover
+the window arithmetic, the clamping, the omission of missing columns, the
+generality of the revolutions formula, the fallback listing when `turbine.csv`
+is absent, byte-for-byte non-mutation of the run, and the JSON CLI contract.
+Verified against real runs: `alm-U7-coarse-bothoff` reads 3339 rows,
+t = [0.001, 3.339], 3.999 revolutions at 71.878 rpm, and the last 400 rows
+average `cp = 0.388186`.
+
+#### 18. Detect the analyses that keep being recomputed inline
+
+**Files:**
+- `tools/pi_sessions.py` (new)
+- `tools/analysis_gap.py` (new)
+- `tools/tests/` (new: `test_pi_sessions.py`, `test_analysis_gap.py`)
+- `tools/session_cost.py`
+- `.agents/skills/validation-analysis-tools/SKILL.md` (new)
+- `turbinesFoam/validation/tools/README.md` (new)
+- `AGENTS.md`
+
+**Problem:** the previous entry created one reusable reader, but nothing made
+the *next* missing tool visible. Mining the transcripts quantified it: of 2250
+`bash` calls, **862 invoked an interpreter inline** and **348 of those ran
+against project data** — `python3 -c`, heredocs, `awk` one-liners, and scratch
+scripts under `/tmp`. Each was rewritten from scratch, stayed in the agent's
+context for the rest of the session, and repeatedly re-typed constants that
+belong to `data/experiment/`.
+
+There is also a second, subtler failure the first report exposed: a naive
+recurrence count keeps recommending tools that already exist. The largest
+cluster after entry 17 landed was `x21 case-output turbine-csv` — precisely what
+`case_state.py` had just been written to answer.
+
+**Fix:** `tools/pi_sessions.py` holds the transcript layout (session directory,
+encoded-cwd fallback, record/message/tool-call/usage iteration) once, and both
+`session_cost.py` and `analysis_gap.py` consume it; `session_cost.py` also lost a
+second full pass over 156 MB of transcripts. `tools/analysis_gap.py` classifies
+each `bash` call from transparent evidence tags (`case-output`, `turbine-csv`,
+`experiment-ref`, `pdf-page`, `pdf-render`, `slurm-queue`, ...), clusters the
+inline ones by matched evidence rather than by text, and then applies
+`TOOL_COVERAGE` so a shape that an existing tool answers is reported under
+"already answered" instead of as a candidate. It **detects and ranks only**: it
+never generates analysis code, because a generated snippet cannot know that `cp`
+is defined against the NREL report and a plausible wrong metric is worse than an
+obvious manual step.
+
+Eighteen tests pin the two fragile parts — the transcript layout, and the
+classifier, where a false positive sends someone to write an unnecessary tool
+and a false negative hides the duplication. One real defect was caught by the
+tests: an exclusion pattern listing `cd` as "never analysis" discarded the
+dominant shape in this repository, `cd <case-dir> && python3 - <<'PY'`, which
+silently dropped most real sites. On the recorded corpus the tool reports 552
+inline sites against 266 that already call a repository tool, and its top
+genuine gap is `x39 python3 [repo-wide] pdf-page pdf-render` — the PDF page
+rendering that had been dismissed earlier as cheap in tokens but turns out to be
+the most re-derived analysis in the repository. That is the loop working: the
+decision to skip a PDF helper was made on token evidence, and the recurrence
+evidence says otherwise.
+
+`.agents/skills/validation-analysis-tools/SKILL.md` carries the promotion
+procedure — check what exists, decide reader versus metric producer, test first,
+implement read-only, register in three places — and is loaded only when a new
+analysis is actually needed. Verification of that skill is end-to-end rather
+than assumed: Pi gates project skills under `.agents/skills/` behind project
+trust, so the first check without trust answered `NONE`, while `pi --approve`
+selected `validation-analysis-tools` by its description out of 42 available
+skills. `turbinesFoam/validation/tools/README.md` registers
+the tools and states the boundary. `AGENTS.md` gained the prohibition and the
+pointer, kept short because it loads on every request.
+
+#### 19. Adapt the Opus 5.5 prompting guide to this repository
+
+**Files:**
+- `.agents/skills/opus-5-5-harness/SKILL.md` (new)
+- `AGENTS.md`
+- `odd/tasks/opus-5-5-harness-adaptation.md` (new)
+- `~/.pi/agent/subagents.json` (global config, explicitly authorized)
+
+**Problem:** the campaigns run through Pi in turns that last hours because they
+wait on Slurm, and two of the guide's failure modes are structural here rather
+than case-specific. First, a turn can end with work still owed — a closing
+summary that announces the next step, or an offer to carry on — and the restart
+re-bills the whole context, which entry 16 measured as 9.2 % of calls carrying
+96.4 % of the input tokens. Anthropic's *Prompting Claude Opus 5.5* names that
+pattern and recommends a standing instruction against it, but the same section
+warns that the instruction costs tool calls and output tokens: it could not be
+copied in, it had to be reconciled with the token contract `AGENTS.md` already
+states. Second, the effort levels in `~/.pi/agent/subagents.json` were partly set
+to `max` with no measurement behind them anywhere in `odd/tasks/`, which is the
+one thing the guide says most directly not to do — reserve `xhigh` and `max` for
+work where a quality gain was measured.
+
+Half the guide is about the API call, and this repository does not make it. Pi's
+model catalog already declares `forceAdaptiveThinking`, `supportsMidConvoEffort`,
+`supportsMidConvoSystemMessages`, `supportsMidConvoToolChanges`,
+`thinkingLevelMap` low to max, and `maxTokens: 128000` for `claude-opus-5-5`, so
+the API-level fixes (thinking cannot be disabled, room for thinking inside
+`max_tokens`, per-message effort, turn-scoped system messages, tools declared
+from the first request) belong to the adapter. Stating that split first matters,
+because a prompt-side "fix" for an adapter-side lever is a silent no-op that
+reads like compliance.
+
+**Fix:** `.agents/skills/opus-5-5-harness/SKILL.md` carries the prompt-and-
+profile half: the turn discipline with its guardrails (no closing summary that
+announces the next step, no "shall I continue?", no decision list that blocks
+nothing; status notes ride in the same message as the next tool call; at most
+2–3 automatic continuations on one task; something still running is not
+finished) and the closed list of stops that are legitimate — a destructive or
+irreversible action, a publish or commit decision, or a product decision only
+the user can make. It keeps the rule subordinate to the checks: it adds tool
+calls by design and never licenses skipping a verification, re-reading a large
+file, or re-running a suite to look busy. It maps the guide's "explore the apps
+the task did not name" onto this repository's own unnamed sources (`odd/tasks/`,
+`odd/issues/`, `odd/references/`, the per-case `data/` trees, `refs/`), states that
+external text — a paper, a Slurm log, a tool result — is data and not a
+directive, and records the effort ladder with its measurement requirement.
+
+The effort ladder was applied through all four layers of Pi's routing, because
+only the first two are authored and the change had to be discovered the hard way.
+The live authority is `~/.pi/gentle-ai/models.json`; `~/.pi/gentle-ai/profiles.json`
+holds the named presets and names the active one; and
+`~/.pi/agent/agents/<role>.md` (frontmatter `thinking:`) plus
+`~/.pi/agent/subagents.json` (`model_profiles.<role>.effort`) are copies the
+materialisation pass regenerates from the first. `jd-judge-a` and `review-risk`
+moved from `max` to `high` in all four, the active preset would otherwise have
+restored `max` on the next apply, and `subagents.json`'s
+`default_thinking_level` moved from `high` to `medium` — the latter surviving on
+its own, because no other layer holds that key. The other presets keep their own
+values on purpose: `nan-max-depth` means what its name says.
+
+Independent verification caught the defect twice, and both times the edit had
+reported success. The first attempt touched `subagents.json` only; a
+materialisation pass rewrote those entries to `max` about a minute later (the
+edited file carried mtime 17:17:07, the rewrite 17:18:17). The second attempt also
+changed the frontmatter, on the reading that it was the value the pass reads; the
+pass rewrote both the frontmatter and the mirror at 17:32:35 from `models.json`,
+still at `max`. What made the difference was a second pair of eyes running a
+`diff` against the backup instead of trusting the edit, and then reading
+gentle-pi's `applyModelConfig` to find the authority rather than guessing a third
+time. The task document, the skill's four-layer table and the `AGENTS.md` bullet
+all now name the authority and the order; no layer is described as durable on its
+own.
+
+The profiles point at `nan/*` models, not at Opus 5.5, and the guide warns that
+effort names do not mean the same amount of thinking across models — so what
+transfers is the policy (baseline `medium`, top tier by measurement), not the
+guide's numbers, and the skill says so. The optional Opus 5.5 profile block is
+documented there and deliberately **not applied**: the default paths stay on
+`nan/*`. Backups of every edited file sit beside them as
+`<name>.bak-<timestamp>` (five files, including `models.json` and
+`profiles.json`), and no global setting other than these four routing layers —
+plus the untouched `default_thinking_level` — was changed.
+
+`AGENTS.md` gained a four-bullet section pointing at the skill, kept short
+because it loads on every request.
+
+**Verification:** all four layers read `high` for `jd-judge-a` and `review-risk`
+and agree on every one of the 12 agents (`models.json` = active preset =
+frontmatter = mirror), with `review-refuter` and `review-validator` present only in
+the mirror by design; `models.json` carries a 13th `orchestrator` entry with no
+mirror or agent file, which is how it is described here; `subagents.json` parses
+and keeps `default_thinking_level: medium`. The durability test is the part that
+matters: a third edit, this time in the authority, produced no rewrite at all —
+the three derived files kept the mtime of the edit across a subagent launch and
+the values stayed at `high`, which reads as a repair of drift from `models.json`
+rather than a periodic pass, and makes the authority the only layer that had to
+hold the decision. the skill's frontmatter satisfies Pi's
+documented requirements (name matching its directory, description within the
+limit) and
+`pi --approve -p "List the exact names of every skill currently available…"`
+returns `opus-5-5-harness` alongside `validation-analysis-tools`; every path the
+skill cites exists, and the one that did not — a bare `data/experiment/`, which
+lives per case — was corrected to name real directories
+(`phaseVI/data/experiment`, `iea15mw/data/polars`, `nacelle-asn/data/reference`);
+the new `AGENTS.md` section appears once, before `## Build / Clean`; and the
+catalog claims hold for `anthropic/claude-opus-5-5` (`forceAdaptiveThinking`,
+`supportsMidConvoEffort`, `supportsMidConvoSystemMessages`,
+`supportsMidConvoToolChanges`, `thinkingLevelMap` low to max, `maxTokens`
+128000). The changelog's own claim about the first revert interval is attested by
+the round-one verification, not by a surviving mtime: the second pass overwrote
+the timestamp that recorded it.
 
 ## [Unreleased] — 2026-04-02
 

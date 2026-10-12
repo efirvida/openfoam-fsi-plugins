@@ -1,4 +1,4 @@
-# P1.5 — Equispaced blade discretisation (in progress: E1 resampler done, integration pending)
+# P1.5 — Equispaced blade discretisation (E1/E2 done, E3 submitted 2026-10-12)
 
 Origin: owner observation 2026-10-12 (the ASM+mesh blade surface has sections unevenly spread
 along the span; proposal: resample at constant spanwise distance, using that the blade carries
@@ -39,13 +39,13 @@ widths, but they move the elements away from the experimental stations (r/R 0.30
 
 ## Proposed work (to decide)
 
-- [~] **E1 (station resampler + rule done 2026-10-12; STL loft rebuild pending)** Loft/element resampling with a chosen `dz` tied to `h` (the rule is NOT settled: the table
+- [x] **E1 (231a.. see log)** Loft/element resampling with a chosen `dz` tied to `h` (the rule is NOT settled: the table
       above only measured fixed dz = 0.05 and 0.1 m; scan dz/h before choosing), exact S809 outboard, circle ->
       S809 morph kept in the root segments; surface area and chord/twist deviation vs the
       committed loft reported (area 4.88423 m^2 today).
-- [ ] **E2** Same resampling for `elementData` (ALM, ASM, ASM+mesh stay consistent); station
+- [x] **E2 (elements: one per segment of the same table; sampler invariant checked in Python: 0 empty elements)** Same resampling for `elementData` (ALM, ASM, ASM+mesh stay consistent); station
       comparison rule in `compareSectionLoads.py`.
-- [ ] **E3** A/B on the coarse mesh: ALM and ASM+mesh, committed vs equispaced, 4 revs. Accept
+- [ ] **E3 (submitted)** A/B on the coarse mesh: ALM and ASM+mesh, committed vs equispaced, 4 revs. Accept
       only if the change is within the ALM-ASM bound of the Model Definition.
 - [ ] **E4** Model Definition v1.1 entry; Phase VI baselines are re-run in P2.1 anyway, so doing
       this BEFORE P2.1 costs no extra baseline.
@@ -60,3 +60,16 @@ Rule settled: **dz = min(0.05 m, h/2)**, root stations (r < 1.0085 m) kept verba
 - Stations: dz 0.05 m gives 85 rows (3 root + 82 outboard) against 26.
 
 Pending: E1 STL (needs `blade_phasevi.py` to accept a station list; `N_STATIONS`/`input_sha256` are pinned to 26), E2 (`blade_element_rows` already takes a station list; the sampler needs the element count tied to dz), E3 (4-rev A/B, needs the queue).
+
+## E3 submitted 2026-10-12 (4 revs, coarse, 7 m/s, H, 84 tasks; `scripts/slurm/equispaced-blade.slurm`)
+
+| label | model | layout | job | comparator |
+|---|---|---|---|---|
+| `eqb-mesh-ref` | asm-mesh | committed | 11613555 | none exists: this is the first ASM+mesh baseline |
+| `eqb-mesh-dz05` | asm-mesh | dz 0.05 | 11613556 | `eqb-mesh-ref` |
+| `eqb-alm-dz05` | alm | dz 0.05 | 11613557 | `alm-U7-coarse-hubfix` |
+| `eqb-asm-dz05` | asm | dz 0.05 | 11613558 | `asm-U7-coarse-asm-mf1` |
+
+Read with `comparePhaseVI.py --run-dir runs/<model>-U7-coarse-<label> --speed 7 --sequence H --allow-short-window`
+and `compareSectionLoads.py --alm-dir ...` (check `run.json` `blade_dz` first). Accept only if
+equispaced is within the ALM-ASM bound of the Model Definition.
