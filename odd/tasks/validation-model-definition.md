@@ -67,7 +67,7 @@ results. They are frozen except the IEA cp centre.
 | Phase VI | spanwise `c_n` at r/R 0.30 | within +-15 % | inboard, root-effect region, wider scatter in the pressure-tap sections |
 | Phase VI | r/R 0.95 | reported, not an acceptance criterion | inside one epsilon of the tip (eps = 0.63 m on the coarse mesh) |
 | Phase VI | 13-25 m/s | reported, not a criterion | deep stall is a known limit of the formulation |
-| IEA | rotor `cp` at rated | **to be re-centred** (decision 3b); until then the provisional [0.476, 0.546] = the committed CCBlade/BEM 0.4910 and OLAF 0.5312 widened by 3 % of their midpoint | the references bracket the answer; the centre is moved only by physical corrections (3-rev control, P3.1 root), never by the v1 result |
+| IEA | rotor `cp` at rated | **DEFERRED to P3.1/P3.3** (decision 3b, plan order: Phase 1 and 2 run first); until then the provisional [0.476, 0.546] = the committed CCBlade/BEM 0.4910 and OLAF 0.5312 widened by 3 % of their midpoint | the references bracket the answer; the centre is moved only by physical corrections (3-rev control, P3.1 root), never by the v1 result |
 | IEA | spanwise `c_n` per band r/R 0.3-0.5, 0.5-0.7, 0.7-0.9 | within +-10 % of OLAF | the frozen ALM sat +2.7 % over BEM and within +-6 % of OLAF (reference/ours 1.06, 1.04, 0.99 in the three bands) |
 | IEA | tip band r/R 0.9-1.0 | reported against OLAF, not an acceptance criterion until an OLAF tip reference is committed | `spanwise-references.csv` stops at 0.9 |
 | Phase VI | `abs(cp_ASM - cp_ALM) / cp_ALM` | <= 2 % | the published difference is 0.3 % (Santoni et al. 2024) and Phase VI showed 0.3 %; 2 % leaves room for the corrected kernel (`914aa72`) |

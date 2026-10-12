@@ -76,7 +76,7 @@ Engram `turbinesfoam/code-review-2026-10-11`.
       sampling + a Gaussian spreading kernel as in Massie/Ouro 2019
       (eps = max(c/4, 4*cbrt(V)); the code default `meshFactor 2` equals 4h, the
       Phase VI case overrides it to 1). Fix the README claim that it is the paper's model.
-- [ ] **P0.3** (v1 frozen except the IEA cp band, `odd/tasks/validation-model-definition.md`) Write `odd/tasks/validation-model-definition.md` (the frozen v1) with:
+- [x] **P0.3** (v1 frozen except the IEA cp band, which is deferred to P3.1/P3.3 by owner order decision 2026-10-12; `odd/tasks/validation-model-definition.md`) Write `odd/tasks/validation-model-definition.md` (the frozen v1) with:
       tip correction = **Dag & Sorensen, Glauert tip loss off** (user decision
       2026-10-11); root = Prandtl hub loss with `hubRadius`; rotational
       augmentation, epsilon rule, velocity sampling, polars; the knobs that differ
@@ -86,7 +86,7 @@ Engram `turbinesfoam/code-review-2026-10-11`.
       (read the spread from `iea15mw/data` before fixing the number);
       ALM-vs-ASM difference bound taken from the Phase VI result and the 0.3 %
       published by Santoni et al. 2024.
-- [ ] **P0.4** (GATE REACHED, owner decision needed: see Model Definition, open items) Resolve the Dag-Sorensen risk on the IEA rotor: the correction is
+- [x] **P0.4** (gate measured, owner chose (b): D&S kept, IEA band re-centred in P3; control read 2026-10-12) Resolve the Dag-Sorensen risk on the IEA rotor: the correction is
       resolution dependent (n25 vs n50 changed the result) and diverged once at
       the hub transition; the IEA case has 147 elements. Run the correction on the
       frozen L2 platform at a short horizon (dev partition) before it is frozen.
@@ -182,3 +182,4 @@ Resume pack: `odd/tasks/iea15mw-platform-freeze.md`, `odd/tasks/iea15mw-asm-l2-v
 | 2026-10-12 | P0.4 confirmation (job 11613058, 3 revs): D&S stable throughout; cp 0.5748 -> 0.5650 over 9 windows of 120 deg and still falling (~0.562 by Aitken). IEA D&S plateau is about +5.5..6 % over OLAF 0.5312, outside the proposed band [0.476, 0.546]; the Glauert control (0.4 rev) reads 0.5476. Gate "inconsistent" -> brought to the owner, not frozen silently. Full suite after the fixes: only `test_al.py::test_parallel` fails, an environment limit (no scotch in the module). |
 | 2026-10-12 | Owner chose option (b) for D&S on IEA: keep D&S, re-centre the IEA band after a 3-rev Glauert control and the P3.1 root fix. Control job 11613092 (`runs/iea15mw-l2-ctrl`, to 23 revs, `sequana_cpu`). Decisions 1 (RA off) and 2 (bands) still unanswered; the Model Definition stays DRAFT. |
 | 2026-10-12 | Owner delegated decisions 1-2 to physical judgment. Model Definition v1 frozen except the IEA cp band: RA off (RA-on S-curve as pre-registered variant, stall onset only); Phase VI `abs(%P)` <= 10 %, `abs(%T)` <= 15 %, `c_n` +-10 % (0.47-0.80) / +-15 % (0.30); ASM-ALM <= 2 % Phase VI, <= 3 % IEA. Phase VI D&S numbers in RESULTS.md predate 4c49dc3 -> P2.1 re-baselines. |
+| 2026-10-12 | P0.4 control read (job 11613092, Glauert tip+root, revs 21-23): cp 0.5375 -> 0.5473 -> 0.5448, plateau 0.5461, drift +0.69 %/rev; ct 0.0613. D&S at the same horizon (11613058) 0.565, so D&S adds about +3.5 % over a control already +2.8 % over OLAF 0.5312; half of the excess over the references is not the tip model (root factor / flow relaxation, the P3.1 root polar is the suspect). Order decision (owner): the plan is followed in order; the IEA cp band stays provisional [0.476, 0.546] and is re-centred in P3.1/P3.3, not now. Phase 0 closes with that one explicit exception; next is P1.1. |
