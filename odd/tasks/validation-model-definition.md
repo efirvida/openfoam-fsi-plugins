@@ -40,6 +40,7 @@ differ" with its reason; nothing else may differ.
 | Lift Re correction | `liftReCorrExp 0` | the declared polar Re sits above the run Re; `quantifyPolarReScaling.py` |
 | ALM width | `eps = max(2*cbrt(V)*meshFactor, c/4, drag term)`, `meshFactor 1` | `actuatorLineElement::calcProjectionEpsilon` |
 | ASM width | `eps = 2*cbrt(V)*meshFactor`, `meshFactor 1`, `nChordwise 5` (default `meshFactor 2` = `4*cbrt(V)` is **not** used) | `actuatorSurfaceElement`; hybrid of Yang & Sotiropoulos sampling and the Massie et al. Gaussian (README, `ad49eef`) |
+| ASM+mesh width | paper cosine kernel, support `2.5*h`, `h = cbrt(V)` of the node's cell; **no free width**: `meshFactor` is inert here by design (P1.3), it acts only in the `kernel gaussian` ablation | `bladeSurfaceSampler::nodeSupport`; pinned by `test_mesh_factor_acts_only_in_gaussian_kernel` (cosine field bit-identical for `meshFactor` 1 and 3, gaussian differs 95 %) | the ASM+mesh width follows the cell, the ALM/ASM width follows `meshFactor`; a cell-size study moves the ASM+mesh width with `h` |
 | ASM+mesh kernel | smoothed cosine kernel, support `2.5*h` | `bladeSurface` (Yang & Sotiropoulos Eq. 8) |
 | Cell prefilter (ASM) | chord box grown by `eps*sqrt(ln 1000)` metres | `914aa72`; results taken before it used a truncated kernel |
 

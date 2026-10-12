@@ -281,6 +281,9 @@ lo que el mecanismo medido arriba señala.
 4. **La forma estación por estación**: las medias por banda no pueden mostrar un
    serrucho.
 5. **El defecto lateral de `meshFactor_` inerte en la rama coseno** (más arriba en
-   este espejo): sigue sin arreglar y necesita decisión.
+   este espejo): **decidido el 2026-10-12 (P1.3): se mantiene inerte por diseño**
+   (el coseno de Yang & Sotiropoulos no tiene ancho libre; honrarlo agregaría un parámetro de ajuste y
+   movería los resultados congelados que ya renderizan `meshFactor 2`). Se fijó con un test y se corrigió la
+   documentación; ver `odd/tasks/p1-3-meshfactor.md`.
 
 Registro completo: `odd/tasks/iea15mw-asm-l2-validation.md`.

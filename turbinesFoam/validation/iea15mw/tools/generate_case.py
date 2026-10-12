@@ -54,6 +54,9 @@ Force-kernel width: the rendered ``GaussianCoeffs/meshFactor`` (default 1.0)
 scales the ALM/ASM projection epsilon. Published guidance is
 ``epsilon_opt = 0.25*c``; ``meshFactor 1`` gives 1.89 m inside the disk against
 1.05 m at mid-span, and too wide a kernel weakens the near-wake induction.
+``meshFactor`` scales the ALM and the no-mesh ASM projection epsilon and the
+ASM+mesh ``kernel gaussian`` ablation; it has NO effect on the default ASM+mesh
+cosine kernel (support 2.5*h of the cell), which has no free width.
 
 Inflow sampling: ``axialFlowTurbineALSource`` already reads
 ``velocitySampleRadius`` (in units of the projection epsilon) and
@@ -2449,7 +2452,9 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "GaussianCoeffs/meshFactor for every profile (effective default "
             f"{DEFAULT_MESH_FACTOR:g}); turns the ALM/ASM projection epsilon "
-            "into 2*cbrt(V_cell)*meshFactor. Explicit flag beats "
+            "into 2*cbrt(V_cell)*meshFactor (ALM, no-mesh ASM and the ASM+mesh "
+            "'kernel gaussian' ablation); NO effect on the default ASM+mesh "
+            "cosine kernel (support 2.5*h of the cell). Explicit flag beats "
             f"{MESH_FACTOR_ENV}, which beats {DEFAULT_MESH_FACTOR:g}"
         ),
     )

@@ -138,7 +138,10 @@ output) but differs in three ways:
    `meshFactor 2` gives `eps = 4*cbrt(V)`, the mesh branch of Massie et al.'s
    `max(c/4, 4*cbrt(V))` **without** its `c/4` branch; a case that sets
    `meshFactor 1` (the NREL Phase VI case does) uses `eps = 2*cbrt(V)`, half
-   of that. State the value used whenever a result is quoted.
+   of that. State the value used whenever a result is quoted. `meshFactor`
+   scales the ALM and the no-mesh ASM projection epsilon and the ASM+mesh
+   `kernel gaussian` ablation; it has no effect on the default ASM+mesh cosine
+   kernel (support `2.5*h` of the cell).
 
 The cell loop that deposits the force is prefiltered with the chord bounding
 box grown by the kernel's truncation radius `eps*sqrt(ln 1000)` in metres; the
@@ -418,7 +421,7 @@ surfaceOrigin         (0 0 0);        // construction frame; injected by AFTAL
 surfaceSpanDirection  (0 0 1);        // outward root -> tip; injected by AFTAL
 surfaceChordDirection (0 -1 0);       // trailing -> leading; injected by AFTAL
 kernel                cosine;         // cosine (default) | gaussian (ablation)
-meshFactor            1.0;            // gaussian only; fallback below
+meshFactor            1.0;            // gaussian kernel only (inert for cosine); fallback below
 rho                   1.0;            // reference density for the SI contract/CSV
 referenceVelocity     1.0;            // accepted for shared-template parity; unused
 nu                    -1.0;           // accepted for shared-template parity; unused

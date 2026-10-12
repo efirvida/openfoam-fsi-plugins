@@ -1260,7 +1260,10 @@ def main(argv: list[str] | None = None) -> int:
              "cylinder; 0 renders the dictionary with no refinement. Each level "
              "halves the cell in the rotor region, and gaussian_mesh_factor is "
              "scaled by 2**N so the actuator line's projection width stays fixed "
-             "in metres and the mesh is the only variable",
+             "in metres and the mesh is the only variable (meshFactor acts on "
+             "the ALM, the no-mesh ASM and the ASM+mesh 'kernel gaussian' "
+             "ablation; it has NO effect on the default ASM+mesh cosine kernel, "
+             "support 2.5*h of the cell)",
     )
     parser.add_argument(
         "--delta-t",

@@ -1052,6 +1052,65 @@ def test_kernel_gaussian_conserves(gaussian_case, surface_case):
     )
 
 
+def _run_kernel_variant(tmp_path, name, flag, kernel, mesh_factor):
+    """Run Allrun `flag` (-surface | -gaussian) with `kernel` and an explicit surface-level `meshFactor`.
+
+    The key is written into the surface subdictionary, the first entry of the
+    `meshFactor` lookup (before `profileData GaussianCoeffs` and the element
+    default 2.0), so neither fallback can mask the value. Returns the last
+    written `force.blade` internal field.
+    """
+    case_dir = _copy_case(CASE_DIR, str(tmp_path / name))
+    variant = {"-surface": "surface", "-gaussian": "surface.gaussian"}[flag]
+    path = os.path.join(case_dir, "system", "fvOptions." + variant)
+    text = open(path).read()
+    text = re.sub(r"^\s*meshFactor\s+[^;]*;\n", "", text, flags=re.M)
+    text, count = re.subn(
+        r"^(\s*)kernel\s+\w+;",
+        r"\1kernel              %s;\n\1meshFactor          %g;" % (kernel, mesh_factor),
+        text,
+        flags=re.M,
+    )
+    assert count == 1
+    open(path, "w").write(text)
+    _run_case(case_dir, flag)
+    times = sorted(
+        (float(d), d) for d in os.listdir(case_dir)
+        if re.fullmatch(r"[0-9.]+", d) and d != "0" and d != "0.org"
+    )
+    return _read_internal_field(
+        os.path.join(case_dir, times[-1][1], "force.blade")
+    )
+
+
+def test_mesh_factor_acts_only_in_gaussian_kernel(tmp_path):
+    """`meshFactor` never reaches the default cosine kernel; it does the Gaussian.
+
+    Pins a design decision (odd/tasks/p1-3-meshfactor.md): the paper's
+    four-point cosine kernel (support 2.5*h) has no free width, so the
+    deposited force field cell by cell must be identical for `meshFactor` 1 and
+    3, while the `kernel gaussian` ablation must change with it. Defect class
+    caught: a change that silently makes the paper kernel depend on a tuning
+    knob (and so shifts every frozen result that renders `meshFactor 2`), or
+    one that makes the ablation's `meshFactor` inert. No RED exists: the test
+    describes the current behaviour.
+    """
+    cos1 = _run_kernel_variant(tmp_path, "cos1", "-surface", "cosine", 1.0)
+    cos3 = _run_kernel_variant(tmp_path, "cos3", "-surface", "cosine", 3.0)
+    gau1 = _run_kernel_variant(tmp_path, "gau1", "-gaussian", "gaussian", 1.0)
+    gau3 = _run_kernel_variant(tmp_path, "gau3", "-gaussian", "gaussian", 3.0)
+
+    assert np.linalg.norm(cos1) > 0.0
+    assert np.linalg.norm(gau1) > 0.0
+    assert_allclose(cos3, cos1, rtol=1e-12, atol=0.0)
+
+    scale = np.abs(gau1).max()
+    rel = np.abs(gau3 - gau1).max() / scale
+    cos_rel = np.abs(cos3 - cos1).max() / np.abs(cos1).max()
+    print("max rel diff meshFactor 3 vs 1: cosine %.3e gaussian %.3e" % (cos_rel, rel))
+    assert rel > 1e-3
+
+
 def _install_surface_variant(case_dir):
     """Install ``system/fvOptions.surface`` over the default fvOptions."""
     shutil.copyfile(
