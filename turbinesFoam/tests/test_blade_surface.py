@@ -450,6 +450,95 @@ def test_default_path_projects_strips(default_case):
     assert_allclose(-vec[0] / total[0], STRIP_KERNEL_SUM, rtol=1e-3)
 
 
+# Multi-element conservation fixture: four elements along the span with a
+# lifting profile, so the element force has a normal (y) component besides the
+# drag (x). Built from the delivered system/fvOptions of the copied case.
+MULTI_ELEMENT_GEOMETRY = """elementGeometry
+        (
+            ((0.5 0.5 0.3) (0 0 1) (0.2) (0 1 0) (0.5) (0))
+            ((0.5 0.5 0.4) (0 0 1) (0.2) (0 1 0) (0.5) (0))
+            ((0.5 0.5 0.5) (0 0 1) (0.2) (0 1 0) (0.5) (0))
+            ((0.5 0.5 0.6) (0 0 1) (0.2) (0 1 0) (0.5) (0))
+            ((0.5 0.5 0.7) (0 0 1) (0.2) (0 1 0) (0.5) (0))
+        );"""
+MULTI_N_ELEMENTS = 4
+CONSERVATION_RTOL = 1e-3
+
+
+def _run_multi_element_case(case_dir, extra_keys=""):
+    """Run the fixture with four lifting elements; `extra_keys` is injected
+    into actuatorLineSourceCoeffs (e.g. the ASM element type)."""
+    path = os.path.join(case_dir, "system", "fvOptions")
+    txt = open(path).read()
+    txt, n_geometry = re.subn(
+        r"elementGeometry.*?\n        \);", MULTI_ELEMENT_GEOMETRY, txt,
+        flags=re.DOTALL,
+    )
+    assert n_geometry == 1
+    assert "nElements           1;" in txt
+    txt = txt.replace(
+        "nElements           1;",
+        "nElements           %d;\n%s" % (MULTI_N_ELEMENTS, extra_keys),
+    )
+    assert "(-180 0 1.1)" in txt
+    txt = txt.replace("(-180 0 1.1)", "(-180 0.5 1.1)").replace(
+        "(180 0 1.1)", "(180 0.5 1.1)"
+    )
+    open(path, "w").write(txt)
+    _run_case(case_dir)
+
+
+def _assert_force_conserved(case_dir):
+    """Field integral = minus the sum of the element forces at every time.
+
+    Returns the list of integral/sum ratios (projected on the force vector)."""
+    integral = _read_force_integral(case_dir)
+    assert len(integral) == N_TIMES
+    ratios = []
+    for time, vec in integral:
+        total = np.zeros(3)
+        for index in range(MULTI_N_ELEMENTS):
+            frame = pd.read_csv(
+                os.path.join(
+                    case_dir, "postProcessing", "actuatorLineElements", "0",
+                    "blade.element%d.csv" % index,
+                )
+            )
+            total += _row_vector(
+                frame[np.isclose(frame.time, time)].iloc[-1],
+                ["fx", "fy", "fz"],
+            )
+        # The lift gives the force a y component: not a pure drag case
+        assert abs(total[1]) > 0.1 * np.linalg.norm(total)
+        ratio = np.dot(-vec, total) / np.dot(total, total)
+        print("time %g integral/sum ratio %.6f" % (time, ratio))
+        ratios.append(ratio)
+        assert abs(np.linalg.norm(vec) / np.linalg.norm(total) - 1.0) < CONSERVATION_RTOL
+        assert_allclose(-vec, total, rtol=CONSERVATION_RTOL, atol=1e-12)
+    return ratios
+
+
+def test_multi_element_alm_conserves_force(tmp_path):
+    """ALM: the deposited field integral is minus the sum of the elements."""
+    case_dir = _copy_case(CASE_DIR, str(tmp_path / "case"))
+    _run_multi_element_case(case_dir)
+    _assert_force_conserved(case_dir)
+
+
+def test_multi_element_asm_conserves_force(tmp_path):
+    """ASM (actuatorSurfaceElement, 5 chordwise strips): same identity.
+
+    Regression for the prefilter box that truncated the kernel support
+    (boundBox::inflate took metres where a factor was meant)."""
+    case_dir = _copy_case(CASE_DIR, str(tmp_path / "case"))
+    _run_multi_element_case(
+        case_dir,
+        "        elementType         actuatorSurfaceElement;\n"
+        "        nChordwise          5;\n",
+    )
+    _assert_force_conserved(case_dir)
+
+
 def test_suppressed_element_still_reports(default_case, surface_case):
     """The suppressed element computes and reports; only the field changes."""
     default = _read_element(default_case)
