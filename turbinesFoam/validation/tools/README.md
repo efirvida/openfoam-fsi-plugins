@@ -135,13 +135,27 @@ and rows with `a >= 0.4` are flagged as outside its validity. Without
 `--t-from`/`--t-to` the last half of the available span is used and the output
 says so.
 
+The elements are not uniformly spaced (the blade is a list of geometry nodes,
+some 13 mm apart, each segment holding `nElementsPerSegment` equal elements), so
+pass `--elements-per-segment n` (Phase VI: 2): the width of each element comes
+from its own segment, and a tiling self-check (outer edge of segment k = inner
+edge of segment k+1, in R) warns if `n` is wrong. The default `n = 1` falls back
+to neighbour midpoints and warns that this is unreliable. The output also prints
+the sum of element forces over blades without `dr`.
+
+Not every blade writes element CSVs (Phase VI: only blade1), so pass
+`--n-blades N` (Phase VI: 2): the force is the mean over the blade files found
+times N (valid for an axisymmetric time-average over whole revolutions), and the
+number found is printed next to N. If it is omitted and only one blade file is
+found, a WARNING says the result covers one blade only.
+
 `--rho` is required. The incompressible solver writes kinematic forces
 (N/rho), so the Phase VI case uses `--rho 1`; a physical density applies only
 to compressible runs whose CSV forces are in newtons.
 
 Exit codes: `1` a sample directory, run directory, ring file or element CSV is
 missing; `2` usage error (e.g. `--rho` omitted); `3` unusable data (empty time
-window, malformed file).
+window, malformed file); `4` element count not a multiple of `--elements-per-segment`; `5` more blade files than `--n-blades`.
 
 ## Adding a tool
 

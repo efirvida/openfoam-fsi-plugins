@@ -50,7 +50,7 @@ over the window (a blade rotates, so its time-averaged position would collapse
 onto the axis). ``root_dist`` is NOT a length: in the real CSVs it is the
 normalised span fraction 0..1 and is never read. ``--radius`` is R in metres and
 scales r/R, which is also the coordinate of the ring sets. ``dr`` is the
-central spacing of neighbouring element radii (one-sided at the ends). Each element is time-averaged
+width of the element (see below). Each element is time-averaged
 over ``--t-from``/``--t-to``; without them the LAST HALF of the available span is
 used and the output says so (``default window``).
 
@@ -65,9 +65,38 @@ N/rho. Pass ``--rho 1`` there: the theory is then kinematic too and the ratio is
 independent of the physical density. Pass the physical density (e.g. 1.225) only
 for a compressible solver, whose CSV forces are in newtons.
 
+Element width ``dr``
+--------------------
+The elements of an actuator line are NOT uniformly spaced: the blade is a list of
+geometry nodes (Phase VI: 26 nodes of the station table, some 13 mm apart) and each
+of the N-1 segments holds exactly ``nElementsPerSegment`` equally wide elements
+(``actuatorLineSource.C``), centred at (j+1/2) of the segment. The width cannot be
+read from the neighbouring centres when adjacent segments differ in length, so
+pass ``--elements-per-segment n`` (Phase VI: 2). With the radii sorted, segment
+k holds elements k*n .. k*n+n-1 and its width is ``(c_last - c_first)/(n-1)`` from
+its own centres. The number of elements must be a multiple of n (exit 4).
+Self-check: consecutive segments must tile, i.e. the outer edge of segment k
+(``c_last + w_k/2``) equals the inner edge of segment k+1 (``c_first - w_(k+1)/2``);
+the largest mismatch is printed in units of R and a WARNING is raised above
+1e-3 R (a warning, not an error: it is what shows n is wrong). With the default
+``n = 1`` the width is only the neighbour-midpoint rule and the output carries a
+WARNING that it is unreliable when adjacent elements differ in width.
+
+Number of blades
+----------------
+Not every blade writes element CSVs (Phase VI: ``writeElementPerf false`` on
+blade2, so only blade1 does). Pass ``--n-blades N`` (Phase VI: 2): the tool
+averages the per-element force over the blade CSVs it FOUND and multiplies by N,
+which is valid for an axisymmetric time-average over a whole number of
+revolutions. The number of blade files found is printed next to N. Without
+``--n-blades`` the force is the plain sum over the files found, and if only ONE
+blade file is found a WARNING (stderr and JSON ``warnings``) says the result covers
+one blade only. More blade files than N is an error (exit 5).
+
 Exit codes: 1 a path or the data it must hold is missing (no ring files, no
 element CSVs); 2 usage error (argparse, e.g. ``--rho`` omitted); 3 the data is
-unusable (empty time window, malformed file).
+unusable (empty time window, malformed file); 4 the number of elements is not a multiple
+of ``--elements-per-segment``; 5 more blade files were found than ``--n-blades``.
 """
 
 from __future__ import annotations
@@ -298,14 +327,54 @@ def window_means(
         "available": [first, last],
         "defaulted": defaulted,
         "rows": used_rows,
+        "blades_found": len({blade for blade, _ in histories}),
     }
     return elements, window
 
 
-def _spacings(radii: np.ndarray) -> np.ndarray:
+#: Largest tolerated gap between neighbouring segments, in units of R.
+TILING_TOLERANCE = 1e-3
+
+
+class BladeError(DataError):
+    """More blade files than ``--n-blades`` (exit code 5)."""
+
+
+class SegmentError(DataError):
+    """The element count does not fit ``--elements-per-segment`` (exit code 4)."""
+
+
+def element_widths(
+    radii: np.ndarray, per_segment: int, radius: float
+) -> tuple[np.ndarray, dict[str, Any] | None, list[str]]:
+    """Width of every element (radii sorted), the tiling check and any warnings."""
     if radii.size < 2:
         raise DataError("at least two elements are needed to form dr")
-    return np.gradient(radii)
+    if per_segment == 1:
+        warning = (
+            "WARNING: --elements-per-segment 1: element widths come from the neighbour-midpoint "
+            "rule, which is unreliable when adjacent elements differ in width"
+        )
+        return np.gradient(radii), None, [warning]
+    if radii.size % per_segment:
+        raise SegmentError(
+            f"{radii.size} elements is not a multiple of --elements-per-segment {per_segment}"
+        )
+    segments = radii.reshape(-1, per_segment)
+    seg_width = (segments[:, -1] - segments[:, 0]) / (per_segment - 1)
+    widths = np.repeat(seg_width, per_segment)
+    outer = segments[:, -1] + seg_width / 2.0
+    inner = segments[:, 0] - seg_width / 2.0
+    gaps = np.abs(outer[:-1] - inner[1:]) / radius
+    worst = float(gaps.max()) if gaps.size else 0.0
+    warnings = []
+    if worst > TILING_TOLERANCE:
+        warnings.append(
+            f"WARNING: segments do not tile (largest mismatch {worst:.3g} R > {TILING_TOLERANCE:g} R): "
+            f"--elements-per-segment {per_segment} is probably wrong"
+        )
+    tiling = {"per_segment": per_segment, "max_mismatch_over_R": worst, "tolerance_over_R": TILING_TOLERANCE}
+    return widths, tiling, warnings
 
 
 def analyse(
@@ -318,6 +387,8 @@ def analyse(
     radius: float,
     origin: np.ndarray,
     axis: np.ndarray,
+    elements_per_segment: int = 1,
+    n_blades: int | None = None,
     t_from: float | None = None,
     t_to: float | None = None,
     sample_time: str | None = None,
@@ -337,9 +408,20 @@ def analyse(
     sorter = np.argsort(radii)
     order = [order[i] for i in sorter]
     radii = radii[sorter]
-    dr = _spacings(radii)
+    dr, tiling, warnings = element_widths(radii, elements_per_segment, radius)
     force_sum = np.array([elements[n]["fx"] for n in order])
+    found = window["blades_found"]
+    blade_warnings: list[str] = []
+    if n_blades is not None:
+        if found > n_blades:
+            raise BladeError(f"{found} blade files found but --n-blades is {n_blades}")
+        force_sum = force_sum * (n_blades / found)  # mean over blades found, times N
+    elif found == 1:
+        blade_warnings.append(
+            "WARNING: only ONE blade file found and --n-blades not given: the result covers ONE blade only"
+        )
     actual = force_sum / dr  # sum over blades, per unit radius
+    total_force = float(force_sum.sum())  # blades summed, no dr
 
     planes = []
     for offset, rings in rings_by_plane.items():
@@ -378,6 +460,10 @@ def analyse(
         "rho": rho,
         "radius": radius,
         "window": window,
+        "tiling": tiling,
+        "warnings": [*blade_warnings, *warnings],
+        "blades": {"found": found, "n_blades": n_blades},
+        "sum_element_force": total_force,
         "planes": planes,
     }
 
@@ -397,6 +483,18 @@ def render_text(result: dict[str, Any]) -> str:
         f"element window: t = {window['t_from']:g} .. {window['t_to']:g}{note}; "
         f"available {window['available'][0]:g} .. {window['available'][1]:g}"
     )
+    if result["tiling"] is not None:
+        lines.append(
+            f"tiling check (n = {result['tiling']['per_segment']}): largest mismatch "
+            f"{result['tiling']['max_mismatch_over_R']:.3g} R"
+        )
+    blades = result["blades"]
+    lines.append(
+        f"blade files found: {blades['found']}"
+        + (f" of N = {blades['n_blades']}" if blades["n_blades"] is not None else " (--n-blades not given)")
+    )
+    lines.append(f"sum of element forces over blades (no dr): {result['sum_element_force']:.6g}")
+    lines += result["warnings"]
     for plane in result["planes"]:
         lines += [
             "",
@@ -435,6 +533,13 @@ def _vector_arg(parser: argparse.ArgumentParser, name: str, **kwargs: Any) -> No
     parser.add_argument(name, type=float, nargs=3, metavar=("X", "Y", "Z"), **kwargs)
 
 
+def _positive_int(text: str) -> int:
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be an integer >= 1")
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Momentum closure dT = 2 rho U^2 a (1-a) of an actuator rotor.",
@@ -467,6 +572,10 @@ def build_parser() -> argparse.ArgumentParser:
     _vector_arg(ana, "--wind", required=True, help="wind direction (fx positive along it)")
     _vector_arg(ana, "--origin", required=True, help="rotor centre (a point on the axis)")
     _vector_arg(ana, "--axis", required=True, help="rotor axis (sign irrelevant)")
+    ana.add_argument("--elements-per-segment", type=_positive_int, default=1,
+                     help="equal elements per geometry segment (Phase VI: 2); gives exact element widths")  # fmt: skip
+    ana.add_argument("--n-blades", type=_positive_int,
+                     help="rotor blade count N: force = mean over the blade CSVs found x N (Phase VI: 2)")  # fmt: skip
     ana.add_argument("--t-from", type=float, help="start of the element averaging window")
     ana.add_argument("--t-to", type=float, help="end of the element averaging window")
     ana.add_argument("--sample-time", help="time folder of the ring files (default: latest)")
@@ -504,6 +613,8 @@ def main(argv: list[str] | None = None) -> int:
             radius=args.radius,
             origin=np.array(args.origin),
             axis=np.array(args.axis),
+            elements_per_segment=args.elements_per_segment,
+            n_blades=args.n_blades,
             t_from=args.t_from,
             t_to=args.t_to,
             sample_time=args.sample_time,
@@ -511,10 +622,18 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
+    except BladeError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 5
+    except SegmentError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 4
     except DataError as error:
         print(f"error: {error}", file=sys.stderr)
         return 3
 
+    for warning in result["warnings"]:
+        print(warning, file=sys.stderr)
     if args.csv:
         write_csv(result, args.csv)
     if args.json:

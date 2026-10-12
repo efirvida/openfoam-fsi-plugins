@@ -107,15 +107,20 @@ def _write_elements(
     a_of_r=induction,
     rho: float = RHO,
     blades: int = 3,
+    radii: list[float] | None = None,
+    widths: list[float] | None = None,
+    written: int | None = None,
 ) -> None:
-    """Element CSVs whose fx is the theory value times dr / blades, times scale."""
-    radii = _element_radii()
-    dr = radii[1] - radii[0]
+    """Element CSVs whose fx is the theory value times the element width / blades, times scale."""
+    if radii is None:
+        radii = _element_radii()
+        widths = [radii[1] - radii[0]] * len(radii)
+    assert widths is not None
     target = run / "postProcessing" / "actuatorLineElements" / folder
     target.mkdir(parents=True, exist_ok=True)
-    for blade in range(1, blades + 1):
+    for blade in range(1, (written or blades) + 1):
         for n, r in enumerate(radii):
-            fx = theory_per_radius(r, a_of_r(r), rho) * dr / blades * scale
+            fx = theory_per_radius(r, a_of_r(r), rho) * widths[n] / blades * scale
             # Real layout: root_dist is a 0..1 span fraction from the hub (NOT r/R),
             # and x,y,z sit at radius r around the axis, with an axial and a
             # lateral offset like the real blade (blade pointing +z).
@@ -358,3 +363,142 @@ def test_empty_window_exits_three(tool, tmp_path, capsys):
     samples, run = _case(tmp_path)
     code, _ = _run(tool, samples, run, "--t-from", "50", "--t-to", "60", capsys=capsys)
     assert code == 3
+
+
+#: Geometry nodes like the real blade table: a 13 mm segment next to a 0.3 m one.
+NODES = [0.6, 1.2, 2.0, 3.172, 3.185, 3.485, 4.2, 4.9]
+PER_SEGMENT = 2
+
+
+def _segment_elements(nodes=NODES, n=PER_SEGMENT):
+    """Centres and widths as actuatorLineSource builds them: n equal elements per segment."""
+    radii, widths = [], []
+    for lo, hi in zip(nodes[:-1], nodes[1:]):
+        width = (hi - lo) / n
+        radii += [lo + width * (j + 0.5) for j in range(n)]
+        widths += [width] * n
+    return radii, widths
+
+
+def _segment_case(tmp_path: Path, scale: float = 1.0) -> tuple[Path, Path]:
+    samples = tmp_path / "postProcessing" / "inductionClosureSample"
+    _write_rings(samples)
+    radii, widths = _segment_elements()
+    _write_elements(tmp_path, "0", [1.0, 2.0, 3.0, 4.0], scale=scale, radii=radii, widths=widths)
+    return samples, tmp_path
+
+
+def test_elements_per_segment_recovers_nonuniform_widths(tool, tmp_path, capsys):
+    samples, run = _segment_case(tmp_path)
+    code, out = _run(tool, samples, run, "--elements-per-segment", "2", capsys=capsys)
+    assert code == 0
+    result = json.loads(out)
+    plane = result["planes"][0]
+    assert len(plane["rows"]) == 2 * (len(NODES) - 1)
+    for row in plane["rows"]:
+        assert row["ratio"] == pytest.approx(1.0, abs=2e-3)
+    assert plane["integrated_ratio"] == pytest.approx(1.0, abs=1e-3)
+    assert result["tiling"]["max_mismatch_over_R"] < 1e-6
+
+
+def test_neighbour_midpoint_fallback_fails_on_nonuniform_widths(tool, tmp_path, capsys):
+    """Pins why the option exists: centre spacing is not the element width."""
+    samples, run = _segment_case(tmp_path)
+    code, out = _run(tool, samples, run, capsys=capsys)
+    assert code == 0
+    ratios = [row["ratio"] for row in json.loads(out)["planes"][0]["rows"]]
+    assert any(abs(ratio - 1.0) > 0.05 for ratio in ratios)
+
+
+def test_fallback_warns_on_stderr(tool, tmp_path, capsys):
+    samples, run = _segment_case(tmp_path)
+    argv = ["analyse", str(samples), str(run), "--rho", str(RHO), "--u-inf", str(U_INF),
+            "--radius", str(RADIUS), "--wind", "1", "0", "0", *ROTOR_ARGS,
+            "--t-from", "1", "--t-to", "4"]  # fmt: skip
+    assert tool.main(argv) == 0
+    assert "WARNING" in capsys.readouterr().err
+
+
+def test_tiling_check_flags_a_wrong_segment_size(tool, tmp_path, capsys):
+    samples, run = _segment_case(tmp_path)  # 14 elements: n = 7 is a multiple, but wrong
+    code, out = _run(tool, samples, run, "--elements-per-segment", "7", capsys=capsys)
+    assert code == 0
+    result = json.loads(out)
+    assert result["tiling"]["max_mismatch_over_R"] > 1e-3
+    assert result["warnings"]
+
+
+def test_text_output_prints_the_tiling_line(tool, tmp_path, capsys):
+    samples, run = _segment_case(tmp_path)
+    argv = ["analyse", str(samples), str(run), "--rho", str(RHO), "--u-inf", str(U_INF),
+            "--radius", str(RADIUS), "--wind", "1", "0", "0", *ROTOR_ARGS,
+            "--t-from", "1", "--t-to", "4", "--elements-per-segment", "2"]  # fmt: skip
+    assert tool.main(argv) == 0
+    assert "tiling check" in capsys.readouterr().out
+
+
+def test_element_count_not_a_multiple_exits_four(tool, tmp_path, capsys):
+    samples, run = _segment_case(tmp_path)  # 14 elements
+    code, _ = _run(tool, samples, run, "--elements-per-segment", "3", capsys=capsys)
+    assert code == 4
+
+
+def test_elements_per_segment_must_be_positive(tool, tmp_path):
+    samples, run = _segment_case(tmp_path)
+    with pytest.raises(SystemExit) as exc:
+        tool.main(["analyse", str(samples), str(run), "--rho", "1", "--u-inf", "7",
+                   "--radius", "5", "--wind", "1", "0", "0", *ROTOR_ARGS,
+                   "--elements-per-segment", "0"])  # fmt: skip
+    assert exc.value.code == 2
+
+
+def _one_blade_of_two(tmp_path: Path) -> tuple[Path, Path]:
+    """A 2-bladed rotor where only blade1 writes element CSVs (writeElementPerf false on blade2)."""
+    samples = tmp_path / "postProcessing" / "inductionClosureSample"
+    _write_rings(samples)
+    _write_elements(tmp_path, "0", [1.0, 2.0, 3.0, 4.0], blades=2, written=1)
+    return samples, tmp_path
+
+
+def test_n_blades_scales_the_found_blades_to_the_rotor(tool, tmp_path, capsys):
+    samples, run = _one_blade_of_two(tmp_path)
+    code, out = _run(tool, samples, run, "--n-blades", "2", capsys=capsys)
+    assert code == 0
+    result = json.loads(out)
+    assert result["blades"] == {"found": 1, "n_blades": 2}
+    assert result["planes"][0]["integrated_ratio"] == pytest.approx(1.0, abs=1e-3)
+    for row in result["planes"][0]["rows"]:
+        assert row["ratio"] == pytest.approx(1.0, abs=2e-3)
+
+
+def test_one_blade_file_without_n_blades_warns_and_reports_half(tool, tmp_path, capsys):
+    samples, run = _one_blade_of_two(tmp_path)
+    code, out = _run(tool, samples, run, capsys=capsys)
+    assert code == 0
+    result = json.loads(out)
+    assert result["planes"][0]["integrated_ratio"] == pytest.approx(0.5, abs=1e-3)
+    assert any("ONE blade" in w for w in result["warnings"])
+
+
+def test_one_blade_warning_goes_to_stderr(tool, tmp_path, capsys):
+    samples, run = _one_blade_of_two(tmp_path)
+    argv = ["analyse", str(samples), str(run), "--rho", str(RHO), "--u-inf", str(U_INF),
+            "--radius", str(RADIUS), "--wind", "1", "0", "0", *ROTOR_ARGS,
+            "--t-from", "1", "--t-to", "4"]  # fmt: skip
+    assert tool.main(argv) == 0
+    assert "ONE blade" in capsys.readouterr().err
+
+
+def test_more_blade_files_than_n_blades_exits_five(tool, tmp_path, capsys):
+    samples, run = _case(tmp_path)  # 3 blade files
+    code, _ = _run(tool, samples, run, "--n-blades", "2", capsys=capsys)
+    assert code == 5
+
+
+def test_text_output_prints_blades_found_next_to_n(tool, tmp_path, capsys):
+    samples, run = _one_blade_of_two(tmp_path)
+    argv = ["analyse", str(samples), str(run), "--rho", str(RHO), "--u-inf", str(U_INF),
+            "--radius", str(RADIUS), "--wind", "1", "0", "0", *ROTOR_ARGS,
+            "--t-from", "1", "--t-to", "4", "--n-blades", "2"]  # fmt: skip
+    assert tool.main(argv) == 0
+    assert "blade files found: 1 of N = 2" in capsys.readouterr().out
