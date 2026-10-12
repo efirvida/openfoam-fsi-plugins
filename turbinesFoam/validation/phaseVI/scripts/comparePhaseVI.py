@@ -163,6 +163,12 @@ def load_experiment(experiment_dir: Path, sequence: str, speed: float):
                 "cn": float(candidate["cn"]),
                 "ct": float(candidate["ct"]),
                 "cm": float(candidate["cm"]),
+                # The plane-of-rotation pair and its normalization pressure are
+                # appended by `extractUAE6Reference.py`; an older CSV without
+                # them yields None instead of raising.
+                "cth": candidate.get("cth"),
+                "ctq": candidate.get("ctq"),
+                "qnorm_pa": candidate.get("qnorm_pa"),
             }
     if not stations:
         raise KeyError(f"{spanwise}: no rows for {speed:g} m/s")
@@ -304,11 +310,25 @@ def spanwise_profile(elements, start, end, allow_short, radius):
     Reference-frame fix. The experiment's spanwise `CN`/`CT` are referenced to
     the **chord line** (NREL/TP-500-29955, Figure 25: "CN = Normal force
     coefficient, CT = Tangent force coefficient  { (Ref: Chord-line) }"),
-    while the element CSV's `c_ref_n`/`c_ref_t` are referenced to the **plane of
-    rotation**: the element's `inflowRefAngle()` is the flow angle phi
-    (`actuatorLineElement.C`, comment "Calculate inflow velocity angle in
-    degrees (AFTAL Phi)"), so `c_ref_t = cl*sin(phi) - cd*cos(phi)` is the
-    report's `C_Torque`, not its `C_T`.
+    while the element CSV's `c_ref_n`/`c_ref_t` come out in a frame that, on the
+    evidence available, behaves as the **plane of rotation**: `c_ref_t =
+    cl*sin(phi) - cd*cos(phi)` is the report's `C_Torque`, not its `C_T`.
+
+    That identification is EMPIRICAL, not read off the C++. `profileData::
+    convertToCRN`/`convertToCRT` are formula-identical to `convertToCC`/
+    `convertToCN` above; the only difference is the angle they receive,
+    `inflowRefAngle()`, which is the angle between the relative velocity and
+    `chordRefDirection_` -- a direction the CASE sets in its own dictionary
+    (`actuatorLineElement.C:92` reads it, `:1028` uses it). The frame is
+    therefore a setup choice, not a fixed law of the model. Two measurements
+    identify it as the plane of rotation: recovering the angle from the pair
+    with `cl`/`cd` gives 13-20 deg inboard, which is NOT the effective angle of
+    attack (about 10.5 deg), so the frame is not the chord frame; and
+    `atan2(c_ref_t, c_ref_n)` tracks the experiment's `atan2(CTQ, CTH)` within
+    about 1 deg at all five stations. Caution on that second check: `atan2` of
+    the pair is an estimator with a measured ~2.5 deg absolute bias (against the
+    algebraic inverse), which largely cancels in a station-to-station
+    difference. See `scripts/compareInflowAngle.py`.
 
     Comparing the two frames directly produced the long-standing "~2x c_ref_t"
     mismatch (measured 1.2x-4.6x, varying with span because phi varies). That was
@@ -324,6 +344,13 @@ def spanwise_profile(elements, start, end, allow_short, radius):
 
     Per row, then averaged (cn is nonlinear in alpha, so averaging the inputs
     first would bias the result).
+
+    The element CSV also carries that frame's pair `c_ref_n`/`c_ref_t`
+    directly, and the experiment reports the same frame as `CTH`/`CTQ`. That pair is what produces rotor thrust and torque, so the
+    POWER comparison must be read from the plane columns, while the chord
+    columns above remain the section-load comparison. Both are returned; they
+    are different quantities, not two estimates of one. The plane pair is also
+    averaged per row, like the chord pair.
     """
     profile = []
     for path, rows in elements:
@@ -343,8 +370,16 @@ def spanwise_profile(elements, start, end, allow_short, radius):
             ct_rows.append(cl * math.sin(alpha) - cd * math.cos(alpha))
         c_ref_n = mean(cn_rows)
         c_ref_t = mean(ct_rows)
+        c_ref_n_plane = mean(
+            [float(row["c_ref_n"]) for row in window if "c_ref_n" in row]
+        )
+        c_ref_t_plane = mean(
+            [float(row["c_ref_t"]) for row in window if "c_ref_t" in row]
+        )
         r_over_r = r_over_r_from_root_dist(root_dist, radius)
-        profile.append((r_over_r, c_ref_n, c_ref_t))
+        profile.append(
+            (r_over_r, c_ref_n, c_ref_t, c_ref_n_plane, c_ref_t_plane)
+        )
     profile.sort()
     return profile
 
@@ -357,8 +392,10 @@ def read_surface_stations(run_dir: Path, start, end, allow_short):
     averaging window like `spanwise_profile` and returns
     `(root_dist, c_ref_n, c_ref_t)` tuples sorted by root distance. The rows
     already carry the element public reference coefficients, so the caller only
-    applies the element r/R mapping. A missing surface directory or an empty
-    station table fails loudly.
+    applies the element r/R mapping. Those columns are the element's
+    **plane-of-rotation** pair, so a surface station table carries ONLY the
+    plane decomposition. A missing surface directory or an empty station table
+    fails loudly.
     """
     surface_dir = run_dir / SURFACE_DIR
     files = sorted(
@@ -423,16 +460,26 @@ def read_surface_audit(run_dir: Path) -> dict:
 
 
 def interpolate(profile, x):
+    """Linear interpolation of a profile of `(x, *values)` rows.
+
+    Interpolates element-wise after the first component, so the result has the
+    same arity as each row drops its `x`: a 3-tuple profile still returns
+    `(cn, ct)` exactly as before, and a 5-tuple profile returns the plane pair
+    too.
+    """
     if not profile:
         return None
     if x <= profile[0][0]:
-        return profile[0][1], profile[0][2]
+        return tuple(profile[0][1:])
     if x >= profile[-1][0]:
-        return profile[-1][1], profile[-1][2]
-    for (x0, n0, t0), (x1, n1, t1) in zip(profile, profile[1:]):
-        if x0 <= x <= x1:
-            ratio = 0.0 if x1 == x0 else (x - x0) / (x1 - x0)
-            return n0 + ratio * (n1 - n0), t0 + ratio * (t1 - t0)
+        return tuple(profile[-1][1:])
+    for left, right in zip(profile, profile[1:], strict=False):
+        if left[0] <= x <= right[0]:
+            ratio = 0.0 if right[0] == left[0] else (x - left[0]) / (right[0] - left[0])
+            return tuple(
+                lo + ratio * (hi - lo)
+                for lo, hi in zip(left[1:], right[1:], strict=True)
+            )
     return None
 
 
@@ -520,10 +567,17 @@ def analyse_model(run_dir: Path, cfg, speed, sequence, rho, allow_short,
     drift = drift_flags(rows, start, period)
     radius = float(cfg["turbine"]["radius"])
     if surface:
-        # The station rows carry the element c_ref_n/c_ref_t definitions; the
-        # only conversion is the element root_dist -> r/R mapping.
+        # The station rows carry the element c_ref_n/c_ref_t definitions, which
+        # are the PLANE-OF-ROTATION pair, so the only conversion is the element
+        # root_dist -> r/R mapping. A surface station table has no chord-line
+        # decomposition: the same plane pair is duplicated into the chord slots
+        # (slots 1 and 2), making the chord comparison a declared open defect
+        # for this model while the plane comparison (slots 3 and 4) is exact.
         profile = [
-            (r_over_r_from_root_dist(root_dist, radius), c_ref_n, c_ref_t)
+            (
+                r_over_r_from_root_dist(root_dist, radius),
+                c_ref_n, c_ref_t, c_ref_n, c_ref_t,
+            )
             for root_dist, c_ref_n, c_ref_t in read_surface_stations(
                 run_dir, start, end, allow_short
             )
@@ -610,6 +664,37 @@ def write_turbine_comparison(path, results, experiment, thrust_scope):
     return measured
 
 
+def spanwise_plane_cells(measured, c_ref_n_plane, c_ref_t_plane):
+    """Appended plane-of-rotation cells, empty when either side is missing.
+
+    The plane pair produces the rotor thrust and torque, so this is the POWER
+    comparison (`c_ref_n_plane` against `CTH`, `c_ref_t_plane` against `CTQ`).
+    `within_band_plane` uses the same `SPANWISE_BAND_FRACTION`/`SPANWISE_BAND_MIN`
+    rule as `within_band`, applied to that pair. Empty strings are emitted when
+    the model OR the experiment row has no plane data.
+    """
+    cth_exp = measured.get("cth")
+    ctq_exp = measured.get("ctq")
+    if (c_ref_n_plane is None or c_ref_t_plane is None
+            or cth_exp is None or ctq_exp is None):
+        return ["", "", "", "", "", "", ""]
+    band_n = max(SPANWISE_BAND_MIN, SPANWISE_BAND_FRACTION * abs(cth_exp))
+    band_t = max(SPANWISE_BAND_MIN, SPANWISE_BAND_FRACTION * abs(ctq_exp))
+    within = (
+        abs(c_ref_n_plane - cth_exp) <= band_n
+        and abs(c_ref_t_plane - ctq_exp) <= band_t
+    )
+    return [
+        f"{c_ref_n_plane:.6g}",
+        f"{cth_exp:.6g}",
+        f"{(c_ref_n_plane - cth_exp) / cth_exp:.6g}",
+        f"{c_ref_t_plane:.6g}",
+        f"{ctq_exp:.6g}",
+        f"{(c_ref_t_plane - ctq_exp) / ctq_exp:.6g}",
+        "yes" if within else "no",
+    ]
+
+
 def write_spanwise_comparison(path, results, experiment_spanwise):
     with path.open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
@@ -617,6 +702,8 @@ def write_spanwise_comparison(path, results, experiment_spanwise):
             "model", "r_over_R", "c_ref_n", "cn_exp", "dcn_frac",
             "c_ref_t", "ct_exp", "dct_frac", "cm_exp_excluded",
             "within_band",
+            "c_ref_n_plane", "cth_exp", "dcth_frac",
+            "c_ref_t_plane", "ctq_exp", "dctq_frac", "within_band_plane",
         ])
         for model in sorted(results):
             spanwise = results[model]["spanwise"]
@@ -625,9 +712,14 @@ def write_spanwise_comparison(path, results, experiment_spanwise):
                 measured = experiment_spanwise[station]
                 if values is None:
                     writer.writerow([model, f"{station:.2f}", "", "", "", "",
-                                     "", "", f"{measured['cm']:.6g}", "no"])
+                                     "", "", f"{measured['cm']:.6g}", "no",
+                                     "", "", "", "", "", "", ""])
                     continue
-                c_ref_n, c_ref_t = values
+                c_ref_n, c_ref_t = values[0], values[1]
+                # `interpolate` drops the r/R component, so the plane pair of a
+                # 5-tuple profile row lands at indices 2 and 3 here.
+                c_ref_n_plane = values[2] if len(values) > 3 else None
+                c_ref_t_plane = values[3] if len(values) > 3 else None
                 band_n = max(
                     SPANWISE_BAND_MIN,
                     SPANWISE_BAND_FRACTION * abs(measured["cn"]),
@@ -651,6 +743,7 @@ def write_spanwise_comparison(path, results, experiment_spanwise):
                     f"{(c_ref_t - measured['ct']) / measured['ct']:.6g}",
                     f"{measured['cm']:.6g}",
                     "yes" if within else "no",
+                    *spanwise_plane_cells(measured, c_ref_n_plane, c_ref_t_plane),
                 ])
 
 
@@ -846,9 +939,7 @@ def main(argv: list[str] | None = None) -> int:
                     "revolutions_averaged"
                 ],
                 "window_mode": results[model]["stats"]["window_mode"],
-                "spanwise": {
-                    key: values for key, values in results[model]["spanwise"].items()
-                },
+                "spanwise": dict(results[model]["spanwise"]),
             }
             for model in results
         },

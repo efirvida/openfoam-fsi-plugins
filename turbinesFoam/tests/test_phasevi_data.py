@@ -32,6 +32,7 @@ from case_config import (  # noqa: E402
 )
 from element_data import blade_element_rows  # noqa: E402
 import buildPolars  # noqa: E402
+import comparePhaseVI as compare  # noqa: E402
 
 CONFIG = PACKAGE / "config" / "case.yaml"
 GEOMETRY_SHA256 = (
@@ -170,6 +171,75 @@ def test_spanwise_stations():
 def test_tsr_matches_measured_rows():
     cfg = load_config(CONFIG)
     assert_tsr_matches_experiment(cfg)
+
+
+def test_enriched_spanwise_carries_the_plane_columns():
+    """The archive-only CTH/CTQ/QNORM join is pinned on the committed tables.
+
+    The workbook `ldsmean` sheet has no plane-of-rotation channels, so without
+    this join the rotor power comparison cannot be read. The anchor values pin
+    the extractor's err-masked mean, so a changed averaging rule fails here.
+    """
+    plane_columns = ("cth", "ctq", "qnorm_pa")
+    for name in ("sequence_H_spanwise.csv", "sequence_S_spanwise.csv"):
+        rows = read_csv(DATA / "experiment" / name)
+        assert rows, name
+        for row in rows:
+            for column in plane_columns:
+                assert column in row
+                assert row[column] != ""
+    anchors = {
+        ("sequence_H_spanwise.csv", "h0700000"):
+            (0.7375108895, 0.3577647636, 114.5407451),
+        ("sequence_S_spanwise.csv", "s0700000"):
+            (0.7279775946, 0.3530765269, 118.3583668),
+    }
+    for (name, file_name), (cth, ctq, qnorm) in anchors.items():
+        row = next(
+            candidate for candidate in read_csv(DATA / "experiment" / name)
+            if candidate["file_name"] == file_name
+            and candidate["r_over_R"] == "0.3"
+        )
+        assert float(row["cth"]) == pytest.approx(cth, abs=1e-9)
+        assert float(row["ctq"]) == pytest.approx(ctq, abs=1e-9)
+        assert float(row["qnorm_pa"]) == pytest.approx(qnorm, abs=1e-9)
+
+
+def test_enriched_performance_carries_eaerotq():
+    """The aerodynamic torque is joined onto the committed performance table."""
+    anchors = {
+        ("sequence_H_performance.csv", "h0700000"): 782.2165271,
+        ("sequence_S_performance.csv", "s0700000"): 796.0658305,
+    }
+    for (name, file_name), expected in anchors.items():
+        row = next(
+            candidate for candidate in read_csv(DATA / "experiment" / name)
+            if candidate["file_name"] == file_name
+        )
+        assert "eaerotq_n" in row
+        assert float(row["eaerotq_n"]) == pytest.approx(expected, abs=1e-9)
+
+
+def test_interpolate_handles_five_tuple_profiles():
+    """`interpolate` maps every coefficient component, not only cn/ct.
+
+    A 5-tuple profile row is `(r_over_r, cn_chord, ct_chord, cth_plane,
+    ctq_plane)`; the returned tuple drops `r_over_r` and carries all four
+    coefficients, so the plane pair reaches the comparison table.
+    """
+    profile = [
+        (0.0, 0.6, -0.08, 0.7, -0.10),
+        (1.0, 0.2, -0.02, 0.3, -0.04),
+    ]
+    assert compare.interpolate(profile, 0.5) == pytest.approx(
+        (0.4, -0.05, 0.5, -0.07)
+    )
+    assert compare.interpolate(profile, -1.0) == pytest.approx(
+        (0.6, -0.08, 0.7, -0.10)
+    )
+    assert compare.interpolate(profile, 2.0) == pytest.approx(
+        (0.2, -0.02, 0.3, -0.04)
+    )
 
 
 def test_polar_baseline():

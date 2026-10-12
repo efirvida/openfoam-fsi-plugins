@@ -39,6 +39,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import re
 import sys
@@ -63,6 +64,23 @@ R_DRY_AIR = 287.058
 KELVIN = 273.15
 # The five instrumented stations and their span fraction.
 STATIONS = (("30", 0.30), ("47", 0.47), ("63", 0.63), ("80", 0.80), ("95", 0.95))
+# The committed workbook tables (`data/experiment/sequence_*_{spanwise,
+# performance}.csv`) are a separate artefact from the archive outputs above:
+# `extractExperimentalData.py` writes them from the workbook sheet `ldsmean`,
+# which carries CN/CT/CM but no plane-of-rotation CTH/CTQ, no normalization
+# pressure QNORM and no aerodynamic torque EAEROTQ. Those live only in the
+# parquet archive, so the committed tables are enriched in place with them. The
+# row set, row order, header order and every pre-existing value are preserved;
+# the new columns are appended at the end.
+COMMITTED_DIR = ROOT / "data" / "experiment"
+COMMITTED_SEQUENCES = ("H", "S")
+ENRICHED_COLUMNS = {
+    "spanwise": ("cth", "ctq", "qnorm_pa"),
+    "performance": ("eaerotq_n",),
+}
+ENRICHED_CHANNELS = ("err", "EAEROTQ") + tuple(
+    f"{kind}{prefix}" for prefix, _ in STATIONS for kind in ("CTH", "CTQ", "QNORM")
+)
 # Workbook convention: a 0 deg test point is one whose measured yaw is within
 # half a degree of zero. The file name is only allowed to disagree by this much.
 YAW_ABS_TOLERANCE_DEG = 0.5
@@ -260,6 +278,156 @@ def _inventory_sort_key(row: dict) -> tuple:
     )
 
 
+def _point_enrichment_means(file_name: str) -> dict[str, float] | None:
+    """Per-channel means of one archive point, using the script's own rule.
+
+    Same statistic as `read_point`: frames whose `err` byte is not 128 are
+    masked out before the arithmetic mean (never `nanmean` over all frames).
+    Returns None when the point is not in the archive, so the caller can warn
+    and leave the row's new cells empty instead of dropping it.
+    """
+    matches = sorted((ARCHIVE_DIR / "parquet").glob(f"uae6.*.00.{file_name}.parquet"))
+    if len(matches) != 1:
+        return None
+    table = pq.read_table(str(matches[0]), columns=list(ENRICHED_CHANNELS))
+    frames = {
+        name: table.column(name).to_numpy(zero_copy_only=False)
+        for name in ENRICHED_CHANNELS
+    }
+    keep = frames["err"] == ERR_BYTE_OK
+    if not keep.any():
+        return None
+    return {
+        name: float(np.mean(frames[name][keep].astype("float64")))
+        for name in ENRICHED_CHANNELS
+    }
+
+
+def read_committed_rows(path: Path) -> list[dict[str, str]]:
+    with path.open(encoding="utf-8") as stream:
+        return list(csv.DictReader(stream))
+
+
+def _station_prefix(fraction: float) -> str:
+    for prefix, value in STATIONS:
+        if abs(value - fraction) < 1e-9:
+            return prefix
+    raise KeyError(f"{fraction:g} is not one of the five instrumented stations")
+
+
+def _spanwise_key(row: dict) -> tuple:
+    return (
+        round(float(row["wind_speed_m_s"]), 6),
+        round(float(row["r_over_R"]), 6),
+    )
+
+
+def _spanwise_lookup(rows: list[dict]) -> dict:
+    lookup = {}
+    cache: dict[str, dict | None] = {}
+    for row in rows:
+        name = row["file_name"]
+        if name not in cache:
+            cache[name] = _point_enrichment_means(name)
+        means = cache[name]
+        if means is None:
+            continue
+        prefix = _station_prefix(float(row["r_over_R"]))
+        lookup[_spanwise_key(row)] = {
+            "cth": means[f"CTH{prefix}"],
+            "ctq": means[f"CTQ{prefix}"],
+            "qnorm_pa": means[f"QNORM{prefix}"],
+        }
+    return lookup
+
+
+def _performance_key(row: dict) -> tuple:
+    return (row["sequence"].upper(), round(float(row["wind_speed_m_s"]), 6))
+
+
+def _performance_lookup(rows: list[dict]) -> dict:
+    lookup = {}
+    cache: dict[str, dict | None] = {}
+    for row in rows:
+        name = row["file_name"]
+        if name not in cache:
+            cache[name] = _point_enrichment_means(name)
+        means = cache[name]
+        if means is None:
+            continue
+        lookup[_performance_key(row)] = {"eaerotq_n": means["EAEROTQ"]}
+    return lookup
+
+
+def enrich_committed_table(path: Path, columns: tuple[str, ...],
+                           key_of, lookup) -> tuple[str, list[str]]:
+    """Append `columns` to one committed table, preserving the existing bytes.
+
+    Each original line is split and re-joined field by field, so pre-existing
+    values keep their exact text; reformatting them through `_format` would
+    change precision (e.g. the workbook `tsr` carries 16 digits). Columns that
+    are already present are dropped first, which makes the step idempotent. A
+    row whose key has no archive match keeps empty cells and is reported in the
+    returned warnings.
+    """
+    lines = path.read_text(encoding="utf-8").splitlines()
+    header = lines[0].split(",")
+    for name in columns:
+        if name in header:
+            header.remove(name)
+    kept = len(header)
+    output = [",".join([*header, *columns])]
+    warnings: list[str] = []
+    for line in lines[1:]:
+        original = line.split(",")[:kept]
+        if len(original) < kept:
+            original += [""] * (kept - len(original))
+        row = {name: original[index] for index, name in enumerate(header)}
+        matched = lookup.get(key_of(row))
+        if matched is None:
+            warnings.append(
+                f"{path.name}: no archive point matches {key_of(row)}; "
+                "the new columns are left empty"
+            )
+        cells = list(original)
+        for name in columns:
+            value = matched.get(name) if matched is not None else None
+            cells.append("" if value is None else _format(value))
+        output.append(",".join(cells))
+    return "\n".join(output) + "\n", warnings
+
+
+def build_committed_enrichment() -> tuple[dict[Path, str], list[str]]:
+    """Render the four committed tables with the archive-only columns appended.
+
+    Always both sequences: the committed workbook tables are a delivered
+    artefact independent of `--sequences`, which selects only the archive
+    outputs under `data/experiment/uae6-archive/`.
+    """
+    rendered: dict[Path, str] = {}
+    warnings: list[str] = []
+    for sequence in COMMITTED_SEQUENCES:
+        performance = COMMITTED_DIR / f"sequence_{sequence}_performance.csv"
+        spanwise = COMMITTED_DIR / f"sequence_{sequence}_spanwise.csv"
+        if performance.is_file():
+            text, notes = enrich_committed_table(
+                performance, ENRICHED_COLUMNS["performance"],
+                _performance_key,
+                _performance_lookup(read_committed_rows(performance)),
+            )
+            rendered[performance] = text
+            warnings += notes
+        if spanwise.is_file():
+            text, notes = enrich_committed_table(
+                spanwise, ENRICHED_COLUMNS["spanwise"],
+                _spanwise_key,
+                _spanwise_lookup(read_committed_rows(spanwise)),
+            )
+            rendered[spanwise] = text
+            warnings += notes
+    return rendered, warnings
+
+
 def build(sequences: list[str], with_hashes: bool) -> tuple[dict[Path, str], list[str]]:
     """Render the selected tables plus the inventory; return the skip notes too."""
     rendered: dict[Path, str] = {}
@@ -313,6 +481,9 @@ def build(sequences: list[str], with_hashes: bool) -> tuple[dict[Path, str], lis
     rendered[OUT_DIR / "INVENTORY.csv"] = write_table(
         INVENTORY_COLUMNS, sorted(inventory, key=_inventory_sort_key)
     )
+    enriched, enrichment_warnings = build_committed_enrichment()
+    rendered.update(enriched)
+    notes += enrichment_warnings
     return rendered, notes
 
 

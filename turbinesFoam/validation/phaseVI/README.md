@@ -522,6 +522,17 @@ experimental CSVs, and writes `turbine_comparison.csv`,
 revolutions 0–4, flags power/thrust drift above 1 %, and interpolates
 `c_ref_n`/`c_ref_t` to 30/47/63/80/95 % span.
 
+`spanwise_comparison.csv` carries **two reference frames**. The chord-line
+`c_ref_n`/`c_ref_t` columns (against the measured `CN`/`CT`) are the
+section-load comparison. The appended `c_ref_n_plane`/`c_ref_t_plane` columns
+(against the measured `CTH`/`CTQ`) are the **plane-of-rotation** pair, which is
+what produces the rotor thrust and torque, so the **power** comparison is read
+from the plane columns. The archive-only plane channels (`CTH`/`CTQ`/`QNORM`)
+are joined onto the committed workbook tables by `extractUAE6Reference.py`.
+For the mesh-backed `asm-mesh` model the surface station table carries only the
+plane decomposition, so its chord columns are a declared open defect while its
+plane columns are exact.
+
 With `--asm-mesh-dir` the comparison is **three-way**: it additionally reads the
 window-filtered `postProcessing/bladeSurface/*.csv` station table (the
 per-node `*_nodes.csv` output is not a station table), merges station rows by
