@@ -180,7 +180,17 @@ runner retoma de `latestTime`, con escritura cada 60°) y se reenvía sola con
   del propio ALM (+4 % medido entre coarse y castellated) es del mismo orden que
   el hueco que el issue #9 quiere medir.
 
-## Planteado (no ejecutar): dispersión del rendimiento suelto
+## Planteado: dispersión del rendimiento suelto
+
+> **ACTUALIZADO 2026-10-10.** La pregunta de la colocación **densa** ya tiene una
+> segunda medición independiente: la escalera de malla de Phase VI, que corrió 84
+> rangos (3-4 nodos, 21-28 por nodo) y 231 rangos (7 nodos, 33 por nodo). Ver la
+> sección *El ladder de Phase VI* más abajo. Resultado: **+47 % de costo por celda**
+> al pasar de 21-28 a 33 rangos por nodo, contra el +46 % ya medido a 96-112. Y hay
+> un dato directo de varianza: **+29 % entre dos corridas de malla y rangos
+> idénticos**. El diseño de K repeticiones de abajo sigue siendo el que hace falta
+> para publicar —una muestra no da desvío— pero ahora está escalado: el ruido es del
+> orden del efecto.
 
 La penalidad de la colocación suelta está medida como **una comparación de dos
 muestras** (una asignación suelta contra una densa: +46 % a 96-112 rangos). Alcanza
@@ -200,6 +210,51 @@ Costo: K × ~4 min por punto (0,1 rev); con K=10 son ~40 min de cola, así que
 postergarlo no cuesta nada. **No ejecutar hasta la fase publicable.** Los resultados
 viven en `analysis/hpc-performance.md`, que se regenera con
 `tools/plot_hpc_performance.py`.
+
+## RESULTADO del ladder de Phase VI: el particionado en distribución DENSA (2026-10-10)
+
+Esta es la medición que faltaba para ver cómo se comporta el **particionado en una
+distribución densa** del HPC: salió de la escalera de malla de Phase VI (job
+`11610480`), no del IEA 15 MW, y por eso se reporta acá y no en la curva del caso.
+Colocación real leída de `sacct`, tiempo por paso = mediana de los deltas de
+`ExecutionTime` del propio log del solver. Crudo en
+`turbinesFoam/validation/phaseVI/analysis/ladder-placement-summary.csv`.
+
+| punto | celdas | rangos | nodos | rangos/nodo | celdas/core | s/paso | core-s/paso | s/celda |
+|---|---|---|---|---|---|---|---|---|
+| L0 | 6.674.304 | 84 | 3-4 | 21-28 | 79.456 | 1,560 | 131,0 | 2,34e-7 |
+| L1 | 6.832.896 | 84 | 3-4 | 21-28 | 81.344 | 1,720 | 144,5 | 2,52e-7 |
+| hubfix | 6.674.304 | 84 | 3-4 | 21-28 | 79.456 | 2,020 | 169,7 | 3,03e-7 |
+| L2 | 8.137.584 | **231** | **7** | **33** | 35.227 | 2,850 | 658,4 | 3,50e-7 |
+| L3 | 18.454.156 | **231** | **7** | **33** | 79.888 | 6,340 | 1464,5 | 3,44e-7 |
+
+**1. La penalidad densa se replica a otro caso y otro rango.** Normalizando por
+celda, 84 rangos a 21-28 por nodo cuestan **2,34-2,52e-7 s/celda** y 231 rangos a 33
+por nodo cuestan **3,44-3,50e-7**: **+47 %**. El estudio ya tenía **+46 %** medido a
+96-112 rangos como comparación de dos muestras. Son **dos mediciones independientes
+del mismo efecto, en casos y rangos distintos, que coinciden.** Eso convierte el
+"+46 %" de dato único en efecto replicado.
+
+**2. Los rangos mandan sobre las celdas por core.** L2 tiene **35.227** celdas por
+core —la mitad de las 79.888 de L3— y cuesta **lo mismo por celda** (3,50e-7 contra
+3,44e-7). Con 231 rangos, darle a cada core la mitad del trabajo **no abarata nada**.
+La heurística de 80.000 celdas/core predice el costo cuando la colocación es floja;
+**lo que lo gobierna es la densidad de colocación**, no el reparto del trabajo.
+
+**3. La varianza entre corridas idénticas, medida de rebote.** L0 y `hubfix` son la
+**misma malla y los mismos 84 rangos** (6.674.304 celdas): **1,560 contra 2,020
+s/paso = +29 %**. El resto de este documento declaraba esa varianza como desconocida,
+y era la razón para no ejecutar el diseño de K repeticiones. Ahora hay un dato
+directo, y **escala el problema**: el ruido de colocación es del orden del efecto que
+se quiere medir, así que una afirmación publicable necesita las K repeticiones, no
+dos muestras. El diseño de arriba sigue vigente.
+
+**Caveat, para no mezclar curvas.** Estos puntos son de **Phase VI**. El costo
+ABSOLUTO por paso depende del caso (elementos ALM, overset, número de campos), así
+que **no van a `iea15mw-scale-summary-dense.csv`** ni a `analysis/hpc-performance.md`.
+Lo transferible es el cociente denso/flojo por celda, que es lo que se reporta. **La
+curva densa del IEA 15 MW sigue pendiente**, y `runs/iea15mw-scale-summary-dense.csv`
+todavía no existe.
 
 ## RESULTADO del tamiz (2026-10-08, `runs/iea15mw-screen-*`)
 
