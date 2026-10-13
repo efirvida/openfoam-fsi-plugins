@@ -1,4 +1,4 @@
-# P1.5 — Equispaced blade discretisation (E1/E2 done, E3 submitted 2026-10-12)
+# P1.5 — Equispaced blade discretisation (E1/E2/E3 done 2026-10-13; E4 pending)
 
 Origin: owner observation 2026-10-12 (the ASM+mesh blade surface has sections unevenly spread
 along the span; proposal: resample at constant spanwise distance, using that the blade carries
@@ -45,7 +45,7 @@ widths, but they move the elements away from the experimental stations (r/R 0.30
       committed loft reported (area 4.88423 m^2 today).
 - [x] **E2 (elements: one per segment of the same table; sampler invariant checked in Python: 0 empty elements)** Same resampling for `elementData` (ALM, ASM, ASM+mesh stay consistent); station
       comparison rule in `compareSectionLoads.py`.
-- [ ] **E3 (submitted)** A/B on the coarse mesh: ALM and ASM+mesh, committed vs equispaced, 4 revs. Accept
+- [x] **E3 (done 2026-10-13, accepted: max change 0.69 %, see Result E3)** A/B on the coarse mesh: ALM and ASM+mesh, committed vs equispaced, 4 revs. Accept
       only if the change is within the ALM-ASM bound of the Model Definition.
 - [ ] **E4** Model Definition v1.1 entry; Phase VI baselines are re-run in P2.1 anyway, so doing
       this BEFORE P2.1 costs no extra baseline.
@@ -80,3 +80,26 @@ equispaced is within the ALM-ASM bound of the Model Definition.
 - Then: read the four arms (recipe above), write the table here, decide acceptance, close P1.5 in `validation-master-plan.md`, Model Definition v1.1 entry (E4), continue with P2.1.
 - Open decision: `validation/phaseVI/geometry/phaseVI_blade_dz0p05.{stl,json}` are untracked; proposal is to version them (0.5 MB).
 - Do not rebuild `libturbinesFoam` while any arm is queued or running.
+
+
+## Result E3 2026-10-13 (`scripts/compareEquispacedArms.py`, jobs 11613555-58 all COMPLETED, `run.json` `blade_dz` 0.05 in the three equispaced arms, null in the references)
+
+Relative change of the simulated value, equispaced dz 0.05 against committed layout (4 revs, coarse, 7 m/s, H, short window):
+
+| arm | P | T | cn max over r/R | ct max over r/R |
+|---|---|---|---|---|
+| ASM+mesh (`eqb-mesh-dz05` vs `eqb-mesh-ref`) | -0.072 % | -0.028 % | 0.14 % (0.47) | 0.11 % |
+| ALM (`eqb-alm-dz05` vs `alm-U7-coarse-hubfix`) | -0.077 % | -0.036 % | 0.13 % (0.95) | 0.69 % (0.30) |
+| ASM (`eqb-asm-dz05` vs `asm-U7-coarse-asm-mf1`) | -0.067 % | -0.045 % | 0.13 % (0.95) | 0.66 % (0.30) |
+
+Acceptance (bound: ALM-ASM cp difference of the Model Definition, 2 %): **accepted**, worst case 0.69 %
+(ct at r/R 0.30, the station nearest the root transition; cn there changes 0.02 %). The change is the same
+in ALM and ASM, so it is a layout effect on the ALM/ASM element integral, not a model effect. Absolute
+levels unchanged: P vs measured -10.8 % (ALM 5.301 kW, ASM 5.308 kW, ASM+mesh 5.112 kW vs 5.946 kW),
+all within the +-15 % band.
+
+Side finding, not P1.5: the first ASM+mesh baseline sits 3.6 % below ALM in power (5.116 vs 5.305 kW, committed
+loft), outside the 2 % ALM-ASM band for "ASM+mesh against ALM". Same on the equispaced layout (-3.6 %), so the
+layout does not cause it; it belongs to the ASM+mesh residual issue (`odd/issues/asm-mesh-residual-vs-alm.md`).
+
+Remaining: E4 (Model Definition v1.1 entry); decide whether to version `geometry/phaseVI_blade_dz0p05.{stl,json}`.
