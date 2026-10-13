@@ -119,7 +119,7 @@ Resume pack: Phase 0 outputs, `src/fvOptions/bladeSurface/*`,
 - [ ] **P1.4** Epsilon/h sensitivity of the ASM kernel after P0.1, by Phase VI
       runs of 4 revolutions (dev or short jobs, in parallel).
 
-- [x] **P1.5** (E1-E3 done 2026-10-13, accepted: dz = min(0.05, h/2) changes P/T < 0.1 % and section loads < 0.7 % in ALM/ASM/ASM+mesh; E4 Model Definition v1.1 entry pending; `odd/tasks/p1-5-equispaced-blade.md`) Equispaced blade discretisation (elements and surface). Do before P2.1.
+- [x] **P1.5** (E1-E3 done 2026-10-13, accepted: dz = min(0.05, h/2) changes P/T < 0.1 % and section loads < 0.7 % in ALM/ASM/ASM+mesh; Model Definition v1.1 row added; `odd/tasks/p1-5-equispaced-blade.md`) Equispaced blade discretisation (elements and surface). Do before P2.1.
 
 **Exit:** each method has conservation tests; the closure result is written down.
 

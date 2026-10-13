@@ -1,4 +1,4 @@
-# P1.5 — Equispaced blade discretisation (E1/E2/E3 done 2026-10-13; E4 pending)
+# P1.5 — Equispaced blade discretisation (all done 2026-10-13)
 
 Origin: owner observation 2026-10-12 (the ASM+mesh blade surface has sections unevenly spread
 along the span; proposal: resample at constant spanwise distance, using that the blade carries
@@ -47,7 +47,7 @@ widths, but they move the elements away from the experimental stations (r/R 0.30
       comparison rule in `compareSectionLoads.py`.
 - [x] **E3 (done 2026-10-13, accepted: max change 0.69 %, see Result E3)** A/B on the coarse mesh: ALM and ASM+mesh, committed vs equispaced, 4 revs. Accept
       only if the change is within the ALM-ASM bound of the Model Definition.
-- [ ] **E4** Model Definition v1.1 entry; Phase VI baselines are re-run in P2.1 anyway, so doing
+- [x] **E4 (done 2026-10-13, v1.1 row in the Model Definition)** Model Definition v1.1 entry; Phase VI baselines are re-run in P2.1 anyway, so doing
       this BEFORE P2.1 costs no extra baseline.
 
 

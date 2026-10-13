@@ -1,4 +1,4 @@
-# Validation Model Definition v1 — ALM / ASM / ASM+mesh
+# Validation Model Definition v1.1 — ALM / ASM / ASM+mesh
 
 **Status:** **v1 FROZEN except the IEA cp band** (2026-10-12). The owner delegated decisions 1
 and 2 to the agent's physical judgment and chose option (b) for decision 3. The IEA cp
@@ -43,6 +43,7 @@ differ" with its reason; nothing else may differ.
 | ASM+mesh width | paper cosine kernel, support `2.5*h`, `h = cbrt(V)` of the node's cell; **no free width**: `meshFactor` is inert here by design (P1.3), it acts only in the `kernel gaussian` ablation | `bladeSurfaceSampler::nodeSupport`; pinned by `test_mesh_factor_acts_only_in_gaussian_kernel` (cosine field bit-identical for `meshFactor` 1 and 3, gaussian differs 95 %) | the ASM+mesh width follows the cell, the ALM/ASM width follows `meshFactor`; a cell-size study moves the ASM+mesh width with `h` |
 | ASM+mesh kernel | smoothed cosine kernel, support `2.5*h` | `bladeSurface` (Yang & Sotiropoulos Eq. 8) |
 | Cell prefilter (ASM) | chord box grown by `eps*sqrt(ln 1000)` metres | `914aa72`; results taken before it used a truncated kernel |
+| Blade layout (Phase VI) | **equispaced**: `dz = min(0.05 m, h/2)`, root stations (r < 1.0085 m) verbatim, exact S809 outboard; surface and elements from the same station list (v1.1, P1.5) | `tools/blade_resample.py`; deposit ripple <= 2 % at every h, section loads change < 0.7 % and P/T < 0.1 % vs the committed layout (`odd/tasks/p1-5-equispaced-blade.md`); geometry `geometry/phaseVI_blade_dz0p05.{stl,json}` |
 
 ## Knobs that differ between pillars
 
