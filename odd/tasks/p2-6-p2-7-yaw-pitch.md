@@ -13,9 +13,9 @@ no libturbinesFoam rebuild, no Slurm submission, no push.
       P, T, root flap moment, cn/ct at the 5 stations, same schema as `sequence_H_*.csv`.
 - [x] 2. Pitch reference tables for I (0), T (2), H/S (3), U (4), J (6) at 0 deg yaw, with the
       pitch sign checked against the NREL report text and the measured pitch channel.
-- [ ] 3. `scripts/compareYawPitch.py` + test on a synthetic run dir, importing `comparePhaseVI.py`.
-- [ ] 4. `runPhaseVI.sh` flags for one yaw case and one pitch case (below).
-- [ ] 5. Full test suite, Conventional commit.
+- [x] 3. `scripts/compareYawPitch.py` + test on a synthetic run dir, importing `comparePhaseVI.py`.
+- [x] 4. `runPhaseVI.sh` flags for one yaw case and one pitch case (below).
+- [x] 5. Full test suite, Conventional commit.
 
 ## Sign conventions (verified from Hand et al. 2001, NREL/TP-500-29955, `turbinesFoam/articles/29955.pdf`)
 
@@ -60,3 +60,28 @@ in the script returns nothing. Not added, per the rules of this unit.
   medians (B3PITCH) I -0.010, T 2.021, H 2.989, S 2.986, U 3.955, J 5.979 deg: sign and order
   match nominal. 8 yaw-sweep stems skipped (`*ys*`). Negative-zero stems (`h05m0000`) exist, so
   `file_name` is the unique key, not (speed, yaw_nominal, repetition).
+  Commit `6e701f8`.
+- Task 3: `scripts/compareYawPitch.py` imports `analyse_model`, `write_turbine_comparison`,
+  `write_spanwise_comparison`, `read_rows`, `load_config`/`select_speed` (via the module), the
+  `EXIT_*` codes and exceptions from `comparePhaseVI.py`; only `load_reference` (the yaw/pitch
+  counterpart of `load_experiment`, which rejects |yaw| > 0.5) and the single-model
+  metrics/report assembly that `comparePhaseVI.main` inlines are its own. New exit code 4 = run
+  yaw (fvOptions magnitude) differs from the request. TSR/window come from `--config-sequence`
+  (H or S, the only sequences `select_speed` knows); the reference TSR is reported beside it.
+  `tests/test_phasevi_compare_yaw_pitch.py` reuses `write_run` from `test_phasevi_compare.py`.
+  Smoke on `runs/alm-U10-coarse-p21` (live, short window, read only): `--yaw 0` rc 0,
+  `--yaw 10` rc 4, `--pitch 6` rc 0 with reference `j1000000` (tsr 3.802 vs config 3.798).
+  `sim` column equals `comparePhaseVI.py` within the drift of the still-growing run.
+- Task 5: full suite `python3 -m pytest turbinesFoam/tests tools/tests -q` 445 passed, 3 skipped
+  (verifier, before the final lint fixes); after them the 4 related files give 54 passed;
+  `extractYawPitchReference.py --check` rc 0.
+
+## Open (outside this unit's new-files-only rule)
+
+- `tools/analysis_gap.py` `TOOL_COVERAGE`: add `compareYawPitch.py` and
+  `extractYawPitchReference.py` lines (existing file, not edited here).
+- Root `CHANGELOG.md` entry and the stale "I (0) missing" line in the evidence register.
+- No simulated root-flap metric exists in `comparePhaseVI.py`; the reference root flap is
+  reported as experiment-only until one is defined.
+- A yaw run needs inflow/axis rotation and a pitch run needs `case_config.py` to accept
+  `pitch_deg != 3` plus T/U/J/I rotor speeds: both are solver-side work for P2.6/P2.7 runs.
