@@ -1,0 +1,6 @@
+step 0: node sdumont6165, 48 ranks: mpirun $TURBINE_MPI_MCA -np $STEP_RANKS /scratch/leahk/eduardo.donestevez/tmp/parallel-steps-smoke.223557/mpi_smoke
+step 1: node sdumont6166, 48 ranks: mpirun $TURBINE_MPI_MCA -np $STEP_RANKS /scratch/leahk/eduardo.donestevez/tmp/parallel-steps-smoke.223557/mpi_smoke
+step 0: rc=1
+step 1: rc=1
+OVERLAP NO []
+=== smoke rc=2 overlap_rc=1 ===

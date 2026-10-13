@@ -1,0 +1,8 @@
+step 0: node sdumont6165, 48 ranks: mpirun $TURBINE_MPI_MCA -np $STEP_RANKS /scratch/leahk/eduardo.donestevez/tmp/parallel-steps-smoke.223820/mpi_smoke
+step 1: node sdumont6166, 48 ranks: mpirun $TURBINE_MPI_MCA -np $STEP_RANKS /scratch/leahk/eduardo.donestevez/tmp/parallel-steps-smoke.223820/mpi_smoke
+SMOKE step=0 node=sdumont6165 ranks=48 onNode=48 start=1791774130 end=1791774146
+SMOKE step=1 node=sdumont6166 ranks=48 onNode=48 start=1791774130 end=1791774146
+step 0: rc=0
+step 1: rc=0
+OVERLAP yes [(1791774130, 1791774146), (1791774130, 1791774146)]
+=== smoke rc=0 overlap_rc=0 ===
