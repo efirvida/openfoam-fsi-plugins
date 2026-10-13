@@ -1,0 +1,6 @@
+point,job,mesh,cells,ranks,nodes,ranks_per_node,cells_per_core,step_s,core_s,s_per_cell,source
+L0,11610480,coarse,6674304,84,3-4,21-28,79456,1.56,131.0,2.34e-07,ladder level 0
+L1,11610480,coarse-r1,6832896,84,3-4,21-28,81344,1.72,144.5,2.52e-07,ladder level 1
+hubfix,11611511,coarse,6674304,84,3-4,21-28,79456,2.02,169.7,3.03e-07,same mesh AND same ranks as L0: the variance datum
+L2,11610480,coarse-r2,8137584,231,7,33,35227,2.85,658.4,3.5e-07,"ladder level 2, DENSE"
+L3,11610480,coarse-r3,18454156,231,7,33,79888,6.34,1464.5,3.44e-07,"ladder level 3, DENSE"
