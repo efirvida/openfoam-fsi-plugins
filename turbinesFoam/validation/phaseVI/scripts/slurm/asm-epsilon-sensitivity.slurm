@@ -14,8 +14,7 @@
 # Do not rebuild libturbinesFoam while an arm is queued or running: the job loads it at start.
 #SBATCH --job-name=phaseVI-asm-eps
 #SBATCH --partition=sequana_cpu
-#SBATCH --time=06:00:00
-#SBATCH --nodes=1-4
+#SBATCH --time=12:00:00
 #SBATCH --ntasks=84
 set -eu
 cd "${SLURM_SUBMIT_DIR:?submit with sbatch}"
