@@ -13,9 +13,9 @@ Branch: `fix/compare-phasevi-surface-stations`. No `libturbinesFoam` rebuild. Do
 ## Tasks
 - [x] N0 (S4) shared STL tool `validation/tools/make_nacelle_stl.py` + test — 7ef5aa0
 - [x] A1 (S4,S5) tare tool: `scripts/extractAeroTare.py` + `data/experiment/aero-tare/runs_056_058.csv`, summary `analysis/aero-tare-nacelle-cda.csv` (L5)
-- [ ] N2/A3 (S1,S2,S3,S5) IEA 15 MW `--nacelle on|off`: fix the 3 failing tests left by the worker, commit, run the on/off pair — inline
+- [ ] N2/A3 (S1,S2,S3,S5) IEA 15 MW `--nacelle on|off`: tests fixed + committed (106103f, 11/11 + 144 case tests green); `TURBINE_NACELLE` bridge (d3a0483); on/off pair resumes `iea15mw-l2-ds` at rev 23 for 3 revs: jobs 11615762 (on) / 11615763 (off), runs `iea15mw-l2-ds-nac-{on,off}`
 - [ ] H1 (S5) Phase VI root-factor A/B: ALM U7 H coarse, `--root-effects off`, same config as `alm-U7-coarse-p21` — submitted job 11615758 (`scripts/slurm/h1-rootoff.slurm`, run `alm-U7-coarse-p21-rootoff`)
-- [ ] N1/A2 (S3,S4) Phase VI nacelle: drop the Fig. 8 provenance, size the surrogate to the A1 CdA, two shapes, ALM U7 on/off — inline
+- [ ] N1/A2 (S3,S4) Phase VI nacelle: Fig. 8 provenance dropped (465e7b4). Shape 1 = placeholder R 0.455 m (estimated CdA ~0.55 m^2, below the target): job 11615766, run `alm-U7-coarse-nacon`; its off arm is `alm-U7-coarse-p21` (identical options). Shape 2 = R ~0.58 m (estimated CdA ~0.9 m^2, flat-faced cylinder Cd ~0.85): submit once 11615766 has rendered (the runner stages a fixed STL name, and it must not be edited while P2.2/H1 read it). Caveat: coarse h = 0.31 m, so the body is ~3-4 cells across.
 - [ ] N3 read, compare (band ratios, section loads), conclude — inline
 
 ## Log
