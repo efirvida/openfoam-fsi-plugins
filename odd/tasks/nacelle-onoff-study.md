@@ -12,7 +12,7 @@ Branch: `fix/compare-phasevi-surface-stations`. No `libturbinesFoam` rebuild. Do
 
 ## Tasks
 - [x] N0 (S4) shared STL tool `validation/tools/make_nacelle_stl.py` + test — 7ef5aa0
-- [ ] A1 (S4,S5) tare tool: parse Tables I-4/I-5 from the report, commit the reference CSV, nacelle CdA per speed at yaw 0 — inline
+- [x] A1 (S4,S5) tare tool: `scripts/extractAeroTare.py` + `data/experiment/aero-tare/runs_056_058.csv`, summary `analysis/aero-tare-nacelle-cda.csv` (L5)
 - [ ] N2/A3 (S1,S2,S3,S5) IEA 15 MW `--nacelle on|off`: fix the 3 failing tests left by the worker, commit, run the on/off pair — inline
 - [ ] H1 (S5) Phase VI root-factor A/B: ALM U7 H coarse, `--root-effects off`, same config as `alm-U7-coarse-p21` — submitted job 11615758 (`scripts/slurm/h1-rootoff.slurm`, run `alm-U7-coarse-p21-rootoff`)
 - [ ] N1/A2 (S3,S4) Phase VI nacelle: drop the Fig. 8 provenance, size the surrogate to the A1 CdA, two shapes, ALM U7 on/off — inline
@@ -25,3 +25,4 @@ Branch: `fix/compare-phasevi-surface-stations`. No `libturbinesFoam` rebuild. Do
 - L3a (agent, evidence): confirmed in `articles/29955.pdf`: Fig. 8 caption (PDF p. 21) "Drivetrain configuration, top view; drivetrain and yaw drive/brake, side view"; no nacelle fairing geometry. Appendix I (PDF p. 295-300): aerodynamic tare run 056 (tower + nacelle, blades removed; yaw sweep at 5, 7, 10, 15, 20, 25 m/s) and run 058 (tower only; 5-25 m/s). Raw balance channels, no tare applied, non-SI units (lb, psf).
 - L3b (agent, evidence): the uncommitted N2 IEA code fails 3 of 6 tests (`make_nacelle_stl.py:99` unpack error; the rendered `nacelle` block carries a comment the test does not strip). The IEA nacelle is sized from internal generator radii (WindIO), so it is a surrogate as well.
 - L4 (2026-10-14, user): chose "Plan completo recomendado".
+- L5 (agent, A1 result): nacelle (+ hub, blades removed) drag area at yaw 0, `CdA(056) - CdA(058)`: 0.96 / 0.94 / 0.98 m^2 at 15 / 20 / 25 m/s; least-squares slope over all speeds 0.86 m^2. At 5-10 m/s (q 15-60 Pa) the per-speed value is 1.5-2.2 m^2, dominated by the balance offset (run 058 fitted offset -4 N, run 056 +36 N), so it is not used. Target for A2: **CdA ~ 0.9 m^2** (0.86-0.98). It includes the hub/teeter assembly and the tower-top interference (run 058 had the nacelle removed). For scale: a disc of 0.91 m diameter is 0.65 m^2 of frontal area, so the measured value is consistent with a bluff body of about 1 m diameter and Cd ~ 1.
