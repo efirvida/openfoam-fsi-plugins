@@ -49,3 +49,7 @@ and `python3 scripts/compareSectionLoads.py --alm-dir runs/asm-U7-coarse-<label>
 - ASM mf1 reproduces ALM within 0.1 % in P (consistent with the P0.1 fix).
 - Power is NOT eps-insensitive: +8.7 % from eps/h 1 to 8, monotonic; thrust flat (<2.5 %); section R_sim moves <2 %.
 - Wider kernel raises power toward the experiment, so the agreement at eps/h 8 could be a smoothing artefact, not better physics. Needs converged runs before any claim.
+
+## Closed 2026-10-14
+
+Figures: `turbinesFoam/validation/phaseVI/analysis/figures/p14-epsilon-turbine.png` (P, Q, T against eps/h with the ALM reference, experiment and +-15 % band) and `p14-epsilon-spanwise.png` (CN/CT per arm). Regenerate with `scripts/plotComparisonFigures.py eps` from `analysis/p14/`.

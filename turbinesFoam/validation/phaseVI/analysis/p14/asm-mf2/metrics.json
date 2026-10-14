@@ -1,0 +1,178 @@
+{
+  "bands": {
+    "drift_flag": 0.01,
+    "spanwise": "max(0.15, 20 % of measured)",
+    "turbine_relative": {
+      "power": 0.15,
+      "thrust": 0.15,
+      "torque": 0.15
+    }
+  },
+  "case": {
+    "experiment_row": "h0700000",
+    "frontal_area_m2": 79.45352028870754,
+    "match_eaeroth_span": false,
+    "rho_kg_m3": 1.2337256249087292,
+    "rho_source": "WTBARO/WTATEMP ideal gas (experiment row h0700000)",
+    "rotor_radius_m": 5.029,
+    "sequence": "H",
+    "speed_m_s": 7.0,
+    "thrust_scope": "blade",
+    "tsr_configured": 5.408
+  },
+  "cm_excluded": {
+    "follow_up": "add momentCoefficient_ to the element writer in a separate opt-in change",
+    "measured_cm_stations": {
+      "0.30": -0.0281,
+      "0.47": -0.0392,
+      "0.63": -0.0462,
+      "0.80": -0.0424,
+      "0.95": -0.022
+    },
+    "reason": "the element CSV has no `cm` column"
+  },
+  "definitions": {
+    "density": "rho = WTBARO / (287.058 * (WTATEMP + 273.15))",
+    "power": "P = cp * q_dyn * Uinf with cp = ct * TSR, A = pi R^2",
+    "spanwise": "time-mean c_ref_n/c_ref_t interpolated to 30/47/63/80/95 % span",
+    "thrust_blade": "T_blade = sum_blades cd_blade * q_dyn (blade-only)",
+    "thrust_rotor": "T_rotor = cd * q_dyn (hub included; secondary)",
+    "torque": "Q = ct * q_dyn * R with R = rotorRadius, q_dyn = 1/2 rho A Uinf^2"
+  },
+  "experiment": {
+    "eaeroth_n": 1132.0692,
+    "file_name": "h0700000",
+    "lsstqcor_nm": 789.8572,
+    "rotpow_kw": 5.9458,
+    "spanwise": {
+      "0.30": {
+        "cm": -0.0281,
+        "cn": 0.8139,
+        "ct": 0.0973,
+        "cth": 0.7375108895,
+        "ctq": 0.3577647636,
+        "qnorm_pa": 114.5407451
+      },
+      "0.47": {
+        "cm": -0.0392,
+        "cn": 0.9204,
+        "ct": 0.1184,
+        "cth": 0.888282626,
+        "ctq": 0.2683404469,
+        "qnorm_pa": 227.2100168
+      },
+      "0.63": {
+        "cm": -0.0462,
+        "cn": 0.8668,
+        "ct": 0.0956,
+        "cth": 0.8524412918,
+        "ctq": 0.1839163098,
+        "qnorm_pa": 387.2508151
+      },
+      "0.80": {
+        "cm": -0.0424,
+        "cn": 0.7673,
+        "ct": 0.073,
+        "cth": 0.7594748192,
+        "ctq": 0.1314966942,
+        "qnorm_pa": 598.6736738
+      },
+      "0.95": {
+        "cm": -0.022,
+        "cn": 0.5175,
+        "ct": 0.0407,
+        "cth": 0.5142898343,
+        "ctq": 0.07035869573,
+        "qnorm_pa": 829.017044
+      }
+    },
+    "wtatemp_degc": 13.116,
+    "wtbaro_pa": 101381.3359
+  },
+  "limitations": [
+    "At every affordable mesh (D/32..D/64) the ASM chordwise strips are sub-cell, so the strip-wise force distribution is sub-grid: the comparison tests chord-averaged inflow and the load shift versus ALM, not a chord-resolved surface.",
+    "The imported blade surface (asm-mesh) is sub-grid at the affordable meshes: background cells are 0.314/0.210/0.157 m (D/32..D/64) against a 0.218-0.744 m chord, so the three-way comparison tests the model form (how the load is distributed), not resolved chordwise physics.",
+    "The surface kernel/width is a confound with the imported geometry: the paper-cosine surface and the no-mesh Gaussian differ in kernel and width as well as in geometry, so the kernel-matched ASM-mesh configuration (`generate_case.py --surface-kernel gaussian`) is an ablation, not a model.",
+    "The ASM-mesh variant is distribution-only: the element BEM chain, chord-averaged inflow, dynamic stall and end effects are unchanged, and the surface does not sample per-node inflow or recompute loads.",
+    "URANS k-omega SST cannot capture deep-stall unsteadiness or hysteresis; the separated high-speed points (13-25 m/s) are trend and stall-onset evidence only.",
+    "The tower is not modelled (rotor + hub only); EAEROTH is a blade pressure integration and the measured loads include tower shadow.",
+    "Spanwise CM is excluded: the element CSV has no `cm` column (follow-up change adds `momentCoefficient_` to the element writer).",
+    "Blockage is not simulated (uniform free box versus the NASA-Ames test section); documented, not corrected.",
+    "Spanwise CN/CT are CHORD-REFERENCED, as the experiment reports them (NREL/TP-500-29955 Figure 25: CN/CT are '(Ref: Chord-line)' while C_Thrust/C_Torque are '(Ref: Plane of rotation)'). The element CSV's own `c_ref_n`/`c_ref_t` columns are PLANE-OF-ROTATION referenced, because `inflowRefAngle()` is the flow angle phi (the code comment calls it 'AFTAL Phi'). `spanwise_profile` therefore rebuilds the chord-referenced pair from the element's `cl,cd,alpha_deg`. Comparing the two frames directly was the long-standing '~2x c_ref_t' mismatch (measured 1.2x-4.6x) - a reference-frame defect in the comparison, not a model error. The mesh-backed ASM-mesh path still reports the plane-referenced columns, so its spanwise rows are NOT on the experiment's frame."
+  ],
+  "models": {
+    "asm-U7-coarse-asm-mf2": {
+      "drift": {
+        "cd": {
+          "flag": true,
+          "reason": "fewer than two revolutions in the window",
+          "variation": null
+        },
+        "cp": {
+          "flag": true,
+          "reason": "fewer than two revolutions in the window",
+          "variation": null
+        },
+        "flag": true
+      },
+      "metrics": {
+        "cd": 0.4827683524,
+        "cp": 0.3214920911,
+        "ct": 0.05944750205,
+        "element_profiles": 50,
+        "power_kw": 5.404632233677228,
+        "power_w": 5404.632233677228,
+        "q_dyn_pa": 2401.5841772499107,
+        "rho_kg_m3": 1.2337256249087292,
+        "rho_source": "WTBARO/WTATEMP ideal gas (experiment row h0700000)",
+        "run_dir": "/scratch/leahk/eduardo.donestevez/simulations/tmp/of-plugins/turbinesFoam/validation/phaseVI/runs/asm-U7-coarse-asm-mf2",
+        "thrust_blade_n": 1131.9086944099752,
+        "thrust_n": 1131.9086944099752,
+        "thrust_rotor_n": 1159.408836400849,
+        "thrust_scope": "blade",
+        "torque_nm": 717.9811787302672,
+        "tsr_config": 5.408
+      },
+      "revolutions_averaged": 0.0002730654738903197,
+      "run_dir": "/scratch/leahk/eduardo.donestevez/simulations/tmp/of-plugins/turbinesFoam/validation/phaseVI/runs/asm-U7-coarse-asm-mf2",
+      "spanwise": {
+        "0.30": [
+          0.9184985784790115,
+          0.12794011519232562,
+          0.8378944734485558,
+          0.3974234166714564
+        ],
+        "0.47": [
+          0.9166783990955824,
+          0.14151991868495015,
+          0.8898170376980328,
+          0.2617711158570456
+        ],
+        "0.63": [
+          0.896279999843934,
+          0.109482777991464,
+          0.8859443511900393,
+          0.17437227168440098
+        ],
+        "0.80": [
+          0.7694827751304013,
+          0.09121175879922988,
+          0.764500889246196,
+          0.12633712309560513
+        ],
+        "0.95": [
+          0.443600154366261,
+          0.041679135458944284,
+          0.4423189260726625,
+          0.05358089911426443
+        ]
+      },
+      "window_mode": "short"
+    }
+  },
+  "window": {
+    "allow_short_window": true,
+    "discard_revolutions": 4,
+    "end_revolutions": 12
+  }
+}

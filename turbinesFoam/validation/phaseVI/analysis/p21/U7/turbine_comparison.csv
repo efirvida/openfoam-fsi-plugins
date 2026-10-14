@@ -1,0 +1,10 @@
+model,quantity,sim,experiment,delta_frac,band_frac,within_band,units
+alm,power,5.2919226,5.9458,-0.109973,0.733153,yes,kW
+alm,torque,703.00821,789.8572,-0.109955,0.733035,yes,Nm
+alm,thrust,1125.1853,1132.0692,-0.0060808,0.0405386,yes,N
+asm,power,5.2981171,5.9458,-0.108931,0.726208,yes,kW
+asm,torque,703.83112,789.8572,-0.108913,0.72609,yes,Nm
+asm,thrust,1126.1094,1132.0692,-0.00526453,0.0350969,yes,N
+asm-mesh,power,5.0850835,5.9458,-0.14476,0.965069,yes,kW
+asm-mesh,torque,675.53056,789.8572,-0.144743,0.964956,yes,Nm
+asm-mesh,thrust,1100.1166,1132.0692,-0.028225,0.188166,yes,N

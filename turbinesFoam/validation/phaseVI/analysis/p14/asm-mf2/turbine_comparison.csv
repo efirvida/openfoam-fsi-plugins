@@ -1,0 +1,4 @@
+model,quantity,sim,experiment,delta_frac,band_frac,within_band,units
+asm-U7-coarse-asm-mf2,power,5.4046322,5.9458,-0.0910168,0.606779,yes,kW
+asm-U7-coarse-asm-mf2,torque,717.98118,789.8572,-0.0909988,0.606658,yes,Nm
+asm-U7-coarse-asm-mf2,thrust,1131.9087,1132.0692,-0.000141781,0.000945205,yes,N

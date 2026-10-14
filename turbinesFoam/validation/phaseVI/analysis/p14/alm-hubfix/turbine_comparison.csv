@@ -1,0 +1,4 @@
+model,quantity,sim,experiment,delta_frac,band_frac,within_band,units
+alm-U7-coarse-hubfix,power,5.3049764,5.9458,-0.107778,0.718517,yes,kW
+alm-U7-coarse-hubfix,torque,704.74235,789.8572,-0.10776,0.718399,yes,Nm
+alm-U7-coarse-hubfix,thrust,1126.5889,1132.0692,-0.004841,0.0322733,yes,N
