@@ -128,11 +128,15 @@ Resume pack: Phase 0 outputs, `src/fvOptions/bladeSurface/*`,
 Resume pack: Model Definition v1, `turbinesFoam/validation/phaseVI/campaign-results/RESULTS.md`,
 `validation/phaseVI/README.md`, `tools/case_state.py`, `scripts/comparePhaseVI.py`.
 
-- [ ] **P2.1** Calibration on Sequence H at 7 and 10 m/s, ALM, ASM and ASM+mesh
+- [x] **P2.1** (closed 2026-10-14, no knob changed: Model Definition v1.1 goes to S as is; H readout
+      7 m/s P -11.0 / -10.9 / -14.5 %, T within 3 %; 10 m/s P -42 / -42 / -39 %, T -27 % from the stalled
+      root polar (P3.1); ASM-ALM 0.1 %, ASM+mesh-ALM 3.9 % > 2 %; `p2-1-calibration.md`)
+      Calibration on Sequence H at 7 and 10 m/s, ALM, ASM and ASM+mesh
       (full 12-revolution window; 6 runs, batched as parallel steps of 1-2 jobs).
       The ASM+mesh has **zero** runs in `runs/`: check the blade surface staging
       first (the surface STL and `surfaceGeometry`) on the dev partition.
-- [ ] **P2.2** Frozen evaluation on Sequence S at the same speeds, then the 21-point
+- [ ] **P2.2** (6 runs submitted 2026-10-14, jobs 11615752-57, `p2-2-sequence-s.md`)
+      Frozen evaluation on Sequence S at the same speeds, then the 21-point
       curve S for trend and stall onset. Report spanwise `c_n`/`c_t` at the
       stations of rule 4, power, thrust and the root flap moment.
 - [ ] **P2.3** Declare the validity envelope per method and update

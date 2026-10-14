@@ -14,7 +14,7 @@ Branch: `fix/compare-phasevi-surface-stations`. No `libturbinesFoam` rebuild. Do
 - [x] N0 (S4) shared STL tool `validation/tools/make_nacelle_stl.py` + test — 7ef5aa0
 - [ ] A1 (S4,S5) tare tool: parse Tables I-4/I-5 from the report, commit the reference CSV, nacelle CdA per speed at yaw 0 — inline
 - [ ] N2/A3 (S1,S2,S3,S5) IEA 15 MW `--nacelle on|off`: fix the 3 failing tests left by the worker, commit, run the on/off pair — inline
-- [ ] H1 (S5) Phase VI root-factor A/B: ALM U7 H coarse, `--root-effects off`, same config as `alm-U7-coarse-p21` — inline
+- [ ] H1 (S5) Phase VI root-factor A/B: ALM U7 H coarse, `--root-effects off`, same config as `alm-U7-coarse-p21` — submitted job 11615758 (`scripts/slurm/h1-rootoff.slurm`, run `alm-U7-coarse-p21-rootoff`)
 - [ ] N1/A2 (S3,S4) Phase VI nacelle: drop the Fig. 8 provenance, size the surrogate to the A1 CdA, two shapes, ALM U7 on/off — inline
 - [ ] N3 read, compare (band ratios, section loads), conclude — inline
 
