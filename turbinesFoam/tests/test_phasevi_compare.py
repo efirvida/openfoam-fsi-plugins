@@ -126,6 +126,11 @@ def write_run(root: Path, sign: float = 1.0, tsr: float = TSR,
     return root
 
 
+#: Chord-frame pair of the synthetic elements: alpha 6 deg, cl 0.9, cd 0.01.
+FIXTURE_CHORD_CN = 0.9 * math.cos(math.radians(6.0)) + 0.01 * math.sin(math.radians(6.0))
+FIXTURE_CHORD_CT = 0.9 * math.sin(math.radians(6.0)) - 0.01 * math.cos(math.radians(6.0))
+
+
 def linear_at(points, x):
     """Independent linear interpolation oracle for the surface conversion."""
     points = sorted(points)
@@ -407,8 +412,12 @@ def test_main_three_way_surface_merge(tmp_path):
     ]
     for station in compare.STATIONS:
         values = metrics["models"]["asm-mesh"]["spanwise"][f"{station:.2f}"]
-        assert values[0] == pytest.approx(linear_at(mapped_n, station), rel=1e-12)
-        assert values[1] == pytest.approx(linear_at(mapped_t, station), rel=1e-12)
+        # chord slots come from the element coefficients (alpha 6 deg, cl 0.9,
+        # cd 0.01 in the fixture); plane slots come from the station table
+        assert values[0] == pytest.approx(FIXTURE_CHORD_CN, rel=1e-12)
+        assert values[1] == pytest.approx(FIXTURE_CHORD_CT, rel=1e-12)
+        assert values[2] == pytest.approx(linear_at(mapped_n, station), rel=1e-12)
+        assert values[3] == pytest.approx(linear_at(mapped_t, station), rel=1e-12)
 
     gate = json.loads((out / "sign_gate.json").read_text(encoding="utf-8"))
     assert gate["pass"] is True
@@ -472,3 +481,27 @@ def test_surface_stations_use_metric_station_and_skip_distribution_csv(tmp_path)
     profile = compare.read_surface_stations(tmp_path, 0.0, 1.0, True)
     assert [round(root_dist, 6) for root_dist, _, _ in profile] == [0.02, 0.06, 0.10]
     assert [round(c_ref_n, 6) for _, c_ref_n, _ in profile] == [0.9, 0.8, 0.7]
+
+
+def test_asm_mesh_chord_pair_comes_from_elements_not_plane_stations(tmp_path):
+    """The surface station table only carries the plane-of-rotation pair.
+
+    Copying it into the chord slots plotted CTq as CT. The chord pair must be
+    rebuilt from the element coefficients (the fixture's alpha, cl, cd),
+    like every other model, while the plane slots keep the station values.
+    """
+    asm_mesh = write_run(tmp_path / "asm-mesh", surface_stations=5)
+    out = tmp_path / "out"
+    rc = compare.main([
+        "--asm-mesh-dir", str(asm_mesh), "--out", str(out),
+        "--allow-short-window", "--revolutions", "0", "1",
+    ])
+    assert rc == compare.EXIT_OK
+    metrics = json.loads((out / "metrics.json").read_text(encoding="utf-8"))
+    radius = float(compare.load_config(compare.DEFAULT_CONFIG)["turbine"]["radius"])
+    root = compare.ROOT_CUTOUT_RADIUS / radius
+    plane_t = [(root + rd * (1.0 - root), 0.08 - 0.06 * rd) for rd in (0.0, 0.25, 0.5, 0.75, 1.0)]
+    for station in compare.STATIONS:
+        values = metrics["models"]["asm-mesh"]["spanwise"][f"{station:.2f}"]
+        assert values[1] == pytest.approx(FIXTURE_CHORD_CT, rel=1e-9)
+        assert values[3] == pytest.approx(linear_at(plane_t, station), rel=1e-9)

@@ -569,24 +569,39 @@ def analyse_model(run_dir: Path, cfg, speed, sequence, rho, allow_short,
     radius = float(cfg["turbine"]["radius"])
     if surface:
         # The station rows carry the element c_ref_n/c_ref_t definitions, which
-        # are the PLANE-OF-ROTATION pair, so the only conversion is the element
-        # root_dist -> r/R mapping. A surface station table has no chord-line
-        # decomposition: the same plane pair is duplicated into the chord slots
-        # (slots 1 and 2), making the chord comparison a declared open defect
-        # for this model while the plane comparison (slots 3 and 4) is exact.
-        profile = [
-            (
-                r_over_r_from_root_dist(root_dist, radius),
-                c_ref_n, c_ref_t, c_ref_n, c_ref_t,
-            )
+        # are the PLANE-OF-ROTATION pair (slots 3 and 4). A surface station
+        # table has no chord-line decomposition, and the station force is the
+        # element force by construction (partition of unity), so the CHORD pair
+        # (slots 1 and 2) is rebuilt from the element CSVs, which a surface run
+        # still writes, exactly as for the other models. Only a run without
+        # element CSVs falls back to duplicating the plane pair into the chord
+        # slots, a declared limitation for that case.
+        stations = [
+            (r_over_r_from_root_dist(root_dist, radius), c_ref_n, c_ref_t)
             for root_dist, c_ref_n, c_ref_t in read_surface_stations(
                 run_dir, start, end, allow_short
             )
         ]
-        profile.sort()
-        # The element CSVs still exist (suppression stops only the strip
-        # projection) and back element_profiles/--match-eaeroth-span.
+        stations.sort()
         elements = read_elements(element_dir) if element_dir.is_dir() else []
+        chord = (
+            spanwise_profile(elements, start, end, allow_short, radius)
+            if elements else []
+        )
+        if chord:
+            # The plane pair is interpolated onto the element r/R grid; in a
+            # real run both tables have one row per element at the same r/R,
+            # so the interpolation is the identity there.
+            profile = [
+                (r_chord, cn, ct, *interpolate(stations, r_chord))
+                for r_chord, cn, ct, _, _ in chord
+            ]
+        else:
+            profile = [
+                (r_over_r, plane_n, plane_t, plane_n, plane_t)
+                for r_over_r, plane_n, plane_t in stations
+            ]
+        profile.sort()
     else:
         elements = read_elements(element_dir)
         profile = spanwise_profile(elements, start, end, allow_short, radius)
@@ -594,7 +609,7 @@ def analyse_model(run_dir: Path, cfg, speed, sequence, rho, allow_short,
     metrics["run_dir"] = str(run_dir)
     metrics["element_profiles"] = len(elements)
     if surface:
-        metrics["surface_stations"] = len(profile)
+        metrics["surface_stations"] = len(stations)
         metrics.update(read_surface_audit(run_dir))
     if match_span:
         if not elements:
