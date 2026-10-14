@@ -400,11 +400,12 @@ def read_surface_stations(run_dir: Path, start, end, allow_short):
     surface_dir = run_dir / SURFACE_DIR
     files = sorted(
         path for path in surface_dir.glob("*.csv")
-        if path.is_file() and not path.name.endswith("_nodes.csv")
+        if path.is_file()
+        and not path.name.endswith(("_nodes.csv", "_distribution.csv"))
     )
     if not files:
         raise FileNotFoundError(str(surface_dir / "*.csv"))
-    stations: dict[int, list[dict]] = {}
+    stations: dict[float, list[dict]] = {}
     for path in files:
         rows = read_rows(path)
         if not rows:
@@ -415,7 +416,7 @@ def read_surface_stations(run_dir: Path, start, end, allow_short):
                 raise ShortWindow(f"{path}: no samples in the averaging window")
             window = rows
         for row in window:
-            stations.setdefault(int(float(row["station"])), []).append(row)
+            stations.setdefault(float(row["station"]), []).append(row)
     # The Phase VI twin writes station output for blade1 only (`writePerf false`
     # on blade2), but merging any station files by station id keeps exactly one
     # profile per station (identical values for symmetric blades) instead of

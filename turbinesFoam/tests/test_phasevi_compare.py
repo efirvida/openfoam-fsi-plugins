@@ -437,3 +437,38 @@ def test_main_three_way_missing_surface_input(tmp_path):
         "--out", str(tmp_path / "out-incomplete"),
     ] + flags)
     assert absent == compare.EXIT_MISSING_INPUT
+
+
+def test_surface_stations_use_metric_station_and_skip_distribution_csv(tmp_path):
+    """The real station column is a span coordinate in metres, not an index.
+
+    The solver writes `<owner>.surface.csv` with fractional `station` values
+    and, next to it, `<owner>.surface_distribution.csv` (timing counters, no
+    `station` column). Distinct stations must stay distinct and the
+    distribution file must not be read as a station table.
+    """
+    surface_dir = tmp_path / compare.SURFACE_DIR
+    surface_dir.mkdir(parents=True)
+    with (surface_dir / "turbine.blade1.surface.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as stream:
+        writer = csv.writer(stream)
+        writer.writerow(SURFACE_STATION_COLUMNS)
+        for station, root_dist, c_ref_n in (
+            (0.58, 0.02, 0.9), (0.77, 0.06, 0.8), (0.94, 0.10, 0.7),
+        ):
+            writer.writerow([
+                "0.001", station, root_dist, "0.1", "1", "0", "0",
+                c_ref_n, "0.1", "1", "1",
+            ])
+    with (surface_dir / "turbine.blade1.surface_distribution.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["time", "nodes", "candidates", "mean_candidates",
+                         "max_candidates", "seconds"])
+        writer.writerow(["0.001", "10", "20", "2", "3", "0.1"])
+
+    profile = compare.read_surface_stations(tmp_path, 0.0, 1.0, True)
+    assert [round(root_dist, 6) for root_dist, _, _ in profile] == [0.02, 0.06, 0.10]
+    assert [round(c_ref_n, 6) for _, c_ref_n, _ in profile] == [0.9, 0.8, 0.7]
