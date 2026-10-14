@@ -25,6 +25,7 @@
 #   TURBINE_REQUEUE            1 = requeue to continue a long run (default 1)
 #   TURBINE_SOLVER_TIME_BUDGET safety wall timeout in seconds (default: Slurm)
 #   TURBINE_MPI_MCA            override the mpirun MCA flags
+#   TURBINE_NACELLE            on = add the nacelle surrogate (default off)
 #
 # Submit from the package directory so $SLURM_SUBMIT_DIR resolves the package.
 set -eu
@@ -81,6 +82,13 @@ fi
 if [ -n "${TURBINE_SNAPPY_LEVEL:-}" ]; then
     domain_args+=(--snappy-level "$TURBINE_SNAPPY_LEVEL")
 fi
+# Nacelle surrogate on/off study (not in the reference): TURBINE_NACELLE=on adds
+# the nacelle actuator surface and writes its STL; unset or off renders as before.
+case "${TURBINE_NACELLE:-off}" in
+    on) domain_args+=(--nacelle on) ;;
+    off) ;;
+    *) echo "ERROR: TURBINE_NACELLE takes on or off" >&2; exit 2 ;;
+esac
 write_deg="${TURBINE_WRITE_DEG:-}"
 if [ -n "$write_deg" ]; then
     domain_args+=(--write-interval-deg "$write_deg")
