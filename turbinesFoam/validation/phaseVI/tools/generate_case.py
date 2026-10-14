@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import math
 import os
 import sys
 from pathlib import Path
@@ -554,6 +555,43 @@ SAMPLE_COUNT_DEFAULT = 20
 LIFT_RE_CORR_EXP_DEFAULT = 0.23
 
 
+NACELLE_CONFIG = ROOT / "config" / "nacelle.yaml"
+
+
+def render_nacelle_block(cfg: dict[str, Any]) -> str:
+    """`nacelle {}` subdict consumed by `axialFlowTurbineALSource::createNacelle()`.
+
+    The flat front cap sits `front_offset_m` downstream of the rotor plane on
+    the rotor axis at hub height; the committed STL
+    (`geometry/phaseVI_nacelle.stl`, staged into the run by `runPhaseVI.sh`)
+    carries the same absolute coordinates, so `bodyOrigin` is its front-cap
+    centre. The nacelle is downstream: the rotor axis points upwind.
+    """
+    import yaml
+
+    nacelle = yaml.safe_load(NACELLE_CONFIG.read_text(encoding="utf-8"))["nacelle"]
+    turbine = cfg["turbine"]
+    origin = turbine_origin(cfg)
+    axis = [0.0 - float(value) for value in turbine["axis"]]
+    start = tuple(o + float(nacelle["front_offset_m"]) * a for o, a in zip(origin, axis))
+    radius = float(nacelle["radius_m"])
+    area = math.pi * radius**2
+    return f"""
+
+        nacelle
+        {{
+            geometry "{nacelle['case_stl']}";
+            cfModel {nacelle['cf_model']};
+            cf -1;
+            rho {float(nacelle['rho']):.8g};
+            nu {float(cfg['inflow']['kinematic_viscosity']):.8g};
+            bodyOrigin {foam_vector(start)};
+            bodyAxis {foam_vector(axis)};
+            referenceArea {area:.12g};
+            writePerf true;
+        }}"""
+
+
 def render_fv_options(
     cfg: dict[str, Any],
     speed: str,
@@ -574,6 +612,7 @@ def render_fv_options(
     velocity_sample_radius: float | None = None,
     n_velocity_samples: int | None = None,
     lift_re_corr_exp: float | None = None,
+    nacelle: bool = False,
 ) -> str:
     """ALM/ASM/ASM-mesh twins rendered from one function.
 
@@ -756,6 +795,7 @@ def render_fv_options(
         f"            epsilon {float(correction['epsilon']):.8g};\n"
         "        }"
     )
+    nacelle_block = render_nacelle_block(cfg) if nacelle else ""
     hub_rows = "\n".join(
         "                (" + " ".join(f"{value:.9g}" for value in row) + ")"
         for row in hub_element_rows()
@@ -829,7 +869,7 @@ def render_fv_options(
             (
 {hub_rows}
             );
-        }}
+        }}{nacelle_block}
 
         profileData
         {{
@@ -1004,6 +1044,7 @@ def outputs(
     n_velocity_samples: int | None = None,
     lift_re_corr_exp: float | None = None,
     refine_level: int = 0,
+    nacelle: bool = False,
 ) -> dict[Path, str]:
     system = case_dir / "system"
     constant = case_dir / "constant"
@@ -1029,6 +1070,7 @@ def outputs(
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
             lift_re_corr_exp=lift_re_corr_exp,
+            nacelle=nacelle,
         ),
         system / "fvOptions.ASM": render_fv_options(
             cfg, speed, mesh, case_dir, ASM_ELEMENT, sequence, n_chordwise,
@@ -1042,6 +1084,7 @@ def outputs(
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
             lift_re_corr_exp=lift_re_corr_exp,
+            nacelle=nacelle,
         ),
         system / "fvOptions.ASM-MESH": render_fv_options(
             cfg,
@@ -1062,6 +1105,7 @@ def outputs(
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
             lift_re_corr_exp=lift_re_corr_exp,
+            nacelle=nacelle,
         ),
         system / "snappyHexMeshDict": render_snappy_dict(cfg, refine_level),
         constant / "transportProperties": render_transport_properties(cfg),
@@ -1283,6 +1327,16 @@ def main(argv: list[str] | None = None) -> int:
              "the committed 26-station table governs and the render is unchanged",
     )
     parser.add_argument(
+        "--nacelle",
+        choices=("on", "off"),
+        default="off",
+        help="add a nacelle surrogate (config/nacelle.yaml, geometry/phaseVI_nacelle.stl; "
+             "the report gives no fairing geometry) "
+             "as the `nacelle {}` subdict of the turbine source, downstream of the "
+             "rotor. Default off: the render is byte-identical to the one without "
+             "the option",
+    )
+    parser.add_argument(
         "--mesh-factor",
         type=_positive_float,
         default=None,
@@ -1367,6 +1421,7 @@ def main(argv: list[str] | None = None) -> int:
             n_velocity_samples=args.n_velocity_samples,
             lift_re_corr_exp=args.lift_re_corr_exp,
             refine_level=args.refine_level,
+            nacelle=args.nacelle == "on",
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)

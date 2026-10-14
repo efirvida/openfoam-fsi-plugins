@@ -10,6 +10,7 @@
 #                 [--end-revs FLOAT] [--run-label WORD] [--stage0]
 #                 [--restart] [--rotational-augmentation on|off]
 #                 [--root-effects on|off] [--refine-level N] [--mesh-factor F]
+#                 [--nacelle on|off]
 #                 [--blade-dz DZ]
 #                 [--run] [--submit]
 #
@@ -34,6 +35,12 @@
 # --n-elements N overrides the configured blade spanwise element count (every
 # model; rendered as `nElements` in the blade subdicts). It is validated as a
 # positive integer (exit 2 otherwise) and forwarded to the renderer when set.
+# --nacelle on adds a nacelle surrogate (config/nacelle.yaml; the report gives no
+# fairing geometry) downstream of the rotor as
+# the `nacelle {}` subdict of the turbine source and stages
+# geometry/phaseVI_nacelle.stl into constant/triSurface/; default off renders the
+# case exactly as before. The mesh is shared with the off case. Recorded as
+# `nacelle` in run.json.
 # --mesh-factor F overrides turbine.gaussian_mesh_factor (positive number, exit 2
 # otherwise): the ALM / no-mesh-ASM projection width eps = 2*cbrt(V)*meshFactor
 # changes without touching the mesh. It is applied before the --refine-level
@@ -93,6 +100,7 @@ polar=""
 refine_level=0
 mesh_factor=""
 blade_dz=""
+nacelle=off
 delta_t=""
 end_revs=""
 run_label=""
@@ -120,6 +128,7 @@ while [ $# -gt 0 ]; do
         --refine-level) refine_level="$2"; shift ;;
         --mesh-factor) mesh_factor="$2"; shift ;;
         --blade-dz) blade_dz="$2"; shift ;;
+        --nacelle) nacelle="$2"; shift ;;
         --delta-t) delta_t="$2"; shift ;;
         --end-revs) end_revs="$2"; shift ;;
         --run-label) run_label="$2"; shift ;;
@@ -231,6 +240,10 @@ if [ -n "$mesh_factor" ]; then
         echo "ERROR: --mesh-factor must be a positive number" >&2; exit 2
     fi
 fi
+case "$nacelle" in
+    on|off) ;;
+    *) echo "ERROR: --nacelle takes on or off" >&2; exit 2 ;;
+esac
 if [ -n "$blade_dz" ]; then
     if ! python3 -c 'import math, sys; v = float(sys.argv[1]); sys.exit(0 if v > 0 and math.isfinite(v) else 1)' "$blade_dz" 2>/dev/null; then
         echo "ERROR: --blade-dz must be a positive number" >&2; exit 2
@@ -367,6 +380,7 @@ fi
 if [ -n "$blade_dz" ]; then
     render_args+=(--blade-dz "$blade_dz")
 fi
+render_args+=(--nacelle "$nacelle")
 if [ -n "$delta_t" ]; then
     render_args+=(--delta-t "$delta_t")
 fi
@@ -455,6 +469,12 @@ if [ "$model" = "asm-mesh" ]; then
     echo "Staged blade STL sha256 $staged_stl_sha256"
 fi
 
+if [ "$nacelle" = "on" ]; then
+    mkdir -p "$run_dir/constant/triSurface"
+    cp "$root/geometry/phaseVI_nacelle.stl" "$run_dir/constant/triSurface/phaseVI_nacelle.stl"
+    echo "Staged nacelle STL phaseVI_nacelle.stl"
+fi
+
 mesh_dir="$root/runs/mesh-$mesh"
 if [ "$refine_level" -gt 0 ]; then
     # Level 0 keeps the historical name; above it the level is appended so two
@@ -474,7 +494,7 @@ echo "Linked shared $mesh mesh (refinement level $refine_level) from $mesh_dir"
 
 python3 - "$run_dir" "$root" "$model" "$speed_token" "$mesh" "$domain" "$sequence" \
     "$stage0" "$solver" "$nchordwise" "$ranks" "$staged_stl_sha256" "$run_label" \
-    "$mesh_factor" "$refine_level" "$blade_dz" <<'PY'
+    "$mesh_factor" "$refine_level" "$blade_dz" "$nacelle" <<'PY'
 import datetime
 import hashlib
 import json
@@ -499,7 +519,8 @@ from pathlib import Path
     mesh_factor,
     refine_level,
     blade_dz,
-) = sys.argv[1:17]
+    nacelle,
+) = sys.argv[1:18]
 run_dir = Path(run_dir)
 root = Path(root)
 
@@ -537,6 +558,7 @@ payload = {
     "n_chordwise": int(nchordwise) if nchordwise else None,
     "mesh_factor": effective_mesh_factor,
     "blade_dz": float(blade_dz) if blade_dz else None,
+    "nacelle": nacelle,
     "ranks": int(ranks),
     "run_label": run_label or None,
     "stage0": stage0 == "1",

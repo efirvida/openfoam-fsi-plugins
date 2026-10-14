@@ -1,0 +1,21 @@
+# Opt-in nacelle SURROGATE (`generate_case.py --nacelle on`). Not read when the
+# nacelle is off, so the committed default render does not depend on it.
+# NREL/TP-500-29955 (Hand et al. 2001) does NOT give the nacelle fairing
+# geometry: Fig. 8 (PDF p. 21) is the drivetrain configuration and its
+# dimensions (1.469, 1.79, 0.91 m) are drivetrain parts, not the cover.
+# The values below are a placeholder body, to be sized against the measured
+# nacelle drag of the aerodynamic tares (Appendix I, run 056 tower + nacelle
+# minus run 058 tower only); see odd/tasks/nacelle-onoff-study.md (A2).
+# Only sourced value: rotor overhang 1.401 m, yaw axis to blade axis (PDF p. 72).
+nacelle:
+  stl: geometry/phaseVI_nacelle.stl   # relative to validation/phaseVI
+  case_stl: constant/triSurface/phaseVI_nacelle.stl
+  radius_m: 0.455            # placeholder (assumption), not from the report
+  cylinder_length_m: 2.8     # placeholder (assumption), not from the report
+  # Streamwise distance from the rotor plane to the flat front cap
+  # (placeholder, assumption).
+  front_offset_m: 0.38
+  # Shaft height = turbine.hub_height of case.yaml (12.192 m, tunnel centreline,
+  # report p. 11); no lateral offset.
+  cf_model: schultzGrunow
+  rho: 1.225                   # assumption: air density, only scales the reported SI force
