@@ -341,6 +341,31 @@ def read_tower_overhang(path: Path | str | None = None) -> float:
     return float(data["components"]["nacelle"]["drivetrain"]["overhang"])
 
 
+def read_nacelle_drivetrain(path: Path | str | None = None) -> dict[str, float]:
+    """WindIO nacelle inputs used to size the nacelle body [m, rad].
+
+    ``overhang``, ``uptilt`` and ``generator_length`` come from
+    ``components.nacelle.drivetrain``; ``rad_ag``, ``h_m`` and ``h_yr`` (generator
+    air-gap radius, magnet height, rotor-yoke height) from
+    ``components.nacelle.generator``.
+    """
+    try:
+        import yaml
+    except ImportError as error:  # pragma: no cover - depends on environment
+        raise GeometryError("PyYAML is required to read the nacelle") from error
+    source = Path(path) if path is not None else DEFAULT_WINDIO
+    nacelle = yaml.safe_load(source.read_text(encoding="utf-8"))["components"]["nacelle"]
+    drivetrain, generator = nacelle["drivetrain"], nacelle["generator"]
+    return {
+        "overhang": float(drivetrain["overhang"]),
+        "uptilt": float(drivetrain["uptilt"]),
+        "generator_length": float(drivetrain["generator_length"]),
+        "rad_ag": float(generator["rad_ag"]),
+        "h_m": float(generator["h_m"]),
+        "h_yr": float(generator["h_yr"]),
+    }
+
+
 def _format(value: float) -> str:
     text = f"{value:.10g}"
     return "0" if text in ("-0", "") else text

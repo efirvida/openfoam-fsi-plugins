@@ -77,6 +77,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import importlib.util
 import math
 import os
 import sys
@@ -1243,6 +1244,87 @@ def _tip_correction_block(
     )
 
 
+#: Nacelle STL written next to the blade STL when ``--nacelle on``.
+NACELLE_STL = "constant/triSurface/iea15mw_nacelle.stl"
+#: Air density [kg/m^3] for the nacelle source's SI contract (ISA sea level; the
+#: solver is kinematic, so only the force bookkeeping uses it).
+NACELLE_RHO = 1.225
+
+
+def nacelle_spec(flow_axis: str = DEFAULT_FLOW_AXIS) -> dict:
+    """Capsule nacelle behind the hub, from the WindIO drivetrain/generator.
+
+    * flat cap centre: on the rotor axis at the hub radius (3.97 m) downwind of
+      the apex (assumption: the nacelle starts where the hub ends);
+    * axis: downwind, tilted so the tail drops by the WindIO ``uptilt`` (6 deg);
+    * radius: ``rad_ag + h_m + h_yr`` = generator outer (rotor-yoke) radius, the
+      only WindIO diameter that bounds the housing (assumption: the housing hugs
+      the PMSG_Outer generator; real nacelle skin is a few tenths larger);
+    * tail tip: ``overhang + generator_length`` downwind of the apex (assumption:
+      the body extends one generator length past the yaw axis), so the yaw axis
+      at ``overhang`` lies inside it.
+    """
+    data = blade_geometry.read_nacelle_drivetrain()
+    tilt = data["uptilt"]
+    flow = inflow_direction(flow_axis)
+    axis = tuple(
+        math.cos(tilt) * flow[i] - math.sin(tilt) * (1.0 if i == 2 else 0.0)
+        for i in range(3)
+    )
+    radius = data["rad_ag"] + data["h_m"] + data["h_yr"]
+    start_s = blade_geometry.HUB_RADIUS
+    total = data["overhang"] + data["generator_length"] - start_s
+    start = tuple(start_s * c for c in axis)
+    return {
+        "overhang": data["overhang"],
+        "uptilt_deg": math.degrees(tilt),
+        "radius": radius,
+        "length": total - radius,
+        "start": start,
+        "axis": axis,
+    }
+
+
+def write_nacelle_stl(case_dir: Path, flow_axis: str = DEFAULT_FLOW_AXIS) -> Path:
+    """Write the nacelle STL under ``case_dir/constant/triSurface``."""
+    spec = importlib.util.spec_from_file_location(
+        "make_nacelle_stl", PACKAGE.parent.parent / "validation" / "tools" / "make_nacelle_stl.py"
+    )
+    assert spec is not None and spec.loader is not None
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    nac = nacelle_spec(flow_axis)
+    tris, axis = tool.triangles(nac["radius"], nac["length"], nac["start"], nac["axis"])
+    out = Path(case_dir) / NACELLE_STL
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tool.write_stl(out, tool._oriented(tris, nac["start"], axis))
+    return out
+
+
+def render_nacelle_block(flow_axis: str = DEFAULT_FLOW_AXIS) -> str:
+    """``nacelle {}`` subdict consumed by ``axialFlowTurbineALSource::createNacelle``."""
+    nac = nacelle_spec(flow_axis)
+    area = math.pi * nac["radius"] ** 2
+    # bodyAxis is the streamwise direction of the skin-friction model (the
+    # inflow), not the tilted body axis.
+    return f"""        nacelle
+        {{
+            // Static nacelle actuator surface (STL in world frame): not in the
+            // OpenFAST/OLAF reference; on/off study only.
+            geometry "{NACELLE_STL}";
+            bodyOrigin {foam_vector(nac['start'])};
+            bodyAxis {foam_vector(inflow_direction(flow_axis))};
+            rho {NACELLE_RHO:g};
+            nu {KINEMATIC_VISCOSITY:g};
+            cfModel schultzGrunow;
+            cf -1.0;
+            referenceArea {area:.8g};
+            writePerf true;
+            writeNodePerf false;
+        }}
+"""
+
+
 def render_fv_options(
     speed: float = RATED_SPEED,
     rpm: float = RATED_RPM,
@@ -1269,6 +1351,7 @@ def render_fv_options(
     wake_turns: int = DEFAULT_WAKE_TURNS,
     wake_azimuthal_step: float = DEFAULT_WAKE_AZIMUTHAL_STEP,
     tip_correction_epsilon: float = DEFAULT_TIP_CORRECTION_EPSILON,
+    nacelle: bool = False,
 ) -> str:
     """The neutral-baseline ``axialFlowTurbineALSource``.
 
@@ -1346,6 +1429,7 @@ def render_fv_options(
 """
     else:
         hub_block = ""
+    nacelle_block = render_nacelle_block(flow_axis) if nacelle else ""
     tower_rows = render_cell_list(tower_element_rows(), indent="                ")
     tower_cd = tower_drag_coefficient()
     if tower:
@@ -1444,7 +1528,7 @@ def render_fv_options(
             }}
         }}
 
-{hub_block}{tower_block}        profileData
+{hub_block}{tower_block}{nacelle_block}        profileData
         {{
 {profile_blocks}
             cylinder {{ data ((-180 0 1.1 0) (180 0 1.1 0)); }}
@@ -1795,6 +1879,7 @@ def outputs(
     dt_factor: float = DEFAULT_DT_FACTOR,
     decomp_method: str = DEFAULT_DECOMP_METHOD,
     decomp_n: str | None = None,
+    nacelle: bool = False,
 ) -> dict[Path, str]:
     domain = _as_domain(domain)
     case_dir = Path(case_dir)
@@ -1835,6 +1920,7 @@ def outputs(
             wake_turns=wake_turns,
             wake_azimuthal_step=wake_azimuthal_step,
             tip_correction_epsilon=tip_correction_epsilon,
+            nacelle=nacelle,
         ),
         system / "fvOptions.ASM": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
@@ -1851,6 +1937,7 @@ def outputs(
             wake_turns=wake_turns,
             wake_azimuthal_step=wake_azimuthal_step,
             tip_correction_epsilon=tip_correction_epsilon,
+            nacelle=nacelle,
         ),
         system / "fvOptions.ASM-MESH": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
@@ -1868,6 +1955,7 @@ def outputs(
             wake_turns=wake_turns,
             wake_azimuthal_step=wake_azimuthal_step,
             tip_correction_epsilon=tip_correction_epsilon,
+            nacelle=nacelle,
         ),
         system / "fvOptions": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
@@ -1887,6 +1975,7 @@ def outputs(
             wake_turns=wake_turns,
             wake_azimuthal_step=wake_azimuthal_step,
             tip_correction_epsilon=tip_correction_epsilon,
+            nacelle=nacelle,
         ),
         system / "snappyHexMeshDict": render_snappy_dict(
             flow_axis,
@@ -2283,6 +2372,12 @@ def main(argv: list[str] | None = None) -> int:
         choices=("on", "off"),
         default="off",
         help="include the hub drag body; default off (AeroDyn has no hub aero)",
+    )
+    parser.add_argument(
+        "--nacelle",
+        choices=("on", "off"),
+        default="off",
+        help="include the nacelle actuator surface + STL (default off; not in the reference)",
     )
     parser.add_argument(
         "--ranks",
@@ -2719,6 +2814,7 @@ def main(argv: list[str] | None = None) -> int:
             dt_factor=dt_factor,
             decomp_method=decomp_method,
             decomp_n=decomp_n,
+            nacelle=args.nacelle == "on",
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)
@@ -2731,6 +2827,8 @@ def main(argv: list[str] | None = None) -> int:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
         print(_display(path, PACKAGE))
+    if args.nacelle == "on":
+        print(_display(write_nacelle_stl(Path(args.case_dir), args.flow_axis), PACKAGE))
     return 0
 
 
