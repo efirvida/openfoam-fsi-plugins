@@ -505,3 +505,19 @@ def test_asm_mesh_chord_pair_comes_from_elements_not_plane_stations(tmp_path):
         values = metrics["models"]["asm-mesh"]["spanwise"][f"{station:.2f}"]
         assert values[1] == pytest.approx(FIXTURE_CHORD_CT, rel=1e-9)
         assert values[3] == pytest.approx(linear_at(plane_t, station), rel=1e-9)
+
+
+def test_drift_ignores_a_trailing_partial_revolution():
+    """A run that ends a few steps past a revolution boundary must not add a sliver.
+
+    The sliver averages only the last rows, so it looked like a sudden cp drop
+    in the per-revolution drift and inflated the variation.
+    """
+    period = 1.0
+    rows = [{"time": f"{step * 0.01:.2f}", "cp": "0.30", "cd": "0.50"}
+            for step in range(1, 301)]
+    rows += [{"time": f"{3.0 + step * 0.01:.2f}", "cp": "0.10", "cd": "0.20"}
+             for step in range(1, 4)]
+    result = compare.drift_flags(rows, 0.0, period)
+    assert result["cp"]["per_revolution"] == pytest.approx([0.30, 0.30, 0.30])
+    assert result["cp"]["flag"] is False

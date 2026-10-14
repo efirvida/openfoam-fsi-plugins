@@ -262,7 +262,12 @@ def drift_flags(rows, start, period):
                 continue
             index = int((time - start) / period)
             per_rev.setdefault(index, []).append(float(row[key]))
-        means = [mean(values) for index, values in sorted(per_rev.items())]
+        chunks = [values for index, values in sorted(per_rev.items())]
+        # A run that ends a few steps past a revolution boundary leaves a
+        # trailing sliver whose mean is not a revolution mean: drop it.
+        if len(chunks) > 1 and len(chunks[-1]) < 0.9 * max(map(len, chunks)):
+            chunks = chunks[:-1]
+        means = [mean(values) for values in chunks]
         means = [value for value in means if value is not None]
         if len(means) < 2:
             result[key] = {"variation": None, "flag": True,

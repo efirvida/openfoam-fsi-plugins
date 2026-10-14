@@ -13,11 +13,11 @@ Metric definitions (fixed against the NREL report):
 
 Turbine level (measured: ROTPOW / LSSTQCOR / EAEROTH):
   ALM: P 5.655 kW vs 9.753 kW; Q 748.7 Nm vs 1292 Nm; T 1182 N vs 1632 N (scope blade)
-    drift flag: False (cp variation 0.0019059067720982735, cd variation 0.0004679041081719983)
+    drift flag: False (cp variation 0.0007849706222840956, cd variation 4.582504743271073e-05)
   ASM: P 5.674 kW vs 9.753 kW; Q 751.3 Nm vs 1292 Nm; T 1184 N vs 1632 N (scope blade)
-    drift flag: False (cp variation 0.0016448068300974165, cd variation 0.0003128901658738362)
+    drift flag: False (cp variation 0.0007856225871845582, cd variation 4.902084946988087e-05)
   ASM-MESH: P 5.978 kW vs 9.753 kW; Q 791.5 Nm vs 1292 Nm; T 1179 N vs 1632 N (scope blade)
-    drift flag: False (cp variation 0.002746200291683999, cd variation 0.00035416885571379635)
+    drift flag: False (cp variation 0.0008038916217635479, cd variation 4.35956953854159e-05)
 
 Bands: turbine power/torque/thrust +-15 %; spanwise max(0.15, 20 %).
 Spanwise CM excluded (element CSV has no cm column).
