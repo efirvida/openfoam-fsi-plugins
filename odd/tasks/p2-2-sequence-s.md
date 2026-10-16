@@ -29,3 +29,25 @@ Submitted together with the H1 root-factor A/B (`alm-U7-coarse-p21-rootoff`, job
    On H the 7 m/s power already sat at -11 / -11 / -14.5 %, so S may fail the power band; report it, do
    not retune. This is the validation that is quoted.
 4. Then the 21-point S curve (trend and stall onset) per the plan.
+
+## Results (2026-10-16) — judged with `scripts/summarizeBands.py` on `comparePhaseVI.py` output
+
+Jobs 11615752-56 COMPLETED (12 rev). 11615757 (asm-mesh U10) FAILED at t=5.48 s: InfiniBand completion error
+(`uct_ib_mlx5_check_completion` inside an MPI Allreduce, nodes sdumont6037/6247), infrastructure, not code.
+Resubmitted unchanged as job **11616862** (`--restart`, no written time, restarts from 0; ~8.5 h).
+
+| run | %P (band 10) | %T (band 15) | c_n 0.30 (15) | 0.47 | 0.63 | 0.80 (10) | 0.95 (report) |
+|---|---|---|---|---|---|---|---|
+| ALM 7 | -11.0 FAIL | -0.7 pass | +15.1 FAIL (marginal) | +1.8 | +2.4 | -0.3 | -12.1 |
+| ASM 7 | -10.9 FAIL | -0.6 pass | +15.1 FAIL (marginal) | +1.8 | +2.4 | -0.3 | -12.1 |
+| ASM-mesh 7 | -14.4 FAIL | -2.9 pass | +12.9 pass | +0.4 | +1.0 | -2.8 | -11.6 |
+| ALM 10 | -43.5 FAIL | -28.1 FAIL | -40.5 | -39.3 | -17.6 | -19.4 | -43.0 |
+| ASM 10 | -43.3 FAIL | -27.9 FAIL | -40.5 | -39.0 | -17.5 | -19.4 | -43.0 |
+
+- 7 m/s: ASM-ALM power 0.1 % (pass, <= 2 %); ASM-mesh vs ALM -3.9 % (fails the 2 % band). Power misses by
+  ~1 point (ALM/ASM) as predicted from H; thrust and mid-span c_n are inside the bands.
+- 10 m/s: the experiment is in 3-D stall delay (c_n 1.29-1.35 at r/R 0.30-0.47); the model has no
+  rotational augmentation, so the underprediction is structural. Reported, not retuned (plan rule 2).
+- The comparison script's own band is 15 % for power; the 10 % verdict comes from the summary script.
+
+Next: when 11616862 completes, judge asm-mesh U10; then the 21-point S curve.

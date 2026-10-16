@@ -47,6 +47,7 @@ CSU_LOW_RE = POLARS_DIR / "S809_CSU_Re0.65M_total.dat"
 # are byte-identical to the `*_total.dat` files above and only the
 # beyond-measurement rows are replaced by an empirical post-stall branch. The
 # running Phase VI jobs read the committed `*_total.dat` files, never these.
+BASELINE_PRESSURE = POLARS_DIR / "S809_OSU_Re1M_pressure.dat"
 BASELINE_VITERNA = POLARS_DIR / "S809_OSU_Re1M_viterna.dat"
 CSU_LOW_RE_VITERNA = POLARS_DIR / "S809_CSU_Re0.65M_viterna.dat"
 
@@ -271,6 +272,26 @@ CSU_VITERNA_HEADER = [
 ]
 
 
+PRESSURE_HEADER = [
+    "// S809 polar, OSU Re = 1e6, PRESSURE drag (`Cdp`, NREL/TP-500-29955 Table A-7).",
+    "// Diagnostic variant of S809_OSU_Re1M_total.dat: inside the measured range the",
+    "// drag column is the surface-pressure integral, which is what the Phase VI",
+    "// pressure taps integrate; rows outside it (the static extension) are unchanged.",
+    "// Not the frozen definition: run it only through `--polar` as a labelled arm.",
+    "// (alpha_deg Cl Cd Cm)",
+]
+
+
+def pressure_drag_rows(rows):
+    """Total-drag rows with Cd replaced by Cdp where the raw table reports it."""
+    cdp = {
+        float(row["alpha_deg"]): float(row["cdp"])
+        for row in read_raw(RAW_DIR / "table_A7.csv")
+        if row.get("cdp")
+    }
+    return [(a, cl, cdp.get(a, cd), cm) for a, cl, cd, cm in rows]
+
+
 def render_single_re(rows, header: list[str] | None = None) -> str:
     lines = list(header) if header is not None else list(BASELINE_HEADER)
     for alpha, cl, cd, cm in rows:
@@ -396,6 +417,7 @@ def main(argv: list[str] | None = None) -> int:
     csu_viterna_rows.sort(key=lambda row: row[0])
     rendered = {
         BASELINE: render_single_re(rows),
+        BASELINE_PRESSURE: render_single_re(pressure_drag_rows(rows), PRESSURE_HEADER),
         MULTI_RE: render_multi_re(),
         CSU_LOW_RE: render_single_re(csu_rows, CSU_HEADER),
         BASELINE_VITERNA: render_single_re(osu_viterna_rows, BASELINE_VITERNA_HEADER),
