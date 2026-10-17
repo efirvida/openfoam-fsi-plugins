@@ -24,7 +24,8 @@ The force x arm table uses `arm_contributions`/`station_widths` of
 `compareSectionLoads.py` (five-point trapezoid, extended to the cutout and the
 tip); the experiment's `F'n`/`F't` are `CTH`/`CTQ x QNORM x chord` with the
 chord taken from the run's `geometry.csv`. `--alm-dir` adds our ALM with the
-window and density of `compareSectionLoads.py` (3-4 periods; f_ref x rho_exp).
+window and density of `compareSectionLoads.py` (configured sequence H window;
+f_ref x rho_exp). The ALM window must pass the turbine cp/cd drift check.
 
 Read-only; no cluster cost.
 
@@ -40,7 +41,8 @@ import math
 import os
 import re
 
-from compareSectionLoads import (CUT, R, STATIONS, TSR, U_REF, arm_contributions, chord_at,
+from compareSectionLoads import (CUT, R, STATIONS, U_REF, arm_contributions, chord_at,
+                                 converged_window,
                                  interpolate, read_density, read_experiment, sim_profile,
                                  station_widths, QNORM)
 
@@ -173,8 +175,8 @@ def main():
     chords = _geometry_chords(args.run)
     alm = None
     if args.alm_dir:
-        period = 2.0 * math.pi / (TSR * U_REF / R)
-        alm, _ = sim_profile(args.alm_dir, 3.0 * period, 4.0 * period)
+        start, end, _ = converged_window(args.alm_dir, args.speed, "H")
+        alm, _ = sim_profile(args.alm_dir, start, end)
         rho = read_density(args.experiment_dir, args.speed)
 
     keys = [s for s in STATIONS if round(s, 4) in experiment]

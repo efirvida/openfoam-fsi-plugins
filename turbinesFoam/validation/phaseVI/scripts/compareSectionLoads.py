@@ -43,6 +43,10 @@ Read-only; no cluster cost.
 
 Usage:  python3 scripts/compareSectionLoads.py --alm-dir runs/alm-U7-coarse-r2 [--sequence S]
 (`--sequence` picks `data/experiment/sequence_<H|S>_*.csv`; default H.)
+The window follows comparePhaseVI's configured discard/end revolutions and
+sequence/speed TSR. Override with --revolutions DISCARD END (integer-truncated,
+like comparePhaseVI). Turbine cp/cd drift above 1% refuses the window (exit 2);
+--allow-drift prints a WARNING and continues.
 """
 from __future__ import annotations
 
@@ -53,12 +57,53 @@ import math
 import os
 import re
 import statistics
+import sys
+from pathlib import Path
 
+import comparePhaseVI
 from closeExperimentIntegral import case_chord
 
 R, CUT, TSR, U_REF = 5.029, 0.5083, 5.408, 7.0
 STATIONS = (0.30, 0.47, 0.63, 0.80, 0.95)
 CD_VALID_MAX = 0.5          # the root sentinel is cd = 1.1
+
+
+def converged_window(run_dir, speed, sequence, revolutions=None, allow_drift=False):
+    """Return rotor-metric bounds and window info, refusing non-steady cp/cd."""
+    cfg = comparePhaseVI.load_config(comparePhaseVI.DEFAULT_CONFIG)
+    if revolutions is not None:
+        cfg["solver"]["discard_revolutions"] = int(revolutions[0])
+        cfg["solver"]["end_revolutions"] = int(revolutions[1])
+    start, end, period = comparePhaseVI.window_bounds(cfg, speed, sequence)
+    rows = comparePhaseVI.read_rows(Path(run_dir) / comparePhaseVI.TURBINE_CSV)
+    tsr = float(comparePhaseVI.select_speed(cfg, speed, sequence)["tsr"])
+    try:
+        comparePhaseVI.analyse_turbine(rows, start, end, period, False, tsr)
+    except comparePhaseVI.ShortWindow as exc:
+        print(f"error: short averaging window: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+    except comparePhaseVI.TsrMismatch as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(3) from exc
+    # drift_flags has no end parameter: restrict its input to this window.
+    drift = comparePhaseVI.drift_flags(
+        [row for row in rows if start <= float(row["time"]) <= end], start, period
+    )
+    if drift["flag"]:
+        flags = (f"drift flag: {drift['flag']} "
+                 f"(cp variation {drift['cp']['variation']}, "
+                 f"cd variation {drift['cd']['variation']}); "
+                 f"tolerance {comparePhaseVI.DRIFT_TOLERANCE:.0%}")
+        if allow_drift:
+            print(f"WARNING: {flags}; continuing with --allow-drift", file=sys.stderr)
+        else:
+            print(f"error: {flags}; use --allow-drift to override", file=sys.stderr)
+            raise SystemExit(2)
+    return start, end, {
+        "discard_revolutions": cfg["solver"]["discard_revolutions"],
+        "end_revolutions": cfg["solver"]["end_revolutions"],
+        "drift": drift,
+    }
 
 
 def element_number(path: str) -> int:
@@ -255,15 +300,20 @@ def interpolate(profile, x, column):
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--alm-dir", default="runs/alm-U7-coarse-r2")
     parser.add_argument("--experiment-dir", default="data/experiment")
     parser.add_argument("--speed", type=float, default=7.0)
     parser.add_argument("--sequence", choices=("H", "S"), default="H")
+    parser.add_argument("--revolutions", nargs=2, type=float, metavar=("DISCARD", "END"),
+                        help="override configured revolution bounds (integer-truncated)")
+    parser.add_argument("--allow-drift", action="store_true",
+                        help="warn and continue if turbine cp/cd drift exceeds 1%")
     args = parser.parse_args()
 
-    period = 2.0 * math.pi / (TSR * U_REF / R)
-    start, end = 3.0 * period, 4.0 * period      # last revolution: least transient
+    start, end, info = converged_window(
+        args.alm_dir, args.speed, args.sequence, args.revolutions, args.allow_drift
+    )
     profile, dropped = sim_profile(args.alm_dir, start, end)
     if not profile:
         raise SystemExit("no valid elements in the window")
@@ -272,7 +322,8 @@ def main():
         raise SystemExit("no experiment stations for that speed")
 
     print(
-        f"run {args.alm_dir}   last revolution t in "
+        f"run {args.alm_dir}   revolutions {info['discard_revolutions']:g}.."
+        f"{info['end_revolutions']:g}   t in "
         f"[{start:.3f}, {end:.3f}] s   degenerate elements excluded: {dropped}"
     )
     print(

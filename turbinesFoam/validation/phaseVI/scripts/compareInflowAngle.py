@@ -24,9 +24,14 @@ wrong plane-frame one.
 Read-only; no cluster cost.
 
 Usage:  python3 scripts/compareInflowAngle.py --alm-dir runs/alm-U7-coarse-r2 [--sequence S]
+The averaging window follows comparePhaseVI's sequence/speed configuration.
+--revolutions DISCARD END overrides it (integer-truncated, like comparePhaseVI).
+Turbine cp/cd drift above 1% exits 2; --allow-drift warns and continues.
 """
 from __future__ import annotations
 import argparse, csv, glob, math, os, re, statistics
+
+from compareSectionLoads import converged_window
 
 R, CUT, TSR, U_REF = 5.029, 0.5083, 5.408, 7.0
 STATIONS = (0.30, 0.47, 0.63, 0.80, 0.95)
@@ -72,14 +77,19 @@ def interpolate(profile, x, col):
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--alm-dir", default="runs/alm-U7-coarse-r2")
     ap.add_argument("--speed", type=float, default=7.0)
     ap.add_argument("--sequence", choices=("H", "S"), default="H")
+    ap.add_argument("--revolutions", nargs=2, type=float, metavar=("DISCARD", "END"),
+                    help="override configured revolution bounds (integer-truncated)")
+    ap.add_argument("--allow-drift", action="store_true",
+                    help="warn and continue if turbine cp/cd drift exceeds 1%")
     a = ap.parse_args()
 
-    period = 2.0 * math.pi / (TSR * U_REF / R)
-    lo, hi = 3.0 * period, 4.0 * period          # last revolution, least transient
+    lo, hi, info = converged_window(
+        a.alm_dir, a.speed, a.sequence, a.revolutions, a.allow_drift
+    )
 
     exp = {}
     for row in read_table(f"data/experiment/sequence_{a.sequence}_spanwise.csv"):
@@ -88,7 +98,8 @@ def main():
             exp[round(float(row["r_over_R"]), 4)] = math.degrees(math.atan2(ctq, cth))
 
     prof = sim_profile(a.alm_dir, lo, hi)
-    print(f"run {a.alm_dir}   ventana t in [{lo:.3f}, {hi:.3f}] s (ultima revolucion)")
+    print(f"run {a.alm_dir}   revolutions {info['discard_revolutions']:g}.."
+          f"{info['end_revolutions']:g}   t in [{lo:.3f}, {hi:.3f}] s")
     print("phi del ensayo = atan2(CTQ, CTH); phi de la sim = atan2(c_ref_t, c_ref_n)\n")
     print(f"{'r/R':>5} {'phi_exp':>8} {'phi_sim':>8} {'delta':>8} {'phi geom':>9} {'alpha_eff':>10} {'alpha_geom':>11}")
     for st in STATIONS:
