@@ -353,3 +353,19 @@ Julia 1.11.3 + `/scratch/leahk/eduardo.donestevez/flowunsteady-env` (depot `juli
 Recipe and the four traps (broken Pkg in other modules, depot path colon, unregistered deps with docs names, FastMultipole master): `validation/phaseVI/flowunsteady/install_flowunsteady.sh`.
 Run: `LD_LIBRARY_PATH=/scratch/app/julia/1.11.3/lib JULIA_DEPOT_PATH=<depot>: /scratch/app/julia/1.11.3/bin/julia --project=<env> script.jl`.
 Not done: the Phase VI rotor case (repo has no UAE example; Mehr's script is not published). Needs geometry + S809 polars of ours.
+
+## Owner decisions 2026-10-17 (session 3)
+1. FLOWUnsteady: not used as a reference (it does not match the experiment). No further runs.
+2. Pressure-drag polar (D3): adopted for now as the best result; keep diagnosing.
+3. No more simulation time in stall (RA at 10 m/s not run); model limits are documented from existing results once the attached regime is validated.
+4. Window: agent's choice, provided it is quasi-steady. Done: `compareSectionLoads.py`, `compareInflowAngle.py` and the ALM columns of
+   `compareFlowUnsteadyStations.py` now use `comparePhaseVI.window_bounds` (revolutions 4-12, per-sequence TSR) and refuse a window that fails
+   `drift_flags` (exit 2; `--allow-drift`). All current runs pass. Numbers move < 0.5 points: D3 torque +0.2 -> -0.3 %, p21 -8.7 -> -9.1 %,
+   S p22 -9.0 -> -9.3 %, B -5.1 -> -5.3 %; flapwise unchanged within 0.2 points.
+
+**Finding (blocks the v1.2 definition text):** every P2.1/P2.2 Phase VI run (H and S, ALM/ASM/ASM-mesh, p21, D3, seqS-p22, B) ran with
+`endEffectsModel Glauert; tipEffects on` and `tipCorrection active off`, while `validation-model-definition.md` v1.1 freezes D&S on and Glauert
+tip off. Cause: `config/case.yaml:337-354` defaults (Glauert tip+root on, D&S off) and the P2 launchers pass no tip flags. Only `dagtip`/`dagtipd`
+(2026-10-08, 4 rev, root off, 50 elements, pre-`4c49dc3`) used D&S on Phase VI: H 7 m/s %P +0.5, c_n 0.80 +13.2 %, 0.95 +50.8 %, station-sum
+flapwise +14.1 % (vs Glauert p21: -11.0 %, +0.2 %, -14.0 %, -3.2 %). D&S over-loads the tip like FLOWUnsteady; Glauert under-loads it.
+IEA control (P0.4): Glauert cp 0.5461 vs OLAF 0.5312 (+2.8 %), D&S ~0.562-0.565 (+5.5..6 %). Owner decision pending.
