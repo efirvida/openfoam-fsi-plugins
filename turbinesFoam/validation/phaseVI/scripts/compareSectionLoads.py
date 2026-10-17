@@ -22,6 +22,19 @@ the same vector seen twice, so the plain rotation between the pairs recovers the
 local twist with no auxiliary quantity. That is checked, not assumed -- the
 rotation is verified against the pairs and its residual is reported.
 
+A force-times-arm table follows (owner priority: the tangential force matters
+structurally, so deficits are ranked by force x arm, not by percent). Per
+station it prints the sectional force per length in the plane of rotation
+(`F'n` thrust direction, `F't` tangential, N/m), and its share of the blade-root
+flapwise moment `F'n (r - r_cut) dr`, edgewise moment `F't (r - r_cut) dr` and
+shaft torque `F't r dr`, with `dr` the trapezoidal width over the five stations
+(extended to the cutout and the tip). The simulation's `f_ref_n`/`f_ref_t` are
+KINEMATIC (`0.5 c C |U|^2`, no density) and are multiplied by the experiment's
+`rho_kg_m3`; the experiment's are `CTH`/`CTQ x QNORM x chord`, the chord taken
+from the case's rendered `elementData`. The station sum is five-point
+trapezoidal, so it ranks deficits; it does not replace the rotor torque of
+record.
+
 Degenerate elements are excluded: the root polar is a sentinel (`cl = 0`,
 `cd = 1.1`) and the tip runs through a blend region, so any spanwise mean that
 includes them is contaminated.
@@ -39,6 +52,8 @@ import math
 import os
 import re
 import statistics
+
+from closeExperimentIntegral import case_chord
 
 R, CUT, TSR, U_REF = 5.029, 0.5083, 5.408, 7.0
 STATIONS = (0.30, 0.47, 0.63, 0.80, 0.95)
@@ -101,9 +116,11 @@ def sim_profile(alm_dir, lo, hi):
         angle = math.degrees(angle_from_pair(cn, ct, cl, cd))
         root_dist = float(rows[0]["root_dist"])
         r_over_r = CUT / R + root_dist * (1.0 - CUT / R)
+        f_n = statistics.mean(float(row["f_ref_n"]) for row in rows)
+        f_t = statistics.mean(float(row["f_ref_t"]) for row in rows)
         out.append(
             (r_over_r, cl, cd, math.hypot(cl, cd), angle, alpha_eff,
-             angle - alpha_eff)
+             angle - alpha_eff, f_n, f_t)
         )
     out.sort()
     return out, dropped
@@ -121,7 +138,105 @@ def read_experiment(experiment_dir, speed):
                 float(row["cn"]), float(row["ct"]),
                 float(row["cth"]), float(row["ctq"]),
             )
+            QNORM[round(float(row["r_over_R"]), 4)] = float(row["qnorm_pa"])
     return stations
+
+
+QNORM = {}
+
+
+def read_density(experiment_dir, speed):
+    """Air density [kg/m^3] of the experiment row at `speed`."""
+    path = os.path.join(experiment_dir, "sequence_H_performance.csv")
+    with open(path) as stream:
+        for row in csv.DictReader(stream):
+            if abs(float(row["wind_speed_m_s"]) - speed) < 0.6:
+                return float(row["rho_kg_m3"])
+    raise SystemExit("no experiment density for that speed")
+
+
+def station_widths(stations, r_min, r_max):
+    """Trapezoidal dr [m] per station, extended to the cutout and the tip."""
+    radii = [station * R for station in stations]
+    widths = []
+    for i, radius in enumerate(radii):
+        lower = radii[i - 1] if i > 0 else r_min
+        upper = radii[i + 1] if i < len(radii) - 1 else r_max
+        widths.append((upper - lower) / 2.0)
+    return widths
+
+
+def arm_contributions(r, d_r, f_n, f_t, r_cut):
+    """Moment shares of one station: (flapwise, edgewise, torque) in N.m."""
+    return (
+        f_n * (r - r_cut) * d_r,
+        f_t * (r - r_cut) * d_r,
+        f_t * r * d_r,
+    )
+
+
+def print_force_arm_table(profile, experiment, chords, rho):
+    """Rank the station deficits by force x arm (sim - experiment, N.m)."""
+    keys = [s for s in STATIONS if round(s, 4) in experiment]
+    widths = station_widths(keys, CUT, R)
+    print(
+        "\n  force x arm per station (plane of rotation, per blade); dr is the"
+        "\n  trapezoidal width over the stations. d* = sim - exp, N.m; the last"
+        "\n  column is the share of the total experimental torque."
+    )
+    print(
+        f"{'r/R':>5} {'dr':>6} | {'Fn_sim':>7} {'Fn_exp':>7} {'Ft_sim':>7} "
+        f"{'Ft_exp':>7} | {'dFlap':>7} {'dEdge':>7} {'dTorq':>7} | {'dTorq%Qexp':>10}"
+    )
+    totals_exp = [0.0, 0.0, 0.0]
+    totals_sim = [0.0, 0.0, 0.0]
+    rows = []
+    for station, d_r in zip(keys, widths, strict=True):
+        cn, ct, cth, ctq = experiment[round(station, 4)]
+        chord = float(chord_at(station * R, chords))
+        q_norm = QNORM[round(station, 4)]
+        fn_exp, ft_exp = cth * q_norm * chord, ctq * q_norm * chord
+        fn_sim = rho * interpolate(profile, station, 7)
+        ft_sim = rho * interpolate(profile, station, 8)
+        r = station * R
+        exp_c = arm_contributions(r, d_r, fn_exp, ft_exp, CUT)
+        sim_c = arm_contributions(r, d_r, fn_sim, ft_sim, CUT)
+        for i in range(3):
+            totals_exp[i] += exp_c[i]
+            totals_sim[i] += sim_c[i]
+        rows.append((station, d_r, fn_sim, fn_exp, ft_sim, ft_exp, sim_c, exp_c))
+    q_exp = totals_exp[2]
+    for station, d_r, fn_sim, fn_exp, ft_sim, ft_exp, sim_c, exp_c in rows:
+        d = [sim_c[i] - exp_c[i] for i in range(3)]
+        print(
+            f"{station:>5.2f} {d_r:>6.3f} | {fn_sim:>7.1f} {fn_exp:>7.1f} "
+            f"{ft_sim:>7.1f} {ft_exp:>7.1f} | {d[0]:>+7.1f} {d[1]:>+7.1f} "
+            f"{d[2]:>+7.1f} | {100.0 * d[2] / q_exp:>+9.1f}%"
+        )
+    print(
+        f"{'sum':>5} {'':>6} | {'':>7} {'':>7} {'':>7} {'':>7} | "
+        f"{totals_sim[0] - totals_exp[0]:>+7.1f} "
+        f"{totals_sim[1] - totals_exp[1]:>+7.1f} "
+        f"{totals_sim[2] - totals_exp[2]:>+7.1f} | "
+        f"{100.0 * (totals_sim[2] - totals_exp[2]) / q_exp:>+9.1f}%"
+    )
+    print(
+        f"  station-sum flapwise root moment: sim {totals_sim[0]:.0f} vs exp "
+        f"{totals_exp[0]:.0f} N.m ({100.0 * (totals_sim[0] / totals_exp[0] - 1.0):+.1f} %)"
+        f"; edgewise: sim {totals_sim[1]:.0f} vs exp {totals_exp[1]:.0f} N.m "
+        f"({100.0 * (totals_sim[1] / totals_exp[1] - 1.0):+.1f} %)"
+    )
+
+
+def chord_at(radius, chords):
+    """Linear chord at `radius` from the rendered (radius, chord) pairs."""
+    pairs = sorted(chords)
+    if radius <= pairs[0][0]:
+        return pairs[0][1]
+    for (r0, c0), (r1, c1) in zip(pairs, pairs[1:], strict=False):
+        if radius <= r1:
+            return c0 + (c1 - c0) * (radius - r0) / (r1 - r0)
+    return pairs[-1][1]
 
 
 def interpolate(profile, x, column):
@@ -192,6 +307,11 @@ def main():
             print(f"      WARNING: the two experiment frames disagree in "
                   f"magnitude at r/R={station:.2f}: {r_exp:.5f} vs "
                   f"{r_exp_plane:.5f}")
+
+    print_force_arm_table(
+        profile, experiment, case_chord(args.alm_dir),
+        read_density(args.experiment_dir, args.speed),
+    )
 
     print(
         "\n  R_exp is the experiment's own resultant, so the two frames agreeing\n"
