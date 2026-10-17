@@ -23,7 +23,7 @@ wrong plane-frame one.
 
 Read-only; no cluster cost.
 
-Usage:  python3 scripts/compareInflowAngle.py --alm-dir runs/alm-U7-coarse-r2
+Usage:  python3 scripts/compareInflowAngle.py --alm-dir runs/alm-U7-coarse-r2 [--sequence S]
 """
 from __future__ import annotations
 import argparse, csv, glob, math, os, re, statistics
@@ -75,13 +75,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--alm-dir", default="runs/alm-U7-coarse-r2")
     ap.add_argument("--speed", type=float, default=7.0)
+    ap.add_argument("--sequence", choices=("H", "S"), default="H")
     a = ap.parse_args()
 
     period = 2.0 * math.pi / (TSR * U_REF / R)
     lo, hi = 3.0 * period, 4.0 * period          # last revolution, least transient
 
     exp = {}
-    for row in read_table("data/experiment/sequence_H_spanwise.csv"):
+    for row in read_table(f"data/experiment/sequence_{a.sequence}_spanwise.csv"):
         if abs(float(row["wind_speed_m_s"]) - a.speed) < 1e-9:
             cth, ctq = float(row["cth"]), float(row["ctq"])
             exp[round(float(row["r_over_R"]), 4)] = math.degrees(math.atan2(ctq, cth))

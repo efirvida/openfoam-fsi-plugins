@@ -41,7 +41,8 @@ includes them is contaminated.
 
 Read-only; no cluster cost.
 
-Usage:  python3 scripts/compareSectionLoads.py --alm-dir runs/alm-U7-coarse-r2
+Usage:  python3 scripts/compareSectionLoads.py --alm-dir runs/alm-U7-coarse-r2 [--sequence S]
+(`--sequence` picks `data/experiment/sequence_<H|S>_*.csv`; default H.)
 """
 from __future__ import annotations
 
@@ -126,10 +127,10 @@ def sim_profile(alm_dir, lo, hi):
     return out, dropped
 
 
-def read_experiment(experiment_dir, speed):
+def read_experiment(experiment_dir, speed, sequence="H"):
     """Per station: (cn, ct, cth, ctq) from the enriched committed table."""
     stations = {}
-    path = os.path.join(experiment_dir, "sequence_H_spanwise.csv")
+    path = os.path.join(experiment_dir, f"sequence_{sequence}_spanwise.csv")
     with open(path) as stream:
         for row in csv.DictReader(stream):
             if abs(float(row["wind_speed_m_s"]) - speed) > 1e-9:
@@ -145,9 +146,9 @@ def read_experiment(experiment_dir, speed):
 QNORM = {}
 
 
-def read_density(experiment_dir, speed):
+def read_density(experiment_dir, speed, sequence="H"):
     """Air density [kg/m^3] of the experiment row at `speed`."""
-    path = os.path.join(experiment_dir, "sequence_H_performance.csv")
+    path = os.path.join(experiment_dir, f"sequence_{sequence}_performance.csv")
     with open(path) as stream:
         for row in csv.DictReader(stream):
             if abs(float(row["wind_speed_m_s"]) - speed) < 0.6:
@@ -258,6 +259,7 @@ def main():
     parser.add_argument("--alm-dir", default="runs/alm-U7-coarse-r2")
     parser.add_argument("--experiment-dir", default="data/experiment")
     parser.add_argument("--speed", type=float, default=7.0)
+    parser.add_argument("--sequence", choices=("H", "S"), default="H")
     args = parser.parse_args()
 
     period = 2.0 * math.pi / (TSR * U_REF / R)
@@ -265,7 +267,7 @@ def main():
     profile, dropped = sim_profile(args.alm_dir, start, end)
     if not profile:
         raise SystemExit("no valid elements in the window")
-    experiment = read_experiment(args.experiment_dir, args.speed)
+    experiment = read_experiment(args.experiment_dir, args.speed, args.sequence)
     if not experiment:
         raise SystemExit("no experiment stations for that speed")
 
@@ -310,7 +312,7 @@ def main():
 
     print_force_arm_table(
         profile, experiment, case_chord(args.alm_dir),
-        read_density(args.experiment_dir, args.speed),
+        read_density(args.experiment_dir, args.speed, args.sequence),
     )
 
     print(

@@ -41,3 +41,16 @@ def test_arm_contributions_weight_flap_edge_by_root_arm_and_torque_by_radius() -
     assert flap == pytest.approx(100.0 * 2.0 * 0.5)
     assert edge == pytest.approx(20.0 * 2.0 * 0.5)
     assert torque == pytest.approx(20.0 * 3.0 * 0.5)
+
+
+EXPERIMENT = SCRIPTS.parent / "data" / "experiment"
+
+
+def test_experiment_defaults_to_sequence_h() -> None:
+    assert compareSectionLoads.read_experiment(str(EXPERIMENT), 7.0)[0.3][0] == pytest.approx(0.8139)
+    assert compareSectionLoads.read_density(str(EXPERIMENT), 7.0) == pytest.approx(1.2337256249087292)
+
+
+def test_experiment_reads_the_requested_sequence() -> None:
+    assert compareSectionLoads.read_experiment(str(EXPERIMENT), 7.0, "S")[0.3][0] == pytest.approx(0.8034)
+    assert compareSectionLoads.read_density(str(EXPERIMENT), 7.0, "S") == pytest.approx(1.252490990875888)
