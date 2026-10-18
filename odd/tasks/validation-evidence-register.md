@@ -6,17 +6,24 @@ experiment as possible. Plan: `odd/tasks/validation-master-plan.md`. This file i
 evidence axes, data, uncertainty and honesty rules; it creates no result by itself. Every
 number quoted from it must come from a committed script, never from this text.
 
+> **Status update 2026-10-17** (the status column below was last written on 2026-10-12; rows updated in
+> place, and the full picture is in the production-readiness criterion R1-R6 of
+> `validation-model-definition.md` and in `model-improvements-register.md`). Model Definition is now **v1.2**.
+> Finding that changes the reproducibility row: every P2.1/P2.2 Phase VI run used the `case.yaml` tip default
+> (Glauert) instead of the frozen v1.1 D&S, undetected for five days; definition conformance is now a
+> readiness condition (R5).
+
 ## 1. What a reviewer will ask, and where the answer lives
 
 | Question | Evidence | Status |
 |---|---|---|
-| Does the code do what it claims? | conservation tests per method (force, moment), momentum closure, kernel truncation regression | P1.1 done, P1.2 ALM done (ASM arms open) |
-| Is the answer independent of the free numerical choices? | `eps/h` sweep, mesh ladder, time step, averaging window | P1.4 submitted; mesh ladder blocked by the blade-surface layout (P1.5) |
-| Is it right against measurement? | Phase VI, calibrate on H, evaluate frozen on S, pre-registered bands | Phase 2, not started |
+| Does the code do what it claims? | conservation tests per method (force, moment), momentum closure, kernel truncation regression | P1.1 done, P1.2 ALM done (ASM arms open); C++ solver has no automated tests (Python suite 527 tests) |
+| Is the answer independent of the free numerical choices? | `eps/h` sweep, mesh ladder, time step, averaging window | P1.4 done (ASM, 4 revs, arm-to-arm only); P1.5 done, which unblocks the mesh ladder, **not run on v1.1/v1.2** (R1); time step open; averaging window: station tools use the comparePhaseVI window (revs 4-12) with the drift gate (2026-10-17) |
+| Is it right against measurement? | Phase VI, calibrate on H, evaluate frozen on S, pre-registered bands | P2.1 (H) and P2.2 (S) run with the de-facto Glauert configuration: S 7 m/s ALM P -11.0 % (fails 10 %), T -0.7 %; v1.2 (pressure-drag polar) S 7 m/s evaluation queued (jobs 11618033-35, P2.3); 10 m/s is stall, reported as a limit |
 | Where does it stop being right? | validity envelope: wind speed (attached to deep stall), yaw, pitch, AoA 3D, dynamic | below, axes A1-A8 |
-| Is it right on the thesis rotor? | IEA 15 MW against OLAF / BEM | Phase 3 (cp band open, root polar P3.1) |
-| Is it reproducible? | `run.json` provenance, committed scripts, pinned data, tests | partly; section 5 |
-| How does it compare with other codes? | NREL blind comparison of Phase VI (Simms et al. 2001) and published CFD / actuator results | the comparison report is NOT in `articles/`; to obtain |
+| Is it right on the thesis rotor? | IEA 15 MW against OLAF / BEM | Phase 3 (cp band open, root polar P3.1); must be re-evaluated with v1.2 Glauert (P0.4 control cp 0.5461, +2.8 % vs OLAF) and the polar Re issue (R3) |
+| Is it reproducible? | `run.json` provenance, committed scripts, pinned data, tests | partly; section 5. Gap found 2026-10-17: provenance recorded the knobs but nothing checked them against the definition (R5, `checkModelDefinition.py`) |
+| How does it compare with other codes? | NREL blind comparison of Phase VI (Simms et al. 2001) and published CFD / actuator results | the comparison report is NOT in `articles/`; to obtain. FLOWUnsteady (Mehr 2024 setup) was run and dropped: tip +72 % (2026-10-17) |
 
 ## 2. Evidence axes against the experiment (UAE Phase VI, same rotor)
 
@@ -65,7 +72,7 @@ differs); K, N, R use the K/L naming (`K<speed><yaw><RU|RD|ST>`) and a time-vary
 | Source | How it is measured | Status |
 |---|---|---|
 | iterative / averaging | revolutions in the window, drift per revolution (4 revs drift about 0.7 %/rev) | per run, `rev_history.py` |
-| mesh | refinement ladder, fixed ranks (the current 84/84/231/231 ladder confounds mesh and partitioning) | open; needs P1.5 for ASM+mesh |
+| mesh | refinement ladder, fixed ranks (the current 84/84/231/231 ladder confounds mesh and partitioning) | open; P1.5 done, ladder not run on v1.2 (R1). Note: P2.3 T5 (refine level 1 at meshFactor 1) is a diagnostic of eps, not a ladder |
 | projection width | `eps/h` sweep | P1.4 |
 | time step | Courant-limited ladder | open |
 | experiment repeatability | repeated files (`H0700000` vs `H0700001`), file-to-file scatter and the azimuthal spread inside a file | to compute with a script |

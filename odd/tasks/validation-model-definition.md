@@ -118,3 +118,22 @@ results. They are frozen except the IEA cp centre.
 - **Phase VI baselines are stale too.** The D&S results in `RESULTS.md` (+0.45 % at
   7 m/s) predate `4c49dc3`; P2.1 re-baselines them with the current root factor
   before any band is judged.
+
+## Production-readiness criterion — PROPOSED 2026-10-17, pending owner approval
+
+Owner question: "si todo sale bien podriamos considerar que la implementacion esta lista para produccion
+cientifica?" Answer: not on Phase VI 7 m/s alone. The definition is declared ready for scientific production
+(use on the IEA 15 MW and in FSI) only when ALL of R1-R6 hold, each with a committed script and data hash:
+
+| id | condition | pass rule | status |
+| --- | --- | --- | --- |
+| R1 | Numerical independence: mesh ladder at FIXED eps (`meshFactor = 2^level`, levels 0-2) and a time-step pair, on H 7 m/s, v1.2 | P, T and F'n at r/R 0.47-0.95 change < 2 % between the two finest levels and between the two time steps | open |
+| R2 | Attached-regime coverage on Sequence S, v1.2 frozen, no retuning: 5, 6, 7, 8 m/s | each speed inside the pre-registered bands (P 10 %, T 15 %, F'n/c_n bands as written, the 0.30 band judged per the owner's decision on the reference pressure) | 7 m/s queued (T1) |
+| R3 | IEA 15 MW pillar re-evaluated with v1.2 (Glauert) against OLAF/BEM at rated, polar Re issue (I14) resolved or bounded | cp inside the re-centred IEA band; spanwise loads reported | open |
+| R4 | Tip residual closed or bounded: the r/R 0.95 F'n deficit has an identified cause (P2.3 T4/T5) and its effect on the flapwise and edgewise root moments is quantified | either inside the 0.80 band or documented as a limit with its root-moment impact (currently flap -3.4 %, edge -0.3 %) | diagnosing |
+| R5 | Definition conformance: every run quoted as validation passes `checkModelDefinition.py` and the judging script refuses non-conforming runs | automated | being built (P2.3 T10) |
+| R6 | Uncertainty attached to every validation number: experiment repeatability, averaging-window sensitivity, blockage (+1/+2 % inflow) | each quoted difference carries its combined uncertainty (evidence register section 4) | open |
+
+Declared alongside, not conditions: the limits chapter (stall regime, from existing results), the calibration
+history (I1 chosen on H, I2 chosen after seeing H and S results), and the C++ solver having no automated tests
+beyond the Python suite.

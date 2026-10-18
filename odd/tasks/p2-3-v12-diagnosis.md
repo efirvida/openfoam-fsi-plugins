@@ -17,6 +17,10 @@ Phase VI, attached regime (7 m/s). v1.2 = Glauert tip + Prandtl hub, D&S off, OS
 - T4 (S2, revised by L7): measure the Glauert lag from the new element column `end_effect_phi_deg` (solver change committed, compile-checked in a temp dir; NOT installed). INSTALL `libturbinesFoam` only when no job is queued/running (jobs 11618033-35, 11618046 load the installed lib), then one short H run (or the next production run) writes the column; `diagnoseElementResiduals.py` block (b) reads it. Former plan: offline velocity re-sampling at ring radius 0, eps, 3.3 eps from `d1-pdrag` fields (ring footprint 2.07 m crosses the tip). Only if T3 leaves the tip open. PENDING.
 - T5 (S2): smaller-eps v1.2 ALM on H 7 m/s: job 11618046, `scripts/slurm/v1-2-small-eps.slurm` (refine level 1 + `--mesh-factor 0.5` = effective meshFactor 1, eps 0.31 m; mesh r1 has 6.83 M cells, cost ~ coarse, no smoke needed) -> run dir label `v12-eps1`; compare with `d1-pdrag` (comparePhaseVI, compareSectionLoads, diagnoseElementResiduals). QUEUED.
 - T6 (S3): model-limits chapter from existing stall results (after the attached regime is validated). PENDING.
+- T7 (L11): single improvements register `odd/tasks/model-improvements-register.md` (I1-I16, status and reopen condition). DONE.
+- T8 (L11): production-readiness criterion R1-R6 in `validation-model-definition.md`, PROPOSED, pending owner approval.
+- T9 (L11): evidence register status rows updated to 2026-10-17. DONE.
+- T10 (L11, R5): `scripts/checkModelDefinition.py` + machine-readable v1.2 spec; `summarizeBands.py` marks non-conforming runs as not of record. PENDING.
 
 ## Log
 - L1 (user, 2026-10-17): "1- ok no utilizarlo si no da buenos resultados vs resultados experimentales. 2- Si es la que mejor resultado ha dado, lo adoptamos por el momento, pero no quiero detenerme ahi quiero continuar el diagnostico 3- Creo que no, no vamos a gastar mas tiempo de simulacion en regimen de perdida. Luego cuando el regimen normal validado, documentamos las restricciones d elos metodos, basados en esos resultados 4- lo que entiendas correcto, siempre que ya este en regimen convergido "quasi estacionadrio""
@@ -37,3 +41,4 @@ Phase VI, attached regime (7 m/s). v1.2 = Glauert tip + Prandtl hub, D&S off, OS
   Glauert factor itself; remaining options are literature corrections, owner decision); drop > 2 points -> double counting confirmed
   (eps-aware correction, owner decision); rise > 2 points -> under-resolution (mesh/eps path).
   T4 (lag): ~0; factor difference < 0.5 %; closes H3b.
+- L11 (user, 2026-10-17): "si por favor. ademas recuerda que habiamos hablado de algunas posible mejoras no se si se estan teniend oen cuenta o se olvidaron" (answer to: propose a production-readiness criterion, build the definition-conformance check, update the evidence register).
