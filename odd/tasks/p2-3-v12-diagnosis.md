@@ -27,3 +27,13 @@ Phase VI, attached regime (7 m/s). v1.2 = Glauert tip + Prandtl hub, D&S off, OS
 - L6 (agent): next for the tip: T4 (field re-sampling) or a cheap solver output change (write the sampled velocity components per element) to measure (b); then T5 (smaller eps) only if (b)/T4 do not explain -14 %.
 - L7 (user, 2026-10-17): "si aplica tus recomendaciones" -> T5: smaller-eps v1.2 ALM on H (refine-level 1, meshFactor 1) after a short cost smoke; (b): per-element sampled velocity components in the solver output, installed only after the v1.2 jobs finish.
 - L8 (agent): T5 submitted as job 11618046 (no cost smoke: level-1 mesh is only +2.4 % cells). Solver change for (b) compile-checked out of tree (wmake exit 0, only OpenFOAM NamedEnum deprecation warnings; installed lib mtime 2026-10-12 09:04:58 unchanged). Lag defined from consecutive `end_effect_phi_deg` rows (same rotor-plane definition); `inflowRefAngle()` is a 3-D angle against the chord reference, not comparable. Prediction: in quasi-steady axial flow the one-step lag is ~0 (azimuth step 0.43 deg), so (b) is expected to be negligible.
+- L9 (user, 2026-10-17): "q esperamos de estas simulaciones?"
+- L10 (agent) PRE-REGISTERED PREDICTIONS, written before any result of jobs 11618033-35/11618046:
+  T1 (S 7 m/s, v1.2): ALM power ~ -2 % (range -4..0), ASM ~ -2 %, ASM-mesh ~ -5 % (-7..-3); thrust unchanged +-1 point; c_n unchanged
+  (0.30 ~ +15 %, 0.95 ~ -12 %). Check: ALM power must rise >= ~6 points vs p22 (-11.0 %), else suspect the render/setup before anything else.
+  Open question to raise: judge the 0.30 band on dimensional force or same-reference q (QNORM vs 0.5 rho W^2 explains ~9 points).
+  T5 (eps 0.31 m, H): favoured (medium confidence) double counting: tip c_n 0.95 from -14 to -17..-20 %, power -2 -> -3..-4 %;
+  stations 0.47-0.80 move < 2 %, thrust < 1 %. Decision rule: |change of tip c_n| < 2 points -> eps is not the lever (deficit is in the
+  Glauert factor itself; remaining options are literature corrections, owner decision); drop > 2 points -> double counting confirmed
+  (eps-aware correction, owner decision); rise > 2 points -> under-resolution (mesh/eps path).
+  T4 (lag): ~0; factor difference < 0.5 %; closes H3b.
