@@ -121,3 +121,54 @@ def test_polar_cl_between_rows(tmp_path):
     polar = tmp_path / "polar.dat"
     polar.write_text("// (alpha cl cd cm)\n(0 0.1 0.01 0)\n(10 1.1 0.02 0)\n")
     assert polar_cl(polar, 2.5) == pytest.approx(0.35)
+
+
+@pytest.mark.parametrize("argv, expected", [
+    ([], (None, False, False)),
+    (["--revolutions", "2", "4", "--allow-drift", "--allow-short-window"], ((2, 4), True, True)),
+])
+def test_window_options_pass_through_to_convergence_gate(monkeypatch, argv, expected):
+    """--revolutions/--allow-drift/--allow-short-window reach
+    compareSectionLoads.converged_window unchanged; the default keeps the
+    configured window and both refusals."""
+    import diagnoseElementResiduals as diagnostic
+
+    seen = {}
+
+    class Stop(Exception):
+        pass
+
+    def gate(run_dir, speed, sequence, revolutions=None, allow_drift=False,
+             allow_short_window=False):
+        seen["window"] = (None if revolutions is None else tuple(revolutions), allow_drift,
+                          allow_short_window)
+        raise Stop
+
+    monkeypatch.setattr(diagnostic, "converged_window", gate)
+    with pytest.raises(Stop):
+        diagnostic.main(["--alm-dir", "unused"] + argv)
+    assert seen["window"] == expected
+
+
+def test_window_header_reports_measured_drift(tmp_path, monkeypatch, capsys):
+    """The header prints the gate's window and drift verdict, never a hard-coded False."""
+    import diagnoseElementResiduals as diagnostic
+
+    info = {"discard_revolutions": 2, "end_revolutions": 4, "drift": {"flag": True}}
+    monkeypatch.setattr(diagnostic, "converged_window", lambda *a, **k: (1.0, 2.0, info))
+    monkeypatch.setattr(diagnostic, "element_data", lambda *a: ([], {}))
+    (tmp_path / "system").mkdir()
+    (tmp_path / "system/fvOptions").write_text("endEffectsModel Glauert;\n")
+
+    class Stop(Exception):
+        pass
+
+    def stop(*_):
+        raise Stop
+
+    monkeypatch.setattr(diagnostic, "bracket", stop)  # first call after the header
+    with pytest.raises(Stop):
+        diagnostic.main(["--alm-dir", str(tmp_path), "--allow-drift", "--revolutions", "2", "4"])
+    out = capsys.readouterr().out
+    assert "window rev 2..4" in out
+    assert "drift=True" in out

@@ -79,3 +79,21 @@ def test_drift_outside_override_window_is_not_counted(tmp_path):
         stream.write(f"{13 * period},5.408,4,0.8,0.1\n")
     _, _, info = compareSectionLoads.converged_window(tmp_path, 7.0, "H", (4, 10))
     assert info["drift"]["flag"] is False
+
+
+def test_short_window_refused_unless_explicitly_allowed(tmp_path, capsys):
+    """A 4-revolution run (the T4 lag run) leaves 2 revolutions after discarding 2."""
+    _, _, period, path = turbine_file(tmp_path)
+    lines = path.read_text().splitlines(keepends=True)
+    path.write_text("".join(lines[:402]))  # header + revolutions 0..4
+    before = path.read_bytes()
+    with pytest.raises(SystemExit) as exc:
+        compareSectionLoads.converged_window(tmp_path, 7.0, "H", (2, 4))
+    assert exc.value.code == 2
+    assert "short averaging window" in capsys.readouterr().err
+    lo, hi, info = compareSectionLoads.converged_window(
+        tmp_path, 7.0, "H", (2, 4), allow_short_window=True)
+    assert (lo, hi) == (2 * period, 4 * period)
+    assert (info["discard_revolutions"], info["end_revolutions"]) == (2, 4)
+    assert info["drift"]["flag"] is False
+    assert path.read_bytes() == before

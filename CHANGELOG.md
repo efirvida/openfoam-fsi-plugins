@@ -4,6 +4,26 @@
 
 ### Features
 
+#### Validation tools: numerical-ladder comparison and short/drifting element diagnostics
+
+**Files:**
+- `turbinesFoam/validation/phaseVI/scripts/compareLadder.py` (new)
+- `turbinesFoam/validation/phaseVI/scripts/diagnoseElementResiduals.py`
+- `turbinesFoam/validation/phaseVI/scripts/compareSectionLoads.py`
+- `turbinesFoam/tests/test_compare_ladder.py`, `test_element_residuals.py`, `test_section_window.py`
+- `turbinesFoam/validation/phaseVI/README.md`
+
+**Problem:** the R1 criterion (P, T and F'n at r/R 0.47-0.95 change < 2 % between ladder levels and
+time steps) had no side-by-side tool, and `diagnoseElementResiduals.py` could not read the
+4-revolution T4 lag run: its window was fixed to revolutions 4-12 and the short-window gate had no
+override; its header also printed `drift=False` regardless of the measured drift.
+
+**Fix:** `compareLadder.py` reads `comparePhaseVI` outputs and prints the % change per quantity with
+a PASS/FAIL against `--tolerance`; `diagnoseElementResiduals.py` gains `--revolutions`,
+`--allow-drift` and `--allow-short-window` (pass-through to `converged_window`, which gains
+`allow_short_window`), and prints the measured drift flag. Defaults are unchanged (output on
+`alm-U7-coarse-d1-pdrag` byte-identical to the previous code).
+
 #### Element output: angle of the end-effect factor
 
 **Files:**

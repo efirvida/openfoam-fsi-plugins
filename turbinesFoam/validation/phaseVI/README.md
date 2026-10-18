@@ -529,10 +529,29 @@ python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-d1-pdrag
 python3 scripts/summarizeBands.py results/U7-H
 ```
 
+### Numerical ladder (R1)
+
+```sh
+python3 scripts/compareLadder.py --reference /tmp/cmpH_d1 --runs /tmp/cmpH_dt05 /tmp/cmpH_l1
+```
+
+Read-only. Each argument is a `comparePhaseVI.py --out` directory; the run directory, speed,
+sequence and averaging window come from its `metrics.json`. Prints P, banded thrust and the
+dimensional F'n at r/R 0.47/0.63/0.80/0.95 (reusing `compareSectionLoads.py`) for every run and
+their % change against the reference; exit 0 when every |change| < `--tolerance` (default 2 %),
+1 otherwise, 2 on inputs that do not share speed, sequence or thrust scope.
+
+`diagnoseElementResiduals.py` accepts `--revolutions DISCARD END`, `--allow-drift` and
+`--allow-short-window` (the 4-revolution T4 lag run: `--revolutions 2 4 --allow-short-window`);
+the defaults keep the configured window and both refusals.
+
 ### Uncertainty (R6)
 
 ```sh
 python3 scripts/quantifyUncertainty.py --run-dir runs/alm-U7-coarse-d1-pdrag --sequence H --speed 7
+# Sequence S away from 7 m/s: the committed S tables hold 7 m/s only, use the archive tables
+python3 scripts/quantifyUncertainty.py --run-dir runs/alm-U5-coarse-seqS-v12 --sequence S --speed 5 \
+    --experiment-dir data/experiment/uae6-archive
 ```
 
 Read-only. For power, blade thrust and the chord-referenced c_n at r/R

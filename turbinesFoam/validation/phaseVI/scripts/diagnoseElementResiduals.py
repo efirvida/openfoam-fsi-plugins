@@ -4,6 +4,7 @@
 
 Run from validation/phaseVI:
     python3 scripts/diagnoseElementResiduals.py [--alm-dir runs/alm-U7-coarse-d1-pdrag]
+        [--revolutions DISCARD END] [--allow-drift] [--allow-short-window]
 
 Uses compareSectionLoads' convergence gate and configured revolution window.
 Blocks: (a) station interpolation, (b) one-step Glauert lag when the appended
@@ -170,9 +171,18 @@ def main(argv=None):
     parser.add_argument('--alm-dir', type=Path, default=Path('runs/alm-U7-coarse-d1-pdrag'))
     parser.add_argument('--speed', type=float, default=7.0)
     parser.add_argument('--sequence', choices=('H', 'S'), default='H')
+    parser.add_argument('--revolutions', nargs=2, type=int, metavar=('DISCARD', 'END'),
+                        help='averaging window in revolutions (default: config/case.yaml)')
+    parser.add_argument('--allow-drift', action='store_true',
+                        help='warn instead of refusing a drifting window (diagnostic only)')
+    parser.add_argument('--allow-short-window', action='store_true',
+                        help='accept a window under the minimum length (short diagnostic runs)')
     args = parser.parse_args(argv)
     root = Path(__file__).resolve().parents[1]
-    start, end, info = converged_window(args.alm_dir, args.speed, args.sequence)
+    start, end, info = converged_window(args.alm_dir, args.speed, args.sequence,
+                                        revolutions=args.revolutions,
+                                        allow_drift=args.allow_drift,
+                                        allow_short_window=args.allow_short_window)
     experiment = read_experiment(root / 'data/experiment', args.speed, args.sequence)
     rho = read_density(root / 'data/experiment', args.speed, args.sequence)
     cfg = comparison.load_config(comparison.DEFAULT_CONFIG)
@@ -185,7 +195,8 @@ def main(argv=None):
     profile, samples = element_data(args.alm_dir, start, end)
     print(f'run {args.alm_dir} | sequence {args.sequence} U={args.speed:g} m/s')
     print(f"window rev {info['discard_revolutions']}..{info['end_revolutions']} "
-          f't=[{start:.6f}, {end:.6f}] s; drift=False; blade1 elements={len(profile)}')
+          f"t=[{start:.6f}, {end:.6f}] s; drift={bool(info['drift']['flag'])}; "
+          f'blade1 elements={len(profile)}')
     print(f'rho={rho:.6f} kg/m3 (experiment); nu={nu:g} m2/s (config); hub loss={root_effects}')
     print('\n(a) Station interpolation: time means; cn is chord-referenced per row')
     print('  label       r/R       cl       cd    alpha       F       cn    cn_exp')

@@ -68,8 +68,13 @@ STATIONS = (0.30, 0.47, 0.63, 0.80, 0.95)
 CD_VALID_MAX = 0.5          # the root sentinel is cd = 1.1
 
 
-def converged_window(run_dir, speed, sequence, revolutions=None, allow_drift=False):
-    """Return rotor-metric bounds and window info, refusing non-steady cp/cd."""
+def converged_window(run_dir, speed, sequence, revolutions=None, allow_drift=False,
+                     allow_short_window=False):
+    """Return rotor-metric bounds and window info, refusing non-steady cp/cd.
+
+    A window shorter than comparePhaseVI's minimum is refused unless
+    `allow_short_window` (diagnostic short runs only, as --allow-short-window).
+    """
     cfg = comparePhaseVI.load_config(comparePhaseVI.DEFAULT_CONFIG)
     if revolutions is not None:
         cfg["solver"]["discard_revolutions"] = int(revolutions[0])
@@ -78,7 +83,7 @@ def converged_window(run_dir, speed, sequence, revolutions=None, allow_drift=Fal
     rows = comparePhaseVI.read_rows(Path(run_dir) / comparePhaseVI.TURBINE_CSV)
     tsr = float(comparePhaseVI.select_speed(cfg, speed, sequence)["tsr"])
     try:
-        comparePhaseVI.analyse_turbine(rows, start, end, period, False, tsr)
+        comparePhaseVI.analyse_turbine(rows, start, end, period, allow_short_window, tsr)
     except comparePhaseVI.ShortWindow as exc:
         print(f"error: short averaging window: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
