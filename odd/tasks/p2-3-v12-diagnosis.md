@@ -20,7 +20,7 @@ Phase VI, attached regime (7 m/s). v1.2 = Glauert tip + Prandtl hub, D&S off, OS
 - T7 (L11): single improvements register `odd/tasks/model-improvements-register.md` (I1-I16, status and reopen condition). DONE.
 - T8 (L11): production-readiness criterion R1-R6 in `validation-model-definition.md`, PROPOSED, pending owner approval.
 - T9 (L11): evidence register status rows updated to 2026-10-17. DONE.
-- T10 (L11, R5): `scripts/checkModelDefinition.py` + machine-readable v1.2 spec; `summarizeBands.py` marks non-conforming runs as not of record. PENDING.
+- T10 (L11, R5): DONE. `config/model-definition.yaml` (effective values; absent key = cited solver default) + `scripts/checkModelDefinition.py`; `summarizeBands.py` labels non-conforming/unknown runs `[not of record]` and exits 1 unless `--allow-nonconforming`. d1-pdrag CONFORMS; p21/seqS-p22 non-conforming on the polar only; T5 run non-conforming on meshFactor by design (diagnostic). runPhaseVI.sh hook point: line 575 (not wired).
 
 ## Log
 - L1 (user, 2026-10-17): "1- ok no utilizarlo si no da buenos resultados vs resultados experimentales. 2- Si es la que mejor resultado ha dado, lo adoptamos por el momento, pero no quiero detenerme ahi quiero continuar el diagnostico 3- Creo que no, no vamos a gastar mas tiempo de simulacion en regimen de perdida. Luego cuando el regimen normal validado, documentamos las restricciones d elos metodos, basados en esos resultados 4- lo que entiendas correcto, siempre que ya este en regimen convergido "quasi estacionadrio""

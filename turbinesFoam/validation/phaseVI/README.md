@@ -39,6 +39,8 @@ tools/stage_blade_stl.py  sha256-gated STL staging for asm-mesh run dirs
 case/                     committed generated skeleton (ALM/ASM/ASM-MESH twins)
 data/                     geometry, polars, experiment, s809 + PROVENANCE per dir
 scripts/                  runners, mesh/stage tooling, comparison
+  checkModelDefinition.py effective-value v1.2 conformance gate
+  summarizeBands.py      pre-registered bands; refuses non-conforming evidence
   slurm/stage0.slurm      authorized development-queue job
   slurm/production.slurm  prepared-only long-queue array (do not submit)
   slurm/stage3.slurm      prepared-only IDDES + nChordwise array (do not submit)
@@ -519,6 +521,31 @@ positive out to `r/R ≈ 0.75`, turning negative only in a thin tip band (was
 than the 0.25-rev window's observed ≈11 % systematic bias — so this short run
 resolves only the sign shift (clearly negative → ≈0), not whether any residual
 failure remains; the primary criterion is still reported unweakened.
+
+## Definition conformance
+
+```sh
+python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-d1-pdrag
+python3 scripts/summarizeBands.py results/U7-H
+```
+
+`config/model-definition.yaml` records v1.2 expected effective values and cited
+solver defaults. An absent key uses its solver default; absence without a known
+default is a mismatch. Point sampling (`velocitySampleRadius 0`) is frozen;
+`nVelocitySamples` is inert and not checked. The checker accepts `--definition PATH`
+and exits **0** when all runs conform, **1** for mismatches, **2** for unreadable or
+malformed input. It never modifies runs.
+
+For fixed-width refinement, `meshFactor` must be `2**level`. The checker reads
+`refine_level` from `run.json` when present, otherwise the runner's `-r<N>` name
+token (including before a label), otherwise level 0. `blade_dz` must be 0.05 when
+recorded and non-null; missing layout metadata is not a geometry certification.
+
+`summarizeBands.py` checks every run in `metrics.json`'s
+`models.<model>.run_dir`, already written by `comparePhaseVI.py`. Missing provenance
+is UNKNOWN and not of record. Non-conforming comparisons retain all diagnostic
+band lines with `[not of record]` and exit **1**. `--allow-nonconforming` permits
+exit 0 for diagnostics only; it does not remove the not-of-record labels.
 
 ## Comparison
 
