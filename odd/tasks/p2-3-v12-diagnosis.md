@@ -51,6 +51,14 @@ Reference arm for H 7 v1.2 = `runs/alm-U7-coarse-d1-pdrag` (CONFORMS; level 0, d
 3. **Delivery**: branch `fix/compare-phasevi-surface-stations` has 341 commits not pushed vs origin/main; push/PR is the owner's decision.
 4. After T5: which tip lever (if any) per the register.
 
+### 3b. Disk cleanup done at the end of session 3 (owner-approved)
+Kept FULL (restartable): all `*-v12*` runs, `alm-U7-coarse-d1-pdrag`, `mesh-coarse`, `mesh-coarse-r1`, `mesh-coarse-r2`, `lib-p23`,
+IEA `iea15mw-screen-m3-l2` (L2 production state) and `iea15mw-l2-ctrl` (R3 starting point).
+DELETED: `alm-U7-coarse-dagtipd`, `alm-U7-coarse-r3`, `mesh-coarse-r3` (refine level 3 must be re-meshed if ever needed), FLOWUnsteady `*pfield*` particle fields.
+SLIMMED (43 dirs: every other Phase VI and IEA run, incl. p21, seqS-p22, U10, B, rootoff, nacon, dagtip, eqb-*, asm-mf*, IEA D&S/RA/ASM variants, `_archive`):
+`processor*/`, `constant/polyMesh`, `0/` removed; `postProcessing/`, `system/`, `run.json`, logs kept, so every analysis tool and every
+documented number still reproduces, but those runs CANNOT be restarted, extended or field-sampled. Path list: `phaseVI/runs/CLEANUP-2026-10-17-paths.txt`.
+
 ### 4. Next work after the analysis
 R2 extension (ASM/ASM-mesh at 5/6/8 if ALM passes), R3 (IEA 15 MW v1.2: P0.4 Glauert control cp 0.5461 vs OLAF 0.5312; I14 polar Re), R4 closure, T6 limits chapter.
 Do NOT rebuild/install `libturbinesFoam` into `$FOAM_USER_LIBBIN` while any job runs; `runs/lib-p23` holds the build of 0c723e4+ (only the lag job loads it).
@@ -100,3 +108,4 @@ Do NOT rebuild/install `libturbinesFoam` into `$FOAM_USER_LIBBIN` while any job 
 - L14 (agent): R6 tool `scripts/quantifyUncertainty.py` (repeatability from the gitignored Parquet archive turbinesFoam/articles/uae6/parquet: H 7 has 4 files at 0 deg, S 7 has 2; window sensitivity; BEM blockage +1/+2 %). d1-pdrag H 7: power -2.2 % +- 4.0 % (agrees), thrust -0.8 +- 1.6 % (agrees), c_n 0.47/0.80 agree, 0.30 (+13 %) and 0.95 (-14 %) outside, 0.63 (+1.9 %) marginally outside. S 7 p22 (v1.1 polar): power -11.0 +- 3.7 % (outside). Finding: the simulation runs at nominal U = 7.0 m/s while the measured tunnel speed (VTUN) is 7.049 m/s for h0700000 (+0.7 % U, ~+2 % power) and 7.016 for s0700000 (+0.2 %, ~+0.7 % power); rpm and rho are already the measured values. Not in the budget yet: owner decision (deterministic comparison-side correction vs simulating at measured U).
 - L15 (user, 2026-10-17): "ok revisa pq no se ejecutan los jobs. q recursos pediste?" -> all PENDING (Priority): sequana_cpu full (0 idle, 236 pending), est. start 19/10 01:08; requests were --ntasks=84 (no --nodes, Slurm places; past runs spread over 2-14 nodes) x 24 h. Owner chose: 11618033/34/35/46 moved to sequana_cpu_bigmem (26 idle nodes, own limit 4 jobs / 846 cpu) and every time limit cut to 12 h (11618057 dt/2: 20 h) via scontrol update. Result within a minute: 4 running on bigmem, 11618055/56 started by backfill on sequana_cpu. Launchers now default to --time=12:00:00. Real run dirs checked: v12 S7 ALM/ASM/ASM-mesh, l1, l2 CONFORM; eps1 non-conforming on meshFactor by design.
 - L16 (user, 2026-10-17): "ok deja todo preparado para hacer el analisis en otra sesion" -> HANDOFF section written at the top of this file.
+- L17 (user, 2026-10-17): "para terminar esta sesion quiero que elimines todos los resultados y simulaciones que ya no necesitemos para ahorrar espacio" -> inventory 206 GB in 68 run dirs; owner approved the plan (delete 3, slim 43, FLOWUnsteady particle fields); recorded in HANDOFF 3b.
