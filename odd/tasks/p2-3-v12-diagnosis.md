@@ -1,0 +1,27 @@
+# P2.3 — Model Definition v1.2: evaluation on Sequence S and diagnosis of the remaining normal-force residuals
+Phase VI, attached regime (7 m/s). v1.2 = Glauert tip + Prandtl hub, D&S off, OSU Re 1e6 pressure-drag polar
+(`validation-model-definition.md`). Residuals on H (`alm-U7-coarse-d1-pdrag`): c_n +13 % at r/R 0.30, -14 % at 0.95.
+
+## Specs
+- S1 (owner, 2026-10-17): "ok no utilizarlo si no da buenos resultados vs resultados experimentales." (FLOWUnsteady)
+- S2: "Si es la que mejor resultado ha dado, lo adoptamos por el momento, pero no quiero detenerme ahi quiero continuar el diagnostico" (pressure-drag polar)
+- S3: "Creo que no, no vamos a gastar mas tiempo de simulacion en regimen de perdida. Luego cuando el regimen normal validado, documentamos las restricciones d elos metodos, basados en esos resultados"
+- S4: "lo que entiendas correcto, siempre que ya este en regimen convergido "quasi estacionadrio"" (averaging window)
+- S5 (answer to the tip-model question): "Glauert en ambos pilares (Recomendado)"
+- Standing rules: no literature method implemented without the owner; no fitted coefficient (definition rules); Slurm: `--ntasks` only.
+
+## Tasks
+- T1 (S2,S5): v1.2 evaluation on S 7 m/s, ALM/ASM/ASM-mesh: jobs 11618033/34/35 (`scripts/slurm/v1-2-evaluation.slurm`, label `v12`) -> comparePhaseVI (`--sequence S`), summarizeBands, compareSectionLoads/compareInflowAngle `--sequence S`. PENDING (queued 2026-10-17).
+- T2 (S2): R2 nacelle (`alm-U7-coarse-nacon` vs `p21`): DONE, no effect (c_n 0.30 +13.6 % both, 0.95 -14.0 % both, P -10.9 vs -11.0 %). Discarded.
+- T3 (S2): DONE (`scripts/diagnoseElementResiduals.py`). Offline element-level tool on `d1-pdrag`: (a) station interpolation vs element values at 0.95 and 0.30 (steep F gradient, elements 45/46); (b) Glauert factor recomputed from the same-step sampled velocity vs the written `end_effect_factor` (one-iteration lag); (c) QNORM vs 0.5 rho W^2 normalisation at 0.30 (4.3 % reported); (d) first-order Re effect at r/R 0.30 from the CSU 0.65e6 / multi-Re tables at the run's alpha. PENDING.
+- T4 (S2): offline velocity re-sampling at ring radius 0, eps, 3.3 eps from `d1-pdrag` fields (ring footprint 2.07 m crosses the tip). Only if T3 leaves the tip open. PENDING.
+- T5 (S2): one smaller-eps v1.2 ALM run on H 7 m/s (decide after T3/T4; owner informed). PENDING.
+- T6 (S3): model-limits chapter from existing stall results (after the attached regime is validated). PENDING.
+
+## Log
+- L1 (user, 2026-10-17): "1- ok no utilizarlo si no da buenos resultados vs resultados experimentales. 2- Si es la que mejor resultado ha dado, lo adoptamos por el momento, pero no quiero detenerme ahi quiero continuar el diagnostico 3- Creo que no, no vamos a gastar mas tiempo de simulacion en regimen de perdida. Luego cuando el regimen normal validado, documentamos las restricciones d elos metodos, basados en esos resultados 4- lo que entiendas correcto, siempre que ya este en regimen convergido "quasi estacionadrio""
+- L2 (user): "Glauert en ambos pilares (Recomendado)"
+- L3 (agent): window done (`400fc9d`); v1.2 applied (generate_case default polar, definition doc, master-plan log, launcher); diagnostic history in `p2-2-next-cycle-plan.md` and the explorer map: tip already tried = Glauert/A'/D&S variants/FLLT NO-GO/fitted f forbidden; Glauert tip never run at eps < 0.63 m on the current platform; hub loss is not the 0.30 lever (p21-rootoff +14.7 vs +13.6 %).
+- L4 (agent, T3 results on `d1-pdrag`, window rev 4-12, no drift): (a) station interpolation: factor-free interpolation moves c_n by +0.007 % at 0.30 and +0.13 % at 0.95 -> not a cause. (b) Glauert lag: NOT measurable, the element CSV has |W| only, no velocity components (needs a new output column or field re-sampling, T4). (c) **Normalisation explains most of the 0.30 residual**: the experiment's QNORM is 8.7 % above 0.5 rho W^2 of the run at 0.30 (1.023 at 0.47-0.63, 1.002 at 0.95); with the same reference the 0.30 residual is +4.0 % (dimensional F'n 63 vs 60 N/m, +5 %), the tip stays -14.5 %. So the inboard "c_n +13 %" is mostly a coefficient-reference difference; the tip deficit is a real force deficit. (d) Re at 0.30 is 0.62e6 vs polar 1e6: CSU 0.65e6 would lower c_n 9 % (facility change too), OSU multi-Re 0.75e6 only 1.2 %; sensitivity, not proof; not additive with (c).
+- L5 (agent): bug found and fixed: `generate_case.py` dropped `--polar` for the ASM-MESH twin (always the default polar). No past asm-mesh run requested a polar (all run.json without it), so no result is contaminated; the v1.2 asm-mesh job 11618035 gets the pressure polar via the new default. `test_phasevi_nacelle` frozen baseline now pins the v1.1 polar explicitly.
+- L6 (agent): next for the tip: T4 (field re-sampling) or a cheap solver output change (write the sampled velocity components per element) to measure (b); then T5 (smaller eps) only if (b)/T4 do not explain -14 %.

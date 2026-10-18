@@ -1,4 +1,18 @@
-# Validation Model Definition v1.1 — ALM / ASM / ASM+mesh
+# Validation Model Definition v1.2 — ALM / ASM / ASM+mesh
+
+> **v1.2 (owner, 2026-10-17)** changes two knobs, everything else is v1.1:
+> 1. **Tip model: Glauert tip loss on, D&S off, in both pillars.** Every P2.1/P2.2 Phase VI run already ran
+>    Glauert (the `config/case.yaml` default; the launchers passed no tip flag), not the frozen D&S, so v1.2
+>    makes the definition match the evidence. Glauert under-loads the Phase VI tip (H 7 m/s c_n r/R 0.95
+>    -14 %, flapwise -3.2 %); D&S over-loads it (`dagtip`: +50.8 %, flapwise +14.1 %; FLOWUnsteady shows the
+>    same over-load). On the IEA rotor the P0.4 Glauert control (cp 0.5461) sits +2.8 % over OLAF 0.5312, D&S
+>    +5.5..6 %. The IEA pillar is re-evaluated with Glauert (P0.4 control job 11613092 is the starting point).
+> 2. **Phase VI polar: OSU Re 1e6 with pressure drag** (`data/polars/S809_OSU_Re1M_pressure.dat`, now the
+>    `generate_case.py` default). D3 (`alm-U7-coarse-d1-pdrag`, H 7 m/s): power -11.0 -> -2.2 %, station-sum
+>    torque -0.3 %, normal force unchanged. Adopted "for now" as the best result; the diagnosis continues.
+>    The IEA polar is unchanged (its tables carry no pressure/friction split; open).
+> Evidence: `odd/tasks/p2-2-next-cycle-plan.md` ("Session 3 results", "Owner decisions 2026-10-17").
+> The v1.1 tables below are kept as written; the two rows marked v1.2 supersede them.
 
 **Status:** **v1 FROZEN except the IEA cp band** (2026-10-12). The owner delegated decisions 1
 and 2 to the agent's physical judgment and chose option (b) for decision 3. The IEA cp
@@ -31,8 +45,9 @@ differ" with its reason; nothing else may differ.
 
 | Knob | Value | Source / reason |
 | --- | --- | --- |
-| Tip model | **Dag & Sorensen 2020** induced-velocity correction: `wakeTurns 2`, `wakeAzimuthalStep 2`, `epsilon 0` (each element's own projection width) | owner decision 2026-10-11 |
-| Glauert tip loss | **off** (`tipEffects off`) | D&S replaces it; they are alternatives |
+| Tip model (v1.2) | **Glauert tip loss** (`endEffectsModel Glauert`, `tipEffects on`); `tipCorrection` (D&S) **off** | owner decision 2026-10-17 (v1.2 note above) |
+| ~~Tip model (v1.1)~~ | ~~**Dag & Sorensen 2020** induced-velocity correction: `wakeTurns 2`, `wakeAzimuthalStep 2`, `epsilon 0` (each element's own projection width)~~ | owner decision 2026-10-11, superseded by v1.2 |
+| ~~Glauert tip loss (v1.1)~~ | ~~**off** (`tipEffects off`)~~ | superseded by v1.2 |
 | Root effect | Glauert branch = **Prandtl hub loss** `f_hub = (B/2)(r - rHub)/rHub`, `rootEffects on`, `hubRadius` = blade root radius (Phase VI 0.5083 m, IEA 3.97 m) | `4c49dc3`; the solver aborts without `hubRadius` |
 | Rotational augmentation | off (decision 1) | Du-Selig A/B |
 | Dynamic stall, added mass | off | as committed; steady operating points |
@@ -49,7 +64,7 @@ differ" with its reason; nothing else may differ.
 
 | Knob | Phase VI | IEA 15 MW | Reason |
 | --- | --- | --- | --- |
-| Polar | S809, OSU Re 1e6 total (`data/polars/S809_OSU_Re1M_total.dat`); cylinder placeholder at the root | table from `buildPolars.py`; stalled root polar still reads `cl = 0` at alpha 41-56 deg, r/R < 0.07 (P3.1) | different airfoils; the IEA root is open until P3.1 |
+| Polar | **v1.2:** S809, OSU Re 1e6 **pressure drag** (`data/polars/S809_OSU_Re1M_pressure.dat`; v1.1 was `..._total.dat`); cylinder placeholder at the root | table from `buildPolars.py`; stalled root polar still reads `cl = 0` at alpha 41-56 deg, r/R < 0.07 (P3.1) | different airfoils; the IEA root is open until P3.1 |
 | Mesh | D/32 coarse, D/48 medium, D/64 fine | snappy L2, finest cell 1.87 m, 2.36 M cells | resolution closed per pillar |
 | Operating point | 7 and 10 m/s calibration (Sequence H), evaluation on Sequence S | rated 10.659 m/s, TSR 8.913 | pillar definition |
 | Elements | 50 | 147 | blade discretisation |
