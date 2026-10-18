@@ -28,7 +28,7 @@ turbine:
 # the `profileData/S809` subdict. `0.23` is the `profileData::updateRe` source
 # default. The Phase VI validation sets `0` to disable the rescaling: the
 # polar's declared reference Reynolds number (1e6,
-# `data/polars/S809_OSU_Re1M_total.dat`) sits above the run's own Reynolds
+# `data/polars/S809_OSU_Re1M_{pressure,total}.dat`) sits above the run's own Reynolds
 # number (0.61e6 at 30 % span to 0.95e6 at 70 %), so the upstream correction
 # currently REDUCES lift by 5.8 % on the mean and by 10.7 % at r/R = 0.29, and
 # the zero-lift angle it displaces is unphysical

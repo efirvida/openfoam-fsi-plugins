@@ -1703,3 +1703,24 @@ def test_runner_mesh_factor_validation_and_run_json(tmp_path):
     assert set(re.findall(
         r"meshFactor\s+([^;]+);", (run_dir / "system" / "fvOptions").read_text()
     )) == {"4"}
+
+
+def test_model_definition_v1_2_defaults(cfg):
+    """v1.2: pressure-drag OSU polar, Glauert tip + Prandtl hub on, D&S off."""
+    text = generate_case.render_fv_options(
+        cfg, "7", "coarse", PACKAGE / "case", generate_case.ALM_ELEMENT
+    )
+    assert "data/polars/S809_OSU_Re1M_pressure.dat" in text
+    assert "S809_OSU_Re1M_total.dat" not in text
+    glauert = block(text, "GlauertCoeffs")
+    assert "tipEffects on;" in glauert and "rootEffects on;" in glauert
+    assert "active off;" in block(text, "tipCorrection")
+
+
+def test_polar_override_still_selects_the_named_file(cfg):
+    text = generate_case.render_fv_options(
+        cfg, "7", "coarse", PACKAGE / "case", generate_case.ALM_ELEMENT,
+        polar="S809_OSU_Re1M_total.dat",
+    )
+    assert "data/polars/S809_OSU_Re1M_total.dat" in text
+    assert "S809_OSU_Re1M_pressure.dat" not in text

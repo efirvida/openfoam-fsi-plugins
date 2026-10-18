@@ -655,10 +655,10 @@ def render_fv_options(
     turbine = cfg["turbine"]
     actuator = cfg["actuator"]
     origin = turbine_origin(cfg)
-    # Reynolds-sensitivity ablation: `polar` selects another committed polar in
-    # data/polars/ (e.g. S809_CSU_Re0.65M_total.dat). Absent, the committed
-    # single-Re OSU Re = 1e6 baseline is used.
-    polar_name = polar or "S809_OSU_Re1M_total.dat"
+    # `polar` selects another committed polar in data/polars/ (e.g. the v1.1
+    # S809_OSU_Re1M_total.dat or S809_CSU_Re0.65M_total.dat). Absent, Model
+    # Definition v1.2 applies: OSU Re = 1e6 with pressure drag (D3 diagnostic).
+    polar_name = polar or "S809_OSU_Re1M_pressure.dat"
     polars = os.path.relpath(POLARS_DIR / polar_name, case_dir / "system")
     sampling = actuator.get("velocity_sampling") or {}
     sample_radius = (
@@ -1193,9 +1193,9 @@ def main(argv: list[str] | None = None) -> int:
         "--polar",
         default=None,
         metavar="FILE",
-        help="override the data/polars/ polar file for a Reynolds-sensitivity "
-             "ablation (e.g. S809_CSU_Re0.65M_total.dat). Absent, the committed "
-             "S809_OSU_Re1M_total.dat baseline is used",
+        help="override the data/polars/ polar file (e.g. the v1.1 "
+             "S809_OSU_Re1M_total.dat). Absent, the Model Definition v1.2 "
+             "S809_OSU_Re1M_pressure.dat (pressure drag) is used",
     )
     parser.add_argument(
         "--div-phi-u",

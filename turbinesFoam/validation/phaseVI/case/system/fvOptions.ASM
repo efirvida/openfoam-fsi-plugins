@@ -143,7 +143,7 @@ turbine
                     dragFactor 1.0;
                     meshFactor 1;
                 }
-                data (#include "../../data/polars/S809_OSU_Re1M_total.dat");
+                data (#include "../../data/polars/S809_OSU_Re1M_pressure.dat");
             }
             cylinder { data ((-180 0 1.1 0) (180 0 1.1 0)); }
         }
