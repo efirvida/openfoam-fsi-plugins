@@ -42,3 +42,4 @@ Phase VI, attached regime (7 m/s). v1.2 = Glauert tip + Prandtl hub, D&S off, OS
   (eps-aware correction, owner decision); rise > 2 points -> under-resolution (mesh/eps path).
   T4 (lag): ~0; factor difference < 0.5 %; closes H3b.
 - L11 (user, 2026-10-17): "si por favor. ademas recuerda que habiamos hablado de algunas posible mejoras no se si se estan teniend oen cuenta o se olvidaron" (answer to: propose a production-readiness criterion, build the definition-conformance check, update the evidence register).
+- L12 (user): "Punto, corregir la definición (Recomendado)" -> v1.2 velocity sampling = point (radius 0); ring = I17. Second definition/default mismatch found while building T10 (v1.1 froze a 3.3/16 ring that no run on disk used, both pillars default 0.0).

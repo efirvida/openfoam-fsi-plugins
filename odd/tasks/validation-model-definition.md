@@ -1,6 +1,6 @@
 # Validation Model Definition v1.2 — ALM / ASM / ASM+mesh
 
-> **v1.2 (owner, 2026-10-17)** changes two knobs, everything else is v1.1:
+> **v1.2 (owner, 2026-10-17)** changes three knobs, everything else is v1.1:
 > 1. **Tip model: Glauert tip loss on, D&S off, in both pillars.** Every P2.1/P2.2 Phase VI run already ran
 >    Glauert (the `config/case.yaml` default; the launchers passed no tip flag), not the frozen D&S, so v1.2
 >    makes the definition match the evidence. Glauert under-loads the Phase VI tip (H 7 m/s c_n r/R 0.95
@@ -11,6 +11,11 @@
 >    `generate_case.py` default). D3 (`alm-U7-coarse-d1-pdrag`, H 7 m/s): power -11.0 -> -2.2 %, station-sum
 >    torque -0.3 %, normal force unchanged. Adopted "for now" as the best result; the diagnosis continues.
 >    The IEA polar is unchanged (its tables carry no pressure/friction split; open).
+> 3. **Velocity sampling: point sampling at the element** (`velocitySampleRadius 0`, solver default). v1.1 froze a
+>    3.3 eps / 16-point ring that no run on disk ever used (the `case.yaml` and IEA generator defaults are 0.0,
+>    which render no key); every P2 result, D3 included, is point sampling. The ring is candidate I17 in
+>    `model-improvements-register.md`. Found by the conformance check (P2.3 T10): an absent key means the
+>    solver default, so conformance is judged on EFFECTIVE values.
 > Evidence: `odd/tasks/p2-2-next-cycle-plan.md` ("Session 3 results", "Owner decisions 2026-10-17").
 > The v1.1 tables below are kept as written; the two rows marked v1.2 supersede them.
 
@@ -51,7 +56,8 @@ differ" with its reason; nothing else may differ.
 | Root effect | Glauert branch = **Prandtl hub loss** `f_hub = (B/2)(r - rHub)/rHub`, `rootEffects on`, `hubRadius` = blade root radius (Phase VI 0.5083 m, IEA 3.97 m) | `4c49dc3`; the solver aborts without `hubRadius` |
 | Rotational augmentation | off (decision 1) | Du-Selig A/B |
 | Dynamic stall, added mass | off | as committed; steady operating points |
-| Velocity sampling | `velocitySampleRadius 3.3`, `nVelocitySamples 16` | validated method (Phase VI), same on the IEA platform |
+| Velocity sampling (v1.2) | **point sampling at the element**: `velocitySampleRadius 0` (solver default; the key is not rendered), `nVelocitySamples` inert | owner decision 2026-10-17: every run on disk, both pillars, used it (`case.yaml` and the IEA generator default 0.0); D3 phi within +-0.7 deg |
+| ~~Velocity sampling (v1.1)~~ | ~~`velocitySampleRadius 3.3`, `nVelocitySamples 16`~~ | ~~"validated method (Phase VI)"~~: no run on disk ever used it; superseded by v1.2 |
 | Lift Re correction | `liftReCorrExp 0` | the declared polar Re sits above the run Re; `quantifyPolarReScaling.py` |
 | ALM width | `eps = max(2*cbrt(V)*meshFactor, c/4, drag term)`, `meshFactor 1` | `actuatorLineElement::calcProjectionEpsilon` |
 | ASM width | `eps = 2*cbrt(V)*meshFactor`, `meshFactor 1`, `nChordwise 5` (default `meshFactor 2` = `4*cbrt(V)` is **not** used) | `actuatorSurfaceElement`; hybrid of Yang & Sotiropoulos sampling and the Massie et al. Gaussian (README, `ad49eef`) |

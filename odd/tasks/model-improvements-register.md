@@ -28,6 +28,7 @@ documented limits, not discarded.
 | I14 | IEA 15 MW polars at operating Re (1.4e7 vs tables at 3e6) and drag split | IEA pillar | **OPEN (pillar 2)** | `p2-2-next-cycle-plan.md` small items | before the IEA v1.2 re-evaluation |
 | I15 | OpenFAST gust model completeness (SeaState/HydroDyn/SubDyn, platform DOFs off) | IEA reference | OPEN, minor | repo files pre-v5 | only if the floating case enters the thesis |
 | I16 | Glauert factor one-step lag (H3b) | tip | MEASURING (T4) | solver column `end_effect_phi_deg`, predicted ~0 | T4 result |
+| I17 | Ring velocity sampling (radius 3.3 eps, 16 points; Jost 2018 / Zormpa 2025): intended to reduce eps dependence | angle error, tip | **CANDIDATE, gated by T5** | listed as frozen in v1.1 but never run; v1.2 declares point sampling (owner 2026-10-17) | T5 shows eps dependence of the tip (> 2 points) -> owner decision, compare with I4 |
 
 Not levers (kept so they are not proposed again): nacelle (no effect, T2), hub loss at r/R 0.30 (factor ~0.99),
 station interpolation (< 0.2 %), FLOWUnsteady as a reference (over-predicts the tip +72 %).
