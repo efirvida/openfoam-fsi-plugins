@@ -4,6 +4,24 @@
 
 ### Features
 
+#### Element output: angle of the end-effect factor
+
+**Files:**
+- `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineElement/actuatorLineElement.{C,H}`
+- `turbinesFoam/src/fvOptions/axialFlowTurbineALSource/axialFlowTurbineALSource.C`
+- `turbinesFoam/validation/phaseVI/scripts/diagnoseElementResiduals.py`
+
+**Problem:** `calcEndEffects` evaluates the Glauert/Shen factor from the relative velocity sampled in
+the previous step, and the element CSV wrote only `|W|`, so the one-step lag of the factor could not be
+measured (Phase VI tip normal-force residual, P2.3).
+
+**Fix:** each element stores the rotor-plane inflow angle its end-effect factor was evaluated with;
+the element CSV appends two columns, `end_effect_phi_deg` (NaN when no angle-based factor ran) and
+`inflow_ref_angle_deg` (the existing `inflowRefAngle()`, 3-D, a different definition). Existing
+columns are unchanged and every reader is name-based. `diagnoseElementResiduals.py` block (b) reports
+the lag from consecutive `end_effect_phi_deg` rows. Model Definition v1.2 is also the renderer default
+(pressure-drag polar) and `--polar` now reaches the ASM-MESH twin.
+
 #### Equispaced Phase VI blade (`--blade-dz`)
 
 **Files:**

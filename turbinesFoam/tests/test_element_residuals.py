@@ -47,6 +47,72 @@ def test_element_reader_reuses_rowwise_chord_frame(tmp_path):
     assert samples[profile[0][0]][0] == 12
 
 
+@pytest.mark.parametrize("root_effects", [False, True])
+def test_glauert_lag_from_consecutive_end_effect_angles(tmp_path, capsys, root_effects):
+    """The factor written at step t used the angle sampled at t-1; the angle
+    stored at t+1 is the one sampled at t, with the same definition."""
+    import diagnoseElementResiduals as diagnostic
+
+    directory = tmp_path / "postProcessing/actuatorLineElements/0"
+    directory.mkdir(parents=True)
+    header = "time,root_dist,cl,cd,alpha_deg,c_ref_n,c_ref_t,rel_vel_mag,end_effect_factor,end_effect_phi_deg\n"
+    # Out-of-window rows (0 and 4) and an inboard element must not enter (b).
+    for number, root_dist in ((12, 0.2), (45, 0.9)):
+        rows = "".join(
+            f"{time},{root_dist},1,0,0,1,0,10,{factor},{phi}\n"
+            for time, factor, phi in ((0, 0.1, 80), (1, 0.4, 30), (2, 0.6, 50), (3, 0.5, 40), (4, 0.1, 80)))
+        (directory / f"turbine.blade1.element{number}.csv").write_text(header + rows)
+    before = {p: p.read_bytes() for p in directory.iterdir()}
+    _, samples = element_data(tmp_path, 1, 3)
+    diagnostic.report_glauert_lag(samples, 2, root_effects)
+    same_step = sum(glauert_factor(0.9, math.radians(phi), 2, root_effects) for phi in (50, 40)) / 2
+    rr = diagnostic.comparison.r_over_r_from_root_dist(0.9, diagnostic.R)
+    assert capsys.readouterr() == (
+        "  element  r/R       lag_mean[deg] F_same_step F_written delta_F\n"
+        f"  element45 {rr:.6f}      -5.000000 {same_step:.6f} 0.500000 "
+        f"{same_step - 0.5:+.6f}\n", "")
+    assert {p: p.read_bytes() for p in directory.iterdir()} == before
+
+
+def test_glauert_lag_legacy_csv_still_skipped(tmp_path, capsys):
+    import diagnoseElementResiduals as diagnostic
+
+    directory = tmp_path / "postProcessing/actuatorLineElements/0"
+    directory.mkdir(parents=True)
+    values = dict(time=1, root_dist=0.9, cl=1, cd=0, alpha_deg=0,
+                  c_ref_n=1, c_ref_t=0, rel_vel_mag=10, end_effect_factor=0.5)
+    (directory / "turbine.blade1.element45.csv").write_text(
+        ",".join(values) + "\n" + ",".join(map(str, values.values())) + "\n")
+    _, samples = element_data(tmp_path, 0, 2)
+    diagnostic.report_glauert_lag(samples, 2, False)
+    assert capsys.readouterr() == (
+        "  SKIPPED: CSV exposes rel_vel_mag, but no relative-velocity vector/components.\n"
+        "  Cannot obtain atan2(W_axis, W_opposite_element_velocity) from magnitude alone.\n"
+        "  No mean/max relative difference claimed; recovered force angle is not sampled velocity.\n", "")
+
+
+def test_glauert_lag_uncomputed_angle_is_explicit(capsys):
+    import diagnoseElementResiduals as diagnostic
+
+    diagnostic.report_glauert_lag({0.9: (45, [
+        dict(time=1, end_effect_phi_deg=math.nan, end_effect_factor=1, root_dist=0.9),
+        dict(time=2, end_effect_phi_deg=math.nan, end_effect_factor=1, root_dist=0.9)])}, 2, False)
+    assert capsys.readouterr() == (
+        "  element  r/R       lag_mean[deg] F_same_step F_written delta_F\n"
+        "  element45 0.900000 SKIPPED: non-finite end-effect angle or factor.\n", "")
+
+
+def test_element_csv_appends_angles_without_changing_existing_columns():
+    import re
+
+    source = (SCRIPTS.parents[2] / "src/fvOptions/actuatorLineSource/actuatorLineElement/actuatorLineElement.C").read_text()
+    header_block = source.split('*outputFile_<< "time,root_dist', 1)[1].split('<< endl;', 1)[0]
+    header = "time,root_dist" + "".join(re.findall(r'"([^"\n]*)"', '"' + header_block))
+    assert header == ("time,root_dist,x,y,z,rel_vel_mag,Re,alpha_deg,alpha_geom_deg,"
+                      "cl,cd,fx,fy,fz,end_effect_factor,c_ref_t,c_ref_n,f_ref_t,f_ref_n,"
+                      "end_effect_phi_deg,inflow_ref_angle_deg")
+
+
 def test_normalisation_ratio():
     assert normalisation_ratio(104.0, 1.3, 10.0) == pytest.approx(1.6)
 

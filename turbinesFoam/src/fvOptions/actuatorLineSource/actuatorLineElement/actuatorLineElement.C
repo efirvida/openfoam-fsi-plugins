@@ -29,6 +29,7 @@ License
 #include "fvMatrices.H"
 #include "syncTools.H"
 #include "unitConversion.H"
+#include <limits>
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -806,7 +807,8 @@ void Foam::fv::actuatorLineElement::createOutputFile()
 
     *outputFile_<< "time,root_dist,x,y,z,rel_vel_mag,Re,alpha_deg,"
                 << "alpha_geom_deg,cl,cd,fx,fy,fz,end_effect_factor,"
-                << "c_ref_t,c_ref_n,f_ref_t,f_ref_n" << endl;
+                << "c_ref_t,c_ref_n,f_ref_t,f_ref_n,"
+                << "end_effect_phi_deg,inflow_ref_angle_deg" << endl;
 }
 
 
@@ -815,7 +817,8 @@ void Foam::fv::actuatorLineElement::writePerf()
     scalar time = mesh_.time().value();
 
     // write time,root_dist,x,y,z,rel_vel_mag,Re,alpha_deg,alpha_geom_deg,cl,cd,
-    // fx,fy,fz,end_effect_factor,c_ref_t,c_ref_n,f_ref_t,f_ref_n
+    // fx,fy,fz,end_effect_factor,c_ref_t,c_ref_n,f_ref_t,f_ref_n,
+    // end_effect_phi_deg,inflow_ref_angle_deg (NaN phi if not evaluated)
     *outputFile_<< time << "," << rootDistance_ << "," << position_.x() << ","
                 << position_.y() << "," << position_.z() << ","
                 << mag(relativeVelocity_) << "," << Re_ << "," << angleOfAttack_
@@ -824,7 +827,8 @@ void Foam::fv::actuatorLineElement::writePerf()
                 << forceVector_.y() << "," << forceVector_.z() << ","
                 << endEffectFactor_ << "," << tangentialRefCoefficient() << ","
                 << normalRefCoefficient() << "," << tangentialRefForce() << ","
-                << normalRefForce() << endl;
+                << normalRefForce() << "," << endEffectPhiDeg_ << ","
+                << inflowRefAngle() << endl;
 }
 
 
@@ -872,6 +876,7 @@ Foam::fv::actuatorLineElement::actuatorLineElement
     projectElementForce_(true),
     rootDistance_(0.0),
     endEffectFactor_(1.0),
+    endEffectPhiDeg_(std::numeric_limits<scalar>::quiet_NaN()),
     inducedVelocityCorrection_(vector::zero),
     projectionEpsilon_(-VGREAT),
     addedMassActive_(dict.lookupOrDefault("addedMass", false)),
@@ -1557,7 +1562,18 @@ void Foam::fv::actuatorLineElement::setOmega(scalar omega)
 
 void Foam::fv::actuatorLineElement::setEndEffectFactor(scalar factor)
 {
+    setEndEffectFactor(factor, std::numeric_limits<scalar>::quiet_NaN());
+}
+
+
+void Foam::fv::actuatorLineElement::setEndEffectFactor
+(
+    scalar factor,
+    scalar phiDeg
+)
+{
     endEffectFactor_ = factor;
+    endEffectPhiDeg_ = phiDeg;
 }
 
 

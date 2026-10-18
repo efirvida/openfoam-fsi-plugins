@@ -222,6 +222,10 @@ protected:
         //- End effect correction factor [0, 1]
         scalar endEffectFactor_;
 
+        //- Angle used to evaluate the rotor-level end factor (degrees).
+        //  NaN when no angle-based end factor has been evaluated.
+        scalar endEffectPhiDeg_;
+
         //- Induced-velocity correction in the global frame, added to the
         //  local inflow before the angle of attack is formed (Dag & Sorensen
         //  Eq. 23); zero when the tip correction is inactive
@@ -487,6 +491,9 @@ public:
 
             //- Set end effect correction factor
             void setEndEffectFactor(scalar factor);
+
+            //- Set end factor and the inflow angle used to evaluate it
+            void setEndEffectFactor(scalar factor, scalar phiDeg);
 
             //- Set the induced-velocity correction (global frame)
             void setInducedVelocityCorrection(const vector& correction);

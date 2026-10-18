@@ -6,8 +6,14 @@ Run from validation/phaseVI:
     python3 scripts/diagnoseElementResiduals.py [--alm-dir runs/alm-U7-coarse-d1-pdrag]
 
 Uses compareSectionLoads' convergence gate and configured revolution window.
-Blocks: (a) station interpolation, (b) same-step Glauert lag if velocity vectors
-exist, (c) normalisation, (d) frozen-inflow first-order polar/Re sensitivity.
+Blocks: (a) station interpolation, (b) one-step Glauert lag when the appended
+end_effect_phi_deg column exists, (c) normalisation, (d) frozen-inflow
+first-order polar/Re sensitivity. Block (b) reports tip-element means over the
+convergence window of consecutive rows: lag = phi(t) - phi(t+1) and the factor
+recomputed with phi(t+1) (the angle sampled at t) versus the written factor.
+`inflow_ref_angle_deg` is a 3-D angle against the chord reference direction, a
+different definition from the factor's rotor-plane phi, so it is not subtracted.
+Uncomputed end-effect angles (end effects off/liftingLine) are NaN, not zero.
 The factor-free reconstruction is a diagnostic, not a replacement load model.
 Reynolds sensitivity holds alpha, drag, end factor and sampled velocity fixed;
 CSU versus OSU also changes facility, so it is not a pure Reynolds correction.
@@ -116,6 +122,43 @@ def element_data(run_dir, start, end):
     return sorted(profile), samples
 
 
+def report_glauert_lag(samples, blades, root_effects):
+    """One-step lag of the Glauert factor for tip elements (r/R >= 0.85).
+
+    `end_effect_phi_deg` at step t is the angle the factor written at t was
+    evaluated with (sampled one step earlier); the value stored at t+1 is the
+    angle sampled at t, with the identical rotor-plane definition. So per
+    consecutive pair: lag = phi(t) - phi(t+1), and the same-step factor at t is
+    the Glauert factor of phi(t+1).
+    """
+    tips = [(rr, number, rows) for rr, (number, rows) in sorted(samples.items())
+            if rr >= 0.85]
+    if any('end_effect_phi_deg' not in row for _, _, rows in tips for row in rows):
+        # Preserve the historical report for CSVs predating the angle column.
+        print('  SKIPPED: CSV exposes rel_vel_mag, but no relative-velocity vector/components.')
+        print('  Cannot obtain atan2(W_axis, W_opposite_element_velocity) from magnitude alone.')
+        print('  No mean/max relative difference claimed; recovered force angle is not sampled velocity.')
+        return
+    print('  element  r/R       lag_mean[deg] F_same_step F_written delta_F')
+    for rr, number, rows in tips:
+        rows = sorted(rows, key=lambda row: row['time'])
+        if len(rows) < 2 or any(not math.isfinite(row[key]) for row in rows
+                                for key in ('end_effect_phi_deg', 'end_effect_factor')):
+            print(f'  element{number} {rr:.6f} SKIPPED: non-finite end-effect angle or factor.')
+            continue
+        pairs = list(zip(rows, rows[1:]))
+        try:
+            same_step = mean(glauert_factor(now['root_dist'], math.radians(nxt['end_effect_phi_deg']),
+                                            blades, root_effects) for now, nxt in pairs)
+        except ValueError:
+            print(f'  element{number} {rr:.6f} SKIPPED: angle outside Glauert domain.')
+            continue
+        lag = mean(now['end_effect_phi_deg'] - nxt['end_effect_phi_deg'] for now, nxt in pairs)
+        written = mean(now['end_effect_factor'] for now, _ in pairs)
+        print(f'  element{number} {rr:.6f} {lag:+14.6f} {same_step:.6f} '
+              f'{written:.6f} {same_step - written:+.6f}')
+
+
 def rebuilt_cn(cl, cd, alpha):
     """Use comparePhaseVI for even counterfactual chord-frame conversion."""
     rows = [{'time': 0.0, 'root_dist': 0.5, 'alpha_deg': alpha, 'cl': cl, 'cd': cd}]
@@ -168,11 +211,7 @@ def main(argv=None):
     print('  F(station) uses mean phi recovered from plane cn/ct + cl/cd; not a lag measurement.')
 
     print('\n(b) Glauert-factor lag: same-step sampled relative velocity')
-    # The writer exposes |W|, not its rotor-normal/tangential components.
-    # Neither alpha_eff (possibly lagged/corrected) nor |W| alone determines phi.
-    print('  SKIPPED: CSV exposes rel_vel_mag, but no relative-velocity vector/components.')
-    print('  Cannot obtain atan2(W_axis, W_opposite_element_velocity) from magnitude alone.')
-    print('  No mean/max relative difference claimed; recovered force angle is not sampled velocity.')
+    report_glauert_lag(samples, blades, root_effects)
 
     print('\n(c) Normalisation: same simulated force, local q versus experimental QNORM')
     print('  r/R    W[m/s] QNORM[Pa] q_sim[Pa]   ratio  cn_local cn_QNORM cn_exp  residual_Q[%]')

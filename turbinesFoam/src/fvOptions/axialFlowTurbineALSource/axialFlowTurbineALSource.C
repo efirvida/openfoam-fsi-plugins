@@ -724,7 +724,9 @@ void Foam::fv::axialFlowTurbineALSource::calcEndEffects()
             {
                 Info<< "    f: " << f << endl;
             }
-            blades_[i].elements()[j].setEndEffectFactor(f);
+            // Preserve the exact angle used above before calculateForce()
+            // samples the next relative velocity. Both Glauert and Shen use it.
+            blades_[i].elements()[j].setEndEffectFactor(f, Foam::radToDeg(phi));
         }
     }
 }
