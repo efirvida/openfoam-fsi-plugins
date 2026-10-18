@@ -125,7 +125,7 @@ results. They are frozen except the IEA cp centre.
   7 m/s) predate `4c49dc3`; P2.1 re-baselines them with the current root factor
   before any band is judged.
 
-## Production-readiness criterion — PROPOSED 2026-10-17, pending owner approval
+## Production-readiness criterion — APPROVED by the owner 2026-10-17
 
 Owner question: "si todo sale bien podriamos considerar que la implementacion esta lista para produccion
 cientifica?" Answer: not on Phase VI 7 m/s alone. The definition is declared ready for scientific production
@@ -133,11 +133,11 @@ cientifica?" Answer: not on Phase VI 7 m/s alone. The definition is declared rea
 
 | id | condition | pass rule | status |
 | --- | --- | --- | --- |
-| R1 | Numerical independence: mesh ladder at FIXED eps (`meshFactor = 2^level`, levels 0-2) and a time-step pair, on H 7 m/s, v1.2 | P, T and F'n at r/R 0.47-0.95 change < 2 % between the two finest levels and between the two time steps | open |
-| R2 | Attached-regime coverage on Sequence S, v1.2 frozen, no retuning: 5, 6, 7, 8 m/s | each speed inside the pre-registered bands (P 10 %, T 15 %, F'n/c_n bands as written, the 0.30 band judged per the owner's decision on the reference pressure) | 7 m/s queued (T1) |
+| R1 | Numerical independence: mesh ladder at FIXED eps (`meshFactor = 2^level`, levels 0-2) and a time-step pair, on H 7 m/s, v1.2 | P, T and F'n at r/R 0.47-0.95 change < 2 % between the two finest levels and between the two time steps | queued: level 1 job 11618055, level 2 11618056, dt 0.0005 11618057; level 0 = `d1-pdrag` |
+| R2 | Attached-regime coverage on Sequence S, v1.2 frozen, no retuning: 5, 6, 7, 8 m/s | each speed inside the pre-registered bands (P 10 %, T 15 %, F'n/c_n bands as written, the 0.30 band judged per the owner's decision on the reference pressure) | ALM: 7 m/s 11618033, 5/6/8 m/s 11618058-60; ASM/ASM-mesh 7 m/s 11618034/35 (other speeds after ALM passes) |
 | R3 | IEA 15 MW pillar re-evaluated with v1.2 (Glauert) against OLAF/BEM at rated, polar Re issue (I14) resolved or bounded | cp inside the re-centred IEA band; spanwise loads reported | open |
-| R4 | Tip residual closed or bounded: the r/R 0.95 F'n deficit has an identified cause (P2.3 T4/T5) and its effect on the flapwise and edgewise root moments is quantified | either inside the 0.80 band or documented as a limit with its root-moment impact (currently flap -3.4 %, edge -0.3 %) | diagnosing |
-| R5 | Definition conformance: every run quoted as validation passes `checkModelDefinition.py` and the judging script refuses non-conforming runs | automated | being built (P2.3 T10) |
+| R4 | Tip residual closed or bounded: the r/R 0.95 F'n deficit has an identified cause (P2.3 T4/T5) and its effect on the flapwise and edgewise root moments is quantified | either inside the 0.80 band or documented as a limit with its root-moment impact (currently flap -3.4 %, edge -0.3 %) | diagnosing: T5 job 11618046, T4 lag run (runs/lib-p23) |
+| R5 | Definition conformance: every run quoted as validation passes `checkModelDefinition.py` and the judging script refuses non-conforming runs | automated | DONE: `checkModelDefinition.py`; `summarizeBands.py` refuses non-conforming runs (6f5f264) |
 | R6 | Uncertainty attached to every validation number: experiment repeatability, averaging-window sensitivity, blockage (+1/+2 % inflow) | each quoted difference carries its combined uncertainty (evidence register section 4) | open |
 
 Declared alongside, not conditions: the limits chapter (stall regime, from existing results), the calibration
