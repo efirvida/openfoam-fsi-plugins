@@ -4,6 +4,23 @@
 
 ### Features
 
+#### Validation tools: drift gate in summarizeBands, VTUN correction, launcher END_REVS/POLAR
+
+**Files:**
+- `turbinesFoam/validation/phaseVI/scripts/summarizeBands.py`, `quantifyUncertainty.py`
+- `turbinesFoam/validation/phaseVI/scripts/slurm/v1-2-run.slurm`
+- `turbinesFoam/tests/test_model_definition_check.py`, `test_uncertainty.py`
+- `turbinesFoam/validation/phaseVI/README.md`
+
+**Problem:** `summarizeBands.py` printed PASS/FAIL for windows that `comparePhaseVI.py` had flagged as
+drifting (S 5/6 m/s v1.2), against the rule that only quasi-steady windows are judged; the comparison
+ignored that the measured tunnel speed (VTUN) differs from the simulated nominal speed (+0.2..+0.8 %);
+the v1.2 launcher could not extend a run past 12 revolutions or run a diagnostic polar.
+
+**Fix:** a recorded drift marks the comparison `[not of record]` (exit 1 unless
+`--allow-nonconforming`); `quantifyUncertainty.py` reports a deterministic BEM-based VTUN correction
+beside the raw difference; the launcher accepts optional `END_REVS` and `POLAR` (defaults unchanged).
+
 #### Validation tools: numerical-ladder comparison and short/drifting element diagnostics
 
 **Files:**

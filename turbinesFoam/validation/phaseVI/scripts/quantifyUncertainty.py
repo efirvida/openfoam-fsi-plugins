@@ -364,6 +364,53 @@ def combine(simulation, experiment_value, repeatability, blockage, window, cover
     return rows
 
 
+def vtun_correction(repeatability, experiment_name, speed, rpm, rho, pitch,
+                    simulation, measured, rows, coverage):
+    """Deterministic correction for the measured tunnel speed (VTUN).
+
+    The run uses the nominal speed while the experiment row measured VTUN; rpm
+    and rho are already the measured ones. The simulation is scaled by the BEM
+    response at fixed rpm to U x VTUN/U_nominal and judged against the same
+    combined uncertainty. Reported beside the raw difference, never instead of it.
+    """
+    vtun = (repeatability.get("power", {}).get("vtun") or {}).get(experiment_name)
+    if vtun is None:
+        return {"available": False,
+                "reason": f"no measured VTUN for {experiment_name} in the UAE6 archive"}
+    increment = vtun / speed - 1.0
+    relative = blockage_sensitivity(rpm, rho, speed, pitch, increments=(increment,))
+    relative = relative["relative"][increment]
+    corrected = {}
+    for quantity in QUANTITIES:
+        if quantity not in relative or quantity not in simulation:
+            continue
+        value = simulation[quantity] * (1.0 + relative[quantity])
+        difference = value - measured[quantity]
+        combined = rows[quantity]["combined"]
+        corrected[quantity] = {
+            "corrected": value, "difference": difference,
+            "verdict": ("uncertainty incomplete: no agreement claim" if combined is None
+                        else verdict(difference, combined, coverage)),
+        }
+    return {"available": True, "vtun": vtun, "increment": increment, "rows": corrected}
+
+
+def print_vtun(correction, experiment_name, speed, rows):
+    if not correction["available"]:
+        print(f"VTUN correction: not available ({correction['reason']})")
+        return
+    print(f"VTUN correction (deterministic, BEM at fixed rpm): {experiment_name} measured "
+          f"{correction['vtun']:.3f} m/s vs simulated {speed:g} m/s "
+          f"({100 * correction['increment']:+.2f} %)")
+    for quantity, row in correction["rows"].items():
+        exp = rows[quantity]["exp"]
+        unit = f" {unit_of(quantity)}" if unit_of(quantity) else ""
+        print(f"  {quantity}: sim {format_value(quantity, rows[quantity]['sim'])} -> "
+              f"{format_value(quantity, row['corrected'])}{unit}; sim-exp "
+              f"{pct(rows[quantity]['difference'], exp)} -> {pct(row['difference'], exp)} %: "
+              f"{row['verdict']}")
+
+
 def definition_line(run_dir):
     """(text, conforms) like summarizeBands: unreadable input fails closed."""
     try:
@@ -393,7 +440,7 @@ def unit_of(quantity):
 
 
 def print_report(args, rows, repeatability, blockage, window, tag, experiment_name,
-                 blockage_note):
+                 blockage_note, vtun=None):
     print(f"R6 uncertainty - {args.sequence} {args.speed:g} m/s, run {args.run_dir.name}{tag}")
     print(f"experiment row {experiment_name}; sim window {window['reference']} revolutions; "
           f"thrust scope {args.thrust_scope} (vs EAEROTH); coverage k={args.coverage:g}")
@@ -417,6 +464,8 @@ def print_report(args, rows, repeatability, blockage, window, tag, experiment_na
         print(f"{quantity}: sim - exp = {row['difference']:+.4g}{unit} "
               f"({100.0 * row['difference'] / abs(row['exp']):+.1f} %) "
               f"+/- {combined} ({row['dominant']} dominates): {row['verdict']}")
+    if vtun is not None:
+        print_vtun(vtun, experiment_name, args.speed, rows)
     print()
     first = repeatability["power"]
     print(f"repeatability method: {first['method']}")
@@ -491,8 +540,14 @@ def main(argv=None):
         blockage = blockage_bound()
         blockage_note = f" (BEM unusable: {exc})"
     rows = combine(simulation, measured, repeatability, blockage, window, args.coverage)
+    try:
+        vtun = vtun_correction(repeatability, experiment["file_name"], args.speed,
+                               float(experiment["rpm"]), rho, pitch, simulation, measured,
+                               rows, args.coverage)
+    except (ImportError, OSError, ValueError, KeyError) as exc:
+        vtun = {"available": False, "reason": f"BEM unusable: {exc}"}
     print_report(args, rows, repeatability, blockage, window, tag, experiment["file_name"],
-                 blockage_note)
+                 blockage_note, vtun)
     return EXIT_OK
 
 

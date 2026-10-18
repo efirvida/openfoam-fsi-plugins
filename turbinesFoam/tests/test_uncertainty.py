@@ -265,3 +265,54 @@ def test_combine_uses_largest_blockage_magnitude_and_names_the_dominant_term():
     assert rows["power"]["dominant"] == "blockage"
     assert rows["thrust"]["blk"] is None and rows["thrust"]["missing"] == ["blockage"]
     assert "blockage" in rows["thrust"]["verdict"]
+
+
+def test_vtun_correction_scales_the_simulation_by_the_bem_response(monkeypatch):
+    """The run is at nominal U; the experiment row measured VTUN. The correction is
+    the BEM response at fixed rpm to U x VTUN/U_nominal, reported beside the raw value."""
+    seen = {}
+
+    def fake_sensitivity(rpm, rho, speed, pitch, increments):
+        seen["call"] = (rpm, rho, speed, pitch, tuple(increments))
+        return {"relative": {increments[0]: {q: 0.02 for q in qu.QUANTITIES}}}
+
+    monkeypatch.setattr(qu, "blockage_sensitivity", fake_sensitivity)
+    sim = {q: 1.0 for q in qu.QUANTITIES}
+    exp = {q: 1.05 for q in qu.QUANTITIES}
+    rows = {q: {"combined": 0.04} for q in qu.QUANTITIES}
+    repeatability = {"power": {"vtun": {"s0700000": 7.07, "s0700001": 9.0}}}
+    result = qu.vtun_correction(repeatability, "s0700000", 7.0, 71.9, 1.25, 3.0,
+                                sim, exp, rows, 1.0)
+    assert result["available"] is True
+    assert result["vtun"] == 7.07
+    assert result["increment"] == pytest.approx(0.01)
+    assert seen["call"] == (71.9, 1.25, 7.0, 3.0, (pytest.approx(0.01),))
+    power = result["rows"]["power"]
+    assert power["corrected"] == pytest.approx(1.02)
+    assert power["difference"] == pytest.approx(1.02 - 1.05)
+    assert power["verdict"] == qu.verdict(1.02 - 1.05, 0.04, 1.0)
+
+
+def test_vtun_correction_not_available_without_the_row_file():
+    repeatability = {"power": {"vtun": {}}}
+    result = qu.vtun_correction(repeatability, "s0700000", 7.0, 71.9, 1.25, 3.0,
+                                {}, {}, {}, 1.0)
+    assert result["available"] is False
+    assert "s0700000" in result["reason"]
+
+
+def test_vtun_correction_raises_power_for_a_faster_tunnel():
+    sim = {q: 1.0 for q in qu.QUANTITIES}
+    rows = {q: {"combined": 0.04} for q in qu.QUANTITIES}
+    result = qu.vtun_correction({"power": {"vtun": {"h0700000": 7.049}}}, "h0700000", 7.0,
+                                71.88, 1.2337, 3.0, sim, sim, rows, 1.0)
+    assert 0.0 < result["rows"]["power"]["corrected"] - 1.0 < 1.007**3 - 1.0
+
+
+def test_report_states_vtun_correction_unavailable_without_archive(tmp_path, capsys, monkeypatch):
+    synthetic_run(tmp_path)
+    monkeypatch.setattr(qu, "check_run", lambda run, definition: [])
+    args = ["--run-dir", str(tmp_path), "--sequence", "H", "--speed", "7",
+            "--archive-dir", str(tmp_path / "no-archive")]
+    assert qu.main(args) == 0
+    assert "VTUN correction: not available" in capsys.readouterr().out

@@ -554,6 +554,15 @@ python3 scripts/quantifyUncertainty.py --run-dir runs/alm-U5-coarse-seqS-v12 --s
     --experiment-dir data/experiment/uae6-archive
 ```
 
+The run uses the nominal wind speed while the tunnel's measured speed (`VTUN`,
+e.g. 7.049 m/s in `h0700000`) differs slightly; rpm and rho are already the measured
+values. The report adds a `VTUN correction` block: the simulated value scaled by the
+BEM response at fixed rpm to U x VTUN/U_nominal, beside the raw difference and judged
+against the same combined uncertainty. The raw verdict stays the comparison of record.
+
+`summarizeBands.py` marks a comparison whose window `comparePhaseVI.py` recorded as
+drifting (`window: DRIFT ... -> NOT OF RECORD`, exit 1 unless `--allow-nonconforming`).
+
 Read-only. For power, blade thrust and the chord-referenced c_n at r/R
 0.30/0.47/0.63/0.80/0.95 (the `comparePhaseVI.py` definitions) it prints
 `sim - exp` with its combined uncertainty: experiment repeatability (file-to-file

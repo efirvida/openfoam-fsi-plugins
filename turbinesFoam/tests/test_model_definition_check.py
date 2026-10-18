@@ -176,3 +176,25 @@ def test_summary_unknown_and_multiple_models(tmp_path):
     assert result.returncode == 1
     assert "NON-CONFORMING" in result.stdout
     assert result.stdout.count("[not of record]") == 4
+
+
+@pytest.mark.parametrize("flag,allow", [(False, False), (True, False), (True, True)])
+def test_summary_drifting_window_is_not_of_record(tmp_path, flag, allow):
+    """S4: a window comparePhaseVI flagged as drifting never gives an of-record verdict."""
+    run = make_run(tmp_path)
+    cmp = make_comparison(tmp_path, [run])
+    drift = {"flag": flag, "cp": {"variation": 0.029, "flag": flag},
+             "cd": {"variation": 0.0169, "flag": flag}}
+    (cmp / "metrics.json").write_text(json.dumps({"models": {
+        "alm": {"run_dir": str(run), "drift": drift}}}))
+    before = (cmp / "metrics.json").read_bytes()
+    result = invoke(SUMMARY, cmp, *(["--allow-nonconforming"] if allow else []))
+    header = ["== cmp", "  definition v1.2: CONFORMS"]
+    if flag:
+        header.append("  window: DRIFT (alm: cp variation 2.90 %, cd variation 1.69 %; "
+                      "tolerance 1 %) -> NOT OF RECORD")
+    suffix = " [not of record]" if flag else ""
+    assert (result.returncode, result.stdout, result.stderr) == (
+        int(flag and not allow),
+        "\n".join([*header, *[s + suffix for s in BAND_LINES]]) + "\n", "")
+    assert (cmp / "metrics.json").read_bytes() == before
