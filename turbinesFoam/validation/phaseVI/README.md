@@ -529,6 +529,27 @@ python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-d1-pdrag
 python3 scripts/summarizeBands.py results/U7-H
 ```
 
+### Uncertainty (R6)
+
+```sh
+python3 scripts/quantifyUncertainty.py --run-dir runs/alm-U7-coarse-d1-pdrag --sequence H --speed 7
+```
+
+Read-only. For power, blade thrust and the chord-referenced c_n at r/R
+0.30/0.47/0.63/0.80/0.95 (the `comparePhaseVI.py` definitions) it prints
+`sim - exp` with its combined uncertainty: experiment repeatability (file-to-file
+scatter of the raw UAE6 Parquet files `h0700000/h0700001/...`, read from
+`turbinesFoam/articles/uae6/parquet` or `--archive-dir`; "not available" with the
+searched path when absent; a single file falls back to the in-file
+autocorrelation standard error of the per-revolution means), simulation
+averaging window (definition window against the windows starting 2 and 4
+revolutions later), and BEM-estimated blockage sensitivity for inflow +1 %/+2 %
+(`bemPhaseVI.py` at the measured rpm; one-sided bound; U^3/U^2 bound if the BEM
+is unusable). The verdict says "agrees within the combined numerical and
+experimental uncertainty" only inside the quadrature sum (`--coverage k`,
+default 1). Exit **1** for a non-conforming run unless `--allow-nonconforming`
+(output then tagged `[not of record]`), **2** for missing input.
+
 `config/model-definition.yaml` records v1.2 expected effective values and cited
 solver defaults. An absent key uses its solver default; absence without a known
 default is a mismatch. Point sampling (`velocitySampleRadius 0`) is frozen;

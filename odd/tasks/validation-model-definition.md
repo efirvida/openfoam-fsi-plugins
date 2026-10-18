@@ -138,7 +138,7 @@ cientifica?" Answer: not on Phase VI 7 m/s alone. The definition is declared rea
 | R3 | IEA 15 MW pillar re-evaluated with v1.2 (Glauert) against OLAF/BEM at rated, polar Re issue (I14) resolved or bounded | cp inside the re-centred IEA band; spanwise loads reported | open |
 | R4 | Tip residual closed or bounded: the r/R 0.95 F'n deficit has an identified cause (P2.3 T4/T5) and its effect on the flapwise and edgewise root moments is quantified | either inside the 0.80 band or documented as a limit with its root-moment impact (currently flap -3.4 %, edge -0.3 %) | diagnosing: T5 job 11618046, T4 lag run (runs/lib-p23) |
 | R5 | Definition conformance: every run quoted as validation passes `checkModelDefinition.py` and the judging script refuses non-conforming runs | automated | DONE: `checkModelDefinition.py`; `summarizeBands.py` refuses non-conforming runs (6f5f264) |
-| R6 | Uncertainty attached to every validation number: experiment repeatability, averaging-window sensitivity, blockage (+1/+2 % inflow) | each quoted difference carries its combined uncertainty (evidence register section 4) | open |
+| R6 | Uncertainty attached to every validation number: experiment repeatability, averaging-window sensitivity, blockage (+1/+2 % inflow) | each quoted difference carries its combined uncertainty (evidence register section 4) | tool DONE (`quantifyUncertainty.py`): H 7 d1-pdrag combined k=1: P 4.0 % (blockage), T 1.6 %, c_n 1.4-3.8 % (repeatability); window <= 0.08 %. Open: tunnel speed (VTUN) offset, owner decision |
 
 Declared alongside, not conditions: the limits chapter (stall regime, from existing results), the calibration
 history (I1 chosen on H, I2 chosen after seeing H and S results), and the C++ solver having no automated tests
