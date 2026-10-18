@@ -48,8 +48,11 @@ def sha(path: Path) -> str:
 
 
 def test_default_and_off_renders_are_byte_identical_to_the_frozen_baseline(tmp_path):
-    default = render(tmp_path / "a")
-    off = render(tmp_path / "b", "--nacelle", "off")
+    # The baseline predates Model Definition v1.2, whose default polar is the
+    # pressure-drag table; pin the v1.1 polar so only the nacelle option is tested.
+    v1_1_polar = ("--polar", "S809_OSU_Re1M_total.dat")
+    default = render(tmp_path / "a", *v1_1_polar)
+    off = render(tmp_path / "b", "--nacelle", "off", *v1_1_polar)
     for name, digest in FROZEN.items():
         assert sha(default / name) == digest, name
         assert sha(off / name) == digest, name
@@ -96,3 +99,12 @@ def test_runner_exposes_nacelle_and_records_it_in_run_json():
     assert '"nacelle":' in text
     assert "phaseVI_nacelle.stl" in text
     assert "--nacelle on|off" in text
+
+
+def test_polar_override_reaches_all_three_twins(tmp_path):
+    """`--polar` was silently dropped by the ASM-MESH twin (it kept the default)."""
+    case = render(tmp_path, "--polar", "S809_CSU_Re0.65M_total.dat")
+    for twin in ("ALM", "ASM", "ASM-MESH"):
+        text = normalised(case / f"system/fvOptions.{twin}")
+        assert '#include "POLARS/S809_CSU_Re0.65M_total.dat"' in text, twin
+        assert "S809_OSU_Re1M" not in text, twin

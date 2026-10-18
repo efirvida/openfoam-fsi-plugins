@@ -1102,6 +1102,7 @@ def outputs(
             tip_effects=tip_effects,
             tip_correction=tip_correction,
             hub_radius=hub_radius,
+            polar=polar,
             velocity_sample_radius=velocity_sample_radius,
             n_velocity_samples=n_velocity_samples,
             lift_re_corr_exp=lift_re_corr_exp,
