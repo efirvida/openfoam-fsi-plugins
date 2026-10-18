@@ -15,7 +15,7 @@
 # Do not rebuild libturbinesFoam while a run is queued or running.
 #SBATCH --job-name=phaseVI-v12run
 #SBATCH --partition=sequana_cpu
-#SBATCH --time=24:00:00
+#SBATCH --time=12:00:00
 #SBATCH --ntasks=84
 set -eu
 cd "${SLURM_SUBMIT_DIR:?submit with sbatch}"
