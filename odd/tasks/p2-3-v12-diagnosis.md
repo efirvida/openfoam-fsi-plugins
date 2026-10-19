@@ -10,6 +10,15 @@ decision rules: judge every result against them, do not re-derive them). Model D
 velocity sampling); production-readiness criterion R1-R6 is APPROVED (same file). Candidate levers:
 `model-improvements-register.md` (I1-I17).
 
+### 0. Session 4 state (2026-10-18, read first; supersedes the job table below where they differ)
+Running/queued: R1 level 2 11618444 (H7 r2, from 0, 26 h); T11 S5/S6 24 rev 11618442/43 (18 h); T12 S5 v1.1 polar 24 rev
+11618430; T13 H5 11618452 (run dir alm-U5-coarse-v12; compare with `--experiment data/experiment/uae6-archive`); A/B wave
+(`odd/tasks/alm-correction-flags.md` L4): 11618455-62 (shen-tip, dag-sorensen-tip, ring-sampling, du-selig-ra x S7/S8) and
+ch-ra 11618472/73 (LIB_DIR runs/lib-flags). Analysis: comparePhaseVI (S: `--experiment data/experiment/uae6-archive`),
+summarizeBands (drift now gates), summarizeVariants (A/B), compareLadder (R1: l1 vs l2), quantifyUncertainty (S 5/6/8:
+`--experiment-dir data/experiment/uae6-archive`; VTUN block). Restart does NOT exist (L23). T13 still needs a probe
+comparison tool (compareInflowAngle is a force proxy). Session-4 S5/S6 12-rev comparisons: runs/_p23-session4-comparisons.
+
 ### 1. Jobs (check first)
 `sacct -j 11618033,11618034,11618035,11618046,11618055,11618056,11618057,11618058,11618059,11618060,11618061 -X --format=JobID,JobName%16,State,Elapsed,NNodes,Partition`
 All run from `turbinesFoam/validation/phaseVI`; run dirs under `runs/`; logs `runs/<label>-*.out|err`.
