@@ -1,8 +1,14 @@
-# AGENTS.md — of-plugins
+# AGENTS.md — openfoam-fsi-plugins
 
 OpenFOAM plugin collection for rotating FSI cases and preCICE coupling.
 C++ codebase using OpenFOAM's `wmake` build system. Each plugin is an
 independent shared library installed to `$FOAM_USER_LIBBIN`.
+
+Purpose: this repository is the CFD side of AeroElast
+(<https://github.com/efirvida/AeroElast>) and is independent of it — the
+coupling boundary is preCICE, so any preCICE structural participant works.
+User-facing documentation lives in `README.md` and in one `README.md` per
+plugin directory.
 
 ## Repository layout
 

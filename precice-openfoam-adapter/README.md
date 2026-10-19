@@ -1,36 +1,96 @@
-# OpenFOAM-preCICE adapter
+# OpenFOAM–preCICE adapter (FSI-only fork)
 
-[![Ask questions in the forum](https://img.shields.io/badge/community-forum-orange?link=https%3A%2F%2Fprecice.discourse.group%2F)](https://precice.discourse.group/)
-[![Release](https://img.shields.io/github/release/precice/openfoam-adapter.svg)](https://github.com/precice/openfoam-adapter/releases/latest)
-[![SoftwareHeritage](https://archive.softwareheritage.org/badge/origin/https://github.com/precice/openfoam-adapter/)](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/precice/openfoam-adapter)
-[![Cite](https://img.shields.io/badge/cite-literature_guide-d45815)](https://precice.org/fundamentals-literature-guide.html)
-[![Changelog](https://img.shields.io/badge/Keep%20a%20Changelog--555.svg?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9IiNmMTVkMzAiIHZpZXdCb3g9IjAgMCAxODcgMTg1Ij48cGF0aCBkPSJNNjIgN2MtMTUgMy0yOCAxMC0zNyAyMmExMjIgMTIyIDAgMDAtMTggOTEgNzQgNzQgMCAwMDE2IDM4YzYgOSAxNCAxNSAyNCAxOGE4OSA4OSAwIDAwMjQgNCA0NSA0NSAwIDAwNiAwbDMtMSAxMy0xYTE1OCAxNTggMCAwMDU1LTE3IDYzIDYzIDAgMDAzNS01MiAzNCAzNCAwIDAwLTEtNWMtMy0xOC05LTMzLTE5LTQ3LTEyLTE3LTI0LTI4LTM4LTM3QTg1IDg1IDAgMDA2MiA3em0zMCA4YzIwIDQgMzggMTQgNTMgMzEgMTcgMTggMjYgMzcgMjkgNTh2MTJjLTMgMTctMTMgMzAtMjggMzhhMTU1IDE1NSAwIDAxLTUzIDE2bC0xMyAyaC0xYTUxIDUxIDAgMDEtMTItMWwtMTctMmMtMTMtNC0yMy0xMi0yOS0yNy01LTEyLTgtMjQtOC0zOWExMzMgMTMzIDAgMDE4LTUwYzUtMTMgMTEtMjYgMjYtMzMgMTQtNyAyOS05IDQ1LTV6TTQwIDQ1YTk0IDk0IDAgMDAtMTcgNTQgNzUgNzUgMCAwMDYgMzJjOCAxOSAyMiAzMSA0MiAzMiAyMSAyIDQxLTIgNjAtMTRhNjAgNjAgMCAwMDIxLTE5IDUzIDUzIDAgMDA5LTI5YzAtMTYtOC0zMy0yMy01MWE0NyA0NyAwIDAwLTUtNWMtMjMtMjAtNDUtMjYtNjctMTgtMTIgNC0yMCA5LTI2IDE4em0xMDggNzZhNTAgNTAgMCAwMS0yMSAyMmMtMTcgOS0zMiAxMy00OCAxMy0xMSAwLTIxLTMtMzAtOS01LTMtOS05LTEzLTE2YTgxIDgxIDAgMDEtNi0zMiA5NCA5NCAwIDAxOC0zNSA5MCA5MCAwIDAxNi0xMmwxLTJjNS05IDEzLTEzIDIzLTE2IDE2LTUgMzItMyA1MCA5IDEzIDggMjMgMjAgMzAgMzYgNyAxNSA3IDI5IDAgNDJ6bS00My03M2MtMTctOC0zMy02LTQ2IDUtMTAgOC0xNiAyMC0xOSAzN2E1NCA1NCAwIDAwNSAzNGM3IDE1IDIwIDIzIDM3IDIyIDIyLTEgMzgtOSA0OC0yNGE0MSA0MSAwIDAwOC0yNCA0MyA0MyAwIDAwLTEtMTJjLTYtMTgtMTYtMzEtMzItMzh6bS0yMyA5MWgtMWMtNyAwLTE0LTItMjEtN2EyNyAyNyAwIDAxLTEwLTEzIDU3IDU3IDAgMDEtNC0yMCA2MyA2MyAwIDAxNi0yNWM1LTEyIDEyLTE5IDI0LTIxIDktMyAxOC0yIDI3IDIgMTQgNiAyMyAxOCAyNyAzM3MtMiAzMS0xNiA0MGMtMTEgOC0yMSAxMS0zMiAxMXptMS0zNHYxNGgtOFY2OGg4djI4bDEwLTEwaDExbC0xNCAxNSAxNyAxOEg5NnoiLz48L3N2Zz4K)](https://github.com/precice/openfoam-adapter/blob/develop/CHANGELOG.md)
-[![License](https://img.shields.io/github/license/precice/openfoam-adapter.svg)](https://github.com/precice/openfoam-adapter/blob/master/LICENSE)
-[![Build with OpenFOAM v2512](https://github.com/precice/openfoam-adapter/actions/workflows/build.yml/badge.svg?branch=develop)](https://github.com/precice/openfoam-adapter/actions/workflows/build.yml)
-[![OpenFOAM Package Index](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fexasim-project%2Fopi%2Frefs%2Fheads%2Fmain%2Fpkg%2Fprecice-adapter%2Fmetadata.json&query=%24.%5Bname%2Ctype%2Cversion%5D&label=opi)](https://github.com/exasim-project/opi)
+> **Fork notice.** This directory is an **independent, diverging copy** of
+> [precice/openfoam-adapter](https://github.com/precice/openfoam-adapter), vendored here as a
+> plain directory (no git submodule). Changes made here are not synced upstream
+> automatically, and the badges, community links and maintenance statements of the upstream
+> README do not describe this copy. Read the two sections below first.
 
-## Start here
+## What this copy is for
 
-See the [adapter documentation](https://precice.org/adapter-openfoam-overview.html) and related [tutorials](https://precice.org/tutorials.html).
+It is the coupling side of this repository's FSI stack: it exchanges forces and displacements
+with an external structural solver through preCICE, and it publishes coupled scalars (such as
+the angular velocity) as `uniformDimensionedScalarField` objects in the OpenFOAM registry.
 
-Please [report any issues](https://github.com/precice/openfoam-adapter/issues) here and give us feedback through [one of our community channels](https://precice.org/community-channels.html). Please ask question in the [preCICE forum](https://precice.discourse.group/), not via issues.
+This is also the component that makes the whole repository solver-agnostic: the coupling
+contract is preCICE, so the structural participant can be any preCICE participant, not
+[the one this repository was originally written for](../README.md).
 
-This project is actively maintained on [precice/openfoam-adapter](https://github.com/precice/openfoam-adapter). Current maintainers: [@MakisH](https://github.com/MakisH/) and [@DavidSCN](https://github.com/DavidSCN).
+## Fork divergence
 
-## Contributing
+**Removed** to make this an FSI-only adapter:
 
-We welcome contributions! Have a look at open [good first issues](https://github.com/precice/openfoam-adapter/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) and [where we need help](https://github.com/precice/openfoam-adapter/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22).
+- the CHT (conjugate heat transfer) module,
+- the FF (free-surface) module,
+- the `Stress` and `DisplacementDelta` coupling-data modules of the FSI module.
 
-Check the file `CONTRIBUTING.md` for a few tips and guidelines.
+**Kept and modified:**
+
+- `modules/FSI/` (`Force`, `ForceBase`, `Displacement`) and `modules/generic/`
+  (`Generic`, `ReadWrite`) are the surviving coupling paths.
+- OpenFOAM v2506 fix: the deprecated `Pstream::scatterList` / `gatherList` are replaced with
+  `OPstream` / `IPstream`.
+- `Interface.C` carries `fsiDiagLog` diagnostics for every READ/WRITE of coupling data.
+- The generic module's global scalar coupler is the **producer** of the
+  `uniformDimensionedScalarField` that [`fsiOmega`](../fsiOmega/README.md) reads and that the
+  motion solver consumes. Note its IO flags: it creates the field only when the field does not
+  exist yet, with `constant()`, `NO_READ` and `NO_WRITE`, and otherwise binds to the existing
+  object with `lookupObjectRef`.
+
+> **Pending author rationale and divergence list.** The fork's delta against upstream is **not
+> enumerated anywhere yet**: `changelog-entries/*.md` holds *upstream* PR entries (338…394),
+> not this fork's changes. Diffing the vendored snapshot against its upstream pin is the way
+> to produce the complete list, and the author's reasons for maintaining a fork instead of
+> upstreaming belong in this section.
+
+## Build
+
+Requires preCICE development files discoverable through `pkg-config`:
+
+```sh
+cd precice-openfoam-adapter && ./Allwmake
+```
+
+- `pkg-config libprecice` is resolved automatically; a missing `.pc` file is a **warning**, not
+  an error.
+- `Allwmake` fails on any `error:` line in `wmake.log` and then runs `ldd -r`, so undefined
+  symbols fail the build.
+
+| Variable | Effect |
+| --- | --- |
+| `PRECICE_OPENFOAM_CFLAGS` | extra preprocessor flags, e.g. `-DADAPTER_DEBUG_MODE` |
+| `PRECICE_OPENFOAM_TARGET_DIR` | install destination (default `$FOAM_USER_LIBBIN`) |
+
+On SDumont, the preCICE installation is built with GCC 14, so the matching `libstdc++` must be
+on the runtime search path at link and `ldd -r` time: prepend `/scratch/app/gcc/14.2.0/lib64`
+to `LD_LIBRARY_PATH` or the adapter reports undefined `GLIBCXX_3.4.32` / `CXXABI_1.3.15`.
+
+## Documentation and contributing
+
+Upstream documentation applies and is vendored under [`docs/`](docs/):
+[`config.md`](docs/config.md) for `preciceDict`, [`extend.md`](docs/extend.md) to add modules,
+[`openfoam-support.md`](docs/openfoam-support.md) for the version matrix. The project overview
+is at <https://precice.org/adapter-openfoam-overview.html>.
+
+Adapter changes follow [`CONTRIBUTING.md`](CONTRIBUTING.md): add
+`changelog-entries/<PR-number>.md` and never edit `CHANGELOG.md` directly — entries are merged
+at release.
 
 ## Citing
 
-Whenever using or referring to this adapter in academic publications, please cite it [1]. See the option "Cite this repository" in the "About" section, as well as the [preCICE literature guide](https://precice.org/fundamentals-literature-guide.html) and the [adapter overview page](https://precice.org/adapter-openfoam-overview.html) for more information.
+Whenever using or referring to this adapter in academic publications, please cite it [1]. See
+the option "Cite this repository" in the "About" section, as well as the
+[preCICE literature guide](https://precice.org/fundamentals-literature-guide.html) and the
+[adapter overview page](https://precice.org/adapter-openfoam-overview.html) for more
+information.
 
 ## References
 
-[1] Chourdakis, G., Schneider, D., & Uekermann, B. (2023). OpenFOAM-preCICE: Coupling OpenFOAM with External Solvers for Multi-Physics Simulations. OpenFOAM® Journal, 3, 1–25. [DOI: 10.51560/ofj.v3.88](https://doi.org/10.51560/ofj.v3.88)
+[1] Chourdakis, G., Schneider, D., & Uekermann, B. (2023). OpenFOAM-preCICE: Coupling OpenFOAM
+with External Solvers for Multi-Physics Simulations. OpenFOAM® Journal, 3, 1–25.
+[DOI: 10.51560/ofj.v3.88](https://doi.org/10.51560/ofj.v3.88)
 
 ## Disclaimer
 
-This offering is not approved or endorsed by OpenCFD Limited, producer and distributor of the OpenFOAM software via www.openfoam.com, and owner of the OPENFOAM®  and OpenCFD®  trade marks.
+This offering is not approved or endorsed by OpenCFD Limited, producer and distributor of the
+OpenFOAM software via www.openfoam.com, and owner of the OPENFOAM® and OpenCFD® trade marks.
