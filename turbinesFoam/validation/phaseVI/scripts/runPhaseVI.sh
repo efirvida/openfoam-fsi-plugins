@@ -9,6 +9,7 @@
 #                 [--nchordwise N] [--n-elements N] [--ranks N]
 #                 [--end-revs FLOAT] [--run-label WORD] [--stage0]
 #                 [--restart] [--rotational-augmentation on|off]
+#                 [--rotational-augmentation-model DuSelig|ChaviaropoulosHansen]
 #                 [--root-effects on|off] [--refine-level N] [--mesh-factor F]
 #                 [--nacelle on|off]
 #                 [--blade-dz DZ] [--end-effects-model Glauert|Shen|liftingLine]
@@ -64,6 +65,8 @@
 # to startTime when no time has been written yet). --rotational-augmentation
 # on|off overrides config/case.yaml for this render; when the flag is absent the
 # YAML `actuator.rotational_augmentation.active` value governs unchanged.
+# --rotational-augmentation-model selects the model independently (default DuSelig);
+# ChaviaropoulosHansen renders a=2.2, h=1, n=4 and excludes collective pitch from twist.
 # --root-effects on|off likewise overrides `actuator.end_effects.root` for this
 # render (the Glauert root-effect ablation); absent, the YAML value governs.
 # --run executes decomposePar and mpirun (inside a Slurm allocation); --submit
@@ -99,6 +102,7 @@ end_effects_model=""
 velocity_sample_radius=""
 n_velocity_samples=""
 rotational_augmentation=""
+rotational_augmentation_model=""
 root_effects=""
 tip_effects=""
 tip_correction=""
@@ -130,6 +134,7 @@ while [ $# -gt 0 ]; do
         --velocity-sample-radius) velocity_sample_radius="$2"; shift ;;
         --n-velocity-samples) n_velocity_samples="$2"; shift ;;
         --rotational-augmentation) rotational_augmentation="$2"; shift ;;
+        --rotational-augmentation-model) rotational_augmentation_model="$2"; shift ;;
         --root-effects) root_effects="$2"; shift ;;
         --tip-effects) tip_effects="$2"; shift ;;
         --tip-correction) tip_correction="$2"; shift ;;
@@ -225,6 +230,13 @@ if [ -n "$n_velocity_samples" ]; then
     if [ "$n_velocity_samples" -le 0 ]; then
         echo "ERROR: --n-velocity-samples must be a positive integer" >&2; exit 2
     fi
+fi
+case "$rotational_augmentation_model" in
+    ''|DuSelig|ChaviaropoulosHansen) ;;
+    *) echo "ERROR: --rotational-augmentation-model must be DuSelig or ChaviaropoulosHansen" >&2; exit 2 ;;
+esac
+if [ "$submit" -eq 1 ] && [ -n "$rotational_augmentation_model" ]; then
+    echo "ERROR: use scripts/slurm/variant-run.slurm for --rotational-augmentation-model" >&2; exit 2
 fi
 # Legacy --submit does not carry these overrides; refuse rather than silently drop them.
 if [ "$submit" -eq 1 ] && { [ -n "$end_effects_model" ] || [ -n "$velocity_sample_radius" ] || [ -n "$n_velocity_samples" ]; }; then
@@ -432,6 +444,9 @@ if [ -n "$nchordwise" ]; then
 fi
 if [ -n "$n_elements" ]; then
     render_args+=(--n-elements "$n_elements")
+fi
+if [ -n "$rotational_augmentation_model" ]; then
+    render_args+=(--rotational-augmentation-model "$rotational_augmentation_model")
 fi
 if [ -n "$rotational_augmentation" ]; then
     render_args+=(--rotational-augmentation "$rotational_augmentation")
@@ -708,6 +723,9 @@ else
     fi
     if [ -n "$run_label" ]; then
         suggestion="$suggestion --run-label $run_label"
+    fi
+    if [ -n "$rotational_augmentation_model" ]; then
+        suggestion="$suggestion --rotational-augmentation-model $rotational_augmentation_model"
     fi
     if [ -n "$rotational_augmentation" ]; then
         suggestion="$suggestion --rotational-augmentation $rotational_augmentation"

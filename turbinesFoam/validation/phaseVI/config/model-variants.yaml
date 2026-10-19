@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Each flags mapping is an override of Model Definition v1.2, not a new baseline.
-# Future C2-C4 arms can add renderer flags here once implemented and validated.
+# Future C2-C3 arms can add renderer flags here once implemented and validated.
 variants:
   v1.2:
     reference: 'Model Definition v1.2, config/model-definition.yaml'
@@ -21,6 +21,12 @@ variants:
     flags:
       --velocity-sample-radius: 3.3
       --n-velocity-samples: 16
+  ch-ra:
+    reference: 'I7: Burgos Tafur et al. (2020), Acta Mech. Sin. 36:306-319, DOI 10.1007/s10409-020-00949-0, pp.307-308 Eqs.(1)-(4)'
+    note: 'Original Chaviaropoulos-Hansen baseline a=2.2, h=1, n=4; no fitted tables. Twist excludes pitch; fixed 2*pi inviscid slope as DuSelig; drag reference is Cd(alpha=0). Not yet A/B tested.'
+    flags:
+      --rotational-augmentation: 'on'
+      --rotational-augmentation-model: ChaviaropoulosHansen
   du-selig-ra:
     reference: 'Du & Selig, AIAA-98-0021 (1998), solver DuSelig implementation'
     note: 'Paper constants a=b=d=1, unchanged from v1.2 inactive block.'

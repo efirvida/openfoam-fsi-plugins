@@ -3,7 +3,7 @@
 """Check Phase VI run directories against effective Model Definition v1.2.
 
 Usage: python3 scripts/checkModelDefinition.py RUN_DIR [RUN_DIR ...]
-       [--definition PATH]
+       [--definition PATH] [--variant NAME]
 Exit 0: all conform; 1: mismatches; 2: unreadable/malformed input.
 `check_run(run_dir, definition)` returns every mismatch without writing files;
 `definition` is the mapping returned by `load_definition`.
@@ -44,6 +44,7 @@ FLAG_RULES = {
     '--end-effects-model': 'endEffectsModel',
     '--tip-correction': 'tipCorrection.active',
     '--rotational-augmentation': 'rotationalAugmentation.active',
+    '--rotational-augmentation-model': 'rotationalAugmentation.model',
     '--velocity-sample-radius': 'velocitySampleRadius',
     '--n-velocity-samples': 'nVelocitySamples',
 }
@@ -60,6 +61,8 @@ def load_variants():
                 raise ValueError(f'unsupported variant flag: {flag}')
             if flag == '--end-effects-model':
                 valid = value in ('Glauert', 'Shen', 'liftingLine')
+            elif flag == '--rotational-augmentation-model':
+                valid = value in ('DuSelig', 'ChaviaropoulosHansen')
             elif flag in ('--tip-correction', '--rotational-augmentation'):
                 valid = value in ('on', 'off')
             else:
@@ -80,7 +83,10 @@ def variant_definition(definition, name):
     result['version'] = name
     knobs = result['knobs']
     for flag, value in variants[name]['flags'].items():
-        rule = knobs[FLAG_RULES[flag]]
+        path = FLAG_RULES[flag]
+        if flag == '--rotational-augmentation-model' and path not in knobs:
+            knobs[path] = dict(path=path, solver_default='DuSelig')
+        rule = knobs[path]
         rule['expected'] = value
         rule.pop('inert', None)
     # Constants become active with their correction, so certify them as well.
@@ -92,9 +98,13 @@ def variant_definition(definition, name):
         add('endEffects.ShenCoeffs.c1', 0.125)
         add('endEffects.ShenCoeffs.c2', 21)
     if knobs['rotationalAugmentation.active']['expected'] == 'on':
-        add('rotationalAugmentation.model', 'DuSelig', 'DuSelig')
-        for key in ('a', 'b', 'd'):
-            add('rotationalAugmentation.' + key, 1, 1)
+        model = variants[name]['flags'].get('--rotational-augmentation-model', 'DuSelig')
+        add('rotationalAugmentation.model', model, 'DuSelig')
+        constants = ({'a': 2.2, 'h': 1, 'n': 4, 'pitchOffset': -3}
+                     if model == 'ChaviaropoulosHansen' else {'a': 1, 'b': 1, 'd': 1})
+        for key, value in constants.items():
+            default = 0 if key == 'pitchOffset' else value
+            add('rotationalAugmentation.' + key, value, default)
     if knobs['tipCorrection.active']['expected'] == 'on':
         for key, value in [('model', 'DagSorensen'), ('wakeTurns', 2),
                            ('wakeAzimuthalStep', 2), ('epsilon', 0)]:

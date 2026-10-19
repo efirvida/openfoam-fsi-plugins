@@ -85,6 +85,7 @@ python3 tools/generate_case.py --check    # exit 1 on missing/stale, never write
 `--domain long|squat`, `--sequence H|S`, `--profile production|smoke`,
 `--solver urans|iddes`, `--n-chordwise N`, `--ranks N`,
 `--surface-kernel cosine|gaussian`, `--rotational-augmentation on|off`,
+`--rotational-augmentation-model DuSelig|ChaviaropoulosHansen`,
 `--root-effects on|off`, `--velocity-sample-radius R`, `--n-velocity-samples N`,
 `--lift-re-corr-exp N`, `--case-dir DIR`,
 `--end-revs FLOAT`, `--start-from startTime|latestTime`.
@@ -130,6 +131,7 @@ scripts/runPhaseVI.sh -m alm|asm|asm-mesh -u <speed> [-mesh coarse|fine|ultra]
                       [--nchordwise N] [--ranks N] [--run-label WORD]
                       [--stage0] [--restart] [--refine-level N] [--mesh-factor F] [--blade-dz DZ]
                       [--rotational-augmentation on|off] [--root-effects on|off]
+                      [--rotational-augmentation-model DuSelig|ChaviaropoulosHansen]
                       [--run] [--submit]
 ```
 
@@ -538,6 +540,73 @@ record for v1.2; `summarizeBands.py` keeps its unchanged baseline-only gate.
 | `dag-sorensen-tip` | `--tip-correction on` | Dağ & Sørensen (2020), existing prescribed helical wake; other settings unchanged |
 | `ring-sampling` | `--velocity-sample-radius 3.3 --n-velocity-samples 16` | v1.1 freeze: 16 equally spaced ring samples, radius **3.3 times local projection epsilon**, not 3.3 metres |
 | `du-selig-ra` | `--rotational-augmentation on` | Du & Selig (1998); existing `DuSelig`, `a=b=d=1` |
+| `ch-ra` | `--rotational-augmentation on --rotational-augmentation-model ChaviaropoulosHansen` | I7, original CH baseline `a=2.2, h=1, n=4`; Burgos Tafur et al. (2020), pp. 307–308 Eqs. (1)–(4); not yet A/B tested |
+
+### Chaviaropoulos–Hansen rotational augmentation (I7)
+
+Selecting `--rotational-augmentation-model ChaviaropoulosHansen` does **not**
+activate RA: use `--rotational-augmentation on` as well, or select `ch-ra`.
+The default render remains byte-identical, with inactive Du–Selig. Existing
+Du–Selig and Lindenburg solver selections retain their arithmetic.
+
+Source: Burgos Tafur, Daniele, Stoevesandt & Thomas, *On the calibration of
+rotational augmentation models for wind turbine load estimation by means of CFD
+simulations*, Acta Mechanica Sinica **36**, 306–319 (2020),
+[DOI 10.1007/s10409-020-00949-0](https://doi.org/10.1007/s10409-020-00949-0).
+Verified locally in `turbinesFoam/articles/Sci-Hub. _ 2,.pdf`, pp. 307–308:
+Eqs. (1)–(2) give the additive lift/drag correction, Eqs. (3)–(4) give the factors,
+and the next paragraph specifies the **original** CH constants (not the paper's
+later calibrated tables). That paper cites Chaviaropoulos & Hansen (2000),
+J. Fluids Eng. 122:330–336, DOI 10.1115/1.483261; the primary source itself was
+not retrieved here. The implementation is:
+
+```text
+fL = fD = a*(c/r)^h*cos(theta)^n       a=2.2, h=1, n=4
+Cl_inv = 2*pi*rad(alpha - alpha0)
+Cl3D = Cl2D + fL*(Cl_inv - Cl2D)
+Cd3D = Cd2D + fD*(Cd2D - Cd(alpha=0))
+```
+
+The inviscid lift deliberately uses Du–Selig's existing **fixed 2π slope** and
+polar zero-lift angle, not a new attached-range slope fit. The drag increment
+has a **plus** sign and uses the same polar interpolated at **zero angle**, unlike
+Du–Selig's minus sign and zero-**lift** drag reference. Placeholder profiles
+without a zero-lift reference are skipped, as for Du–Selig; there is no extra
+radial or angle-of-attack taper/clamp.
+
+`theta` is immutable local twist **without collective pitch**. The source calls
+it “local twist angle” but the cited passage does not explicitly resolve pitch;
+excluding pitch is the selected implementation convention. Phase VI's section
+geometry stores `-(twist + pitch)`; the line's existing interpolation is reused,
+then the signed `pitchOffset` is subtracted to recover `-twist`. For the fixed
+integer exponent 4 this sign does not change the factor. The CH block explicitly
+renders the literature coefficients and the geometry offset in all three twins:
+
+```text
+rotationalAugmentation
+{
+    active on;
+    model ChaviaropoulosHansen;
+    a 2.2;
+    h 1;
+    n 4;
+    pitchOffset -3;  // degrees, signed geometry convention, not a fitted coefficient
+}
+```
+
+Other actuator-line users must supply the signed collective `pitchOffset` if
+section geometry includes it (default 0). Direct element dictionaries selecting
+CH must supply `localTwist` in degrees. CH rejects nonfinite/negative `a` or `n`,
+nonfinite/nonpositive `h`, and nonfinite twist or twist outside [-90,90] degrees
+with a dictionary error. The baseline values above are the only registered arm;
+no coefficient is fitted. The stateful polar/geometry hook's numerical reference
+is pinned in `tests/test_rotational_augmentation_ch.py` (not a solver execution).
+
+Build only into `runs/lib-flags` while production jobs use the installed library.
+Set `LIB_DIR=$PWD/runs/lib-flags` when launching `variant-run.slurm` to prepend
+that directory to `LD_LIBRARY_PATH`; it must contain `libturbinesFoam.so`.
+Without `LIB_DIR`, library resolution is unchanged. This arm is implemented
+behind a flag, **not yet A/B tested**; implementation is not a validation claim.
 
 **Shen is not a pure tip substitution:** selecting the solver's Shen model also
 replaces the hub/root loss formula. The on/off root and tip switches remain on.
@@ -558,10 +627,11 @@ python3 scripts/summarizeVariants.py results/cmp-baseline results/cmp-ring
 
 Unknown variants are refused before module loading or case preparation. The
 launcher accepts the v1-2-run environment (`MODEL`, `SPEED`, `SEQUENCE`, optional
-`REFINE_LEVEL`, `DELTA_T`, `END_REVS`, `POLAR`, `LABEL`), defaulting `LABEL` to
+`REFINE_LEVEL`, `DELTA_T`, `END_REVS`, `POLAR`, `LABEL`, `LIB_DIR`), defaulting `LABEL` to
 `var-<variant>`. It passes explicit baseline switches plus the registry overrides
 through `runPhaseVI.sh`; no rendered file is hand-edited. The runner also accepts
-`--end-effects-model`, `--velocity-sample-radius`, `--n-velocity-samples` directly;
+`--end-effects-model`, `--velocity-sample-radius`, `--n-velocity-samples`,
+`--rotational-augmentation-model` directly;
 legacy `--submit` refuses these rather than dropping them. Existing `--restart`
 refusal on written state remains: use a fresh label for a new arm.
 

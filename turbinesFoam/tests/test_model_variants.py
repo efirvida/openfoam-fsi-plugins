@@ -31,7 +31,7 @@ def render(tmp_path, name):
 
 
 @pytest.mark.parametrize('name', ['v1.2', 'shen-tip', 'dag-sorensen-tip',
-                                  'ring-sampling', 'du-selig-ra'])
+                                  'ring-sampling', 'du-selig-ra', 'ch-ra'])
 def test_variants_render_and_check(tmp_path, name):
     case = render(tmp_path, name)
     text = (case / 'system/fvOptions').read_text()
@@ -61,6 +61,7 @@ def test_unknown_variant_refused_before_input(tmp_path):
 
 
 @pytest.mark.parametrize('flag,value,message', [
+    ('--rotational-augmentation-model', 'unknown', 'must be DuSelig or ChaviaropoulosHansen'),
     ('--end-effects-model', 'unknown', 'must be Glauert, Shen or liftingLine'),
     ('--velocity-sample-radius', '-1', 'must be a non-negative finite number'),
     ('--velocity-sample-radius', 'nan', 'must be a non-negative finite number'),
@@ -82,7 +83,8 @@ def test_known_variant_preflight():
     assert (result.returncode, result.stdout, result.stderr) == (0, '', '')
 
 
-def test_runner_forwards_sampling_and_model(tmp_path):
+@pytest.mark.parametrize('ra_model', ['DuSelig', 'ChaviaropoulosHansen'])
+def test_runner_forwards_sampling_and_model(tmp_path, ra_model):
     package = tmp_path / 'validation/phaseVI'
     shutil.copytree(ROOT, package, ignore=shutil.ignore_patterns(
         'runs', 'results', 'polyMesh', '__pycache__'))
@@ -95,10 +97,18 @@ def test_runner_forwards_sampling_and_model(tmp_path):
     env = {k: v for k, v in ENV.items() if not k.startswith('SLURM_')}
     result = subprocess.run(['bash', str(package / 'scripts/runPhaseVI.sh'),
         '-m', 'alm', '-u', '7', '--end-effects-model', 'Shen',
-        '--velocity-sample-radius', '3.3', '--n-velocity-samples', '16'],
+        '--velocity-sample-radius', '3.3', '--n-velocity-samples', '16',
+        '--rotational-augmentation-model', ra_model,
+        '--rotational-augmentation', 'on'],
         capture_output=True, text=True, env=env, cwd=package)
     assert result.returncode == 0, result.stderr
     text = (package / 'runs/alm-U7-coarse/system/fvOptions').read_text()
+    assert f'model {ra_model};' in text
+    if ra_model == 'ChaviaropoulosHansen':
+        assert 'a 2.2;' in text and 'h 1;' in text and 'n 4;' in text
+        assert 'pitchOffset -3;' in text
+    else:
+        assert 'a 1;' in text and 'b 1;' in text and 'd 1;' in text
     assert 'endEffectsModel Shen;' in text
     assert 'velocitySampleRadius 3.3;' in text
     assert 'nVelocitySamples 16;' in text

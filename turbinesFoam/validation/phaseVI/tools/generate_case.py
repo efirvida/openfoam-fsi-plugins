@@ -8,7 +8,8 @@ Every generated file carries a "Generated from config/case.yaml" banner and
 stale, without writing anything.
 
 Usage:
-    generate_case.py [--mesh coarse|fine|ultra] [--speed 7|10|13|15|20|25]
+    generate_case.py [--rotational-augmentation-model DuSelig|ChaviaropoulosHansen]
+                     [--mesh coarse|fine|ultra] [--speed 7|10|13|15|20|25]
                      [--domain long|squat] [--profile production|smoke]
                      [--solver urans|iddes] [--n-chordwise N] [--n-elements N]
                      [--ranks N]
@@ -753,14 +754,21 @@ def render_fv_options(
         augmentation_block = ""
     else:
         active = bool(augmentation["active"])
+        if augmentation['model'] == 'ChaviaropoulosHansen':
+            constants = (f"            a {float(augmentation['a']):.8g};\n"
+                         f"            h {float(augmentation['h']):.8g};\n"
+                         f"            n {float(augmentation['n']):.8g};\n"
+                         f"            pitchOffset {-float(turbine['pitch_deg']):.8g};\n")
+        else:
+            constants = (f"            a {float(augmentation['a']):.8g};\n"
+                         f"            b {float(augmentation['b']):.8g};\n"
+                         f"            d {float(augmentation['d']):.8g};\n")
         augmentation_block = (
             "\n\n        rotationalAugmentation\n"
             "        {\n"
             f"            active {'on' if active else 'off'};\n"
             f"            model {augmentation['model']};\n"
-            f"            a {float(augmentation['a']):.8g};\n"
-            f"            b {float(augmentation['b']):.8g};\n"
-            f"            d {float(augmentation['d']):.8g};\n"
+            f"{constants}"
             "        }"
         )
     # The Prandtl hub loss is built from the hub surface radius. `hubRadius`
@@ -1250,8 +1258,14 @@ def main(argv: list[str] | None = None) -> int:
         "--rotational-augmentation",
         choices=("on", "off"),
         default=None,
-        help="render the Du-Selig rotational-augmentation switch; the default "
+        help="render the rotational-augmentation switch; the default "
              "comes from config/case.yaml (off). `on`/`off` overrides it",
+    )
+    parser.add_argument(
+        "--rotational-augmentation-model",
+        choices=("DuSelig", "ChaviaropoulosHansen"), default=None,
+        help="select the RA model without activating it; default unchanged (DuSelig). "
+             "CH renders Burgos Tafur 2020 baseline a=2.2, h=1, n=4",
     )
     parser.add_argument(
         "--root-effects",
@@ -1399,6 +1413,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.end_effects_model is not None:
             cfg['actuator']['end_effects']['model'] = args.end_effects_model
         augmentation = dict(cfg["actuator"]["rotational_augmentation"])
+        if args.rotational_augmentation_model is not None:
+            augmentation['model'] = args.rotational_augmentation_model
+            if args.rotational_augmentation_model == 'ChaviaropoulosHansen':
+                # Burgos Tafur 2020 pp.307-308 Eqs.(1)-(4), baseline, no fit.
+                augmentation.update(a=2.2, h=1, n=4)
         if args.rotational_augmentation is not None:
             augmentation["active"] = args.rotational_augmentation == "on"
         root_effects = (

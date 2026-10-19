@@ -30,6 +30,7 @@ License
 #include "syncTools.H"
 #include "unitConversion.H"
 #include <limits>
+#include <cmath>
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -141,13 +142,36 @@ void Foam::fv::actuatorLineElement::read()
         (
             rotationalAugmentationModel_ != "DuSelig"
             and rotationalAugmentationModel_ != "Lindenburg"
+            and rotationalAugmentationModel_ != "ChaviaropoulosHansen"
         )
         {
             FatalIOErrorInFunction(raDict)
                 << "Unknown rotationalAugmentation model '"
                 << rotationalAugmentationModel_
-                << "'; registered models are DuSelig and Lindenburg"
+                << "'; registered models are DuSelig, Lindenburg and "
+                << "ChaviaropoulosHansen"
                 << exit(FatalIOError);
+        }
+
+        if (rotationalAugmentationModel_ == "ChaviaropoulosHansen")
+        {
+            chA_ = raDict.lookupOrDefault<scalar>("a", 2.2);
+            chH_ = raDict.lookupOrDefault<scalar>("h", 1.0);
+            chN_ = raDict.lookupOrDefault<scalar>("n", 4.0);
+            localTwist_ = dict_.get<scalar>("localTwist");
+            if
+            (
+                not std::isfinite(chA_) or chA_ < 0.0
+                or not std::isfinite(chH_) or chH_ <= 0.0
+                or not std::isfinite(chN_) or chN_ < 0.0
+                or not std::isfinite(localTwist_) or mag(localTwist_) > 90.0
+            )
+            {
+                FatalIOErrorInFunction(raDict)
+                    << "ChaviaropoulosHansen requires finite a >= 0, h > 0, "
+                    << "n >= 0 and localTwist in [-90, 90] degrees"
+                    << exit(FatalIOError);
+            }
         }
 
         if
@@ -314,6 +338,12 @@ void Foam::fv::actuatorLineElement::correctRotationalAugmentation()
         return;
     }
 
+    if (rotationalAugmentationModel_ == "ChaviaropoulosHansen")
+    {
+        correctChaviaropoulosHansenRotationalAugmentation();
+        return;
+    }
+
     // Rotationally augmented (3D stall-delayed) blade-load correction.
     //
     // Formulation -- Du & Selig (1998), AIAA-98-0021:
@@ -412,6 +442,33 @@ void Foam::fv::actuatorLineElement::correctRotationalAugmentation()
 
     liftCoefficient_ += fL*(CLp - liftCoefficient_);
     dragCoefficient_ -= fD*(dragCoefficient_ - CD0);
+}
+
+
+void Foam::fv::actuatorLineElement::correctChaviaropoulosHansenRotationalAugmentation()
+{
+    // Original CH baseline, not the calibrated tables: Burgos Tafur et al.,
+    // Acta Mech. Sin. 36:306-319 (2020), DOI 10.1007/s10409-020-00949-0,
+    // pp.307-308 Eqs.(1)-(4): fL = fD = a*(c/r)^h*cos(theta)^n,
+    // a=2.2, h=1, n=4. The source names theta local twist; its passage does
+    // not explicitly resolve pitch. Here theta EXCLUDES collective pitch.
+    // Cl_inv uses the same 2*pi slope and polar alpha0 as Du-Selig, by
+    // explicit model choice. Cd0 is instead polar Cd(alpha=0), NOT the
+    // zero-lift drag used by Du-Selig; the drag increment has a PLUS sign.
+    if (not profileData_.hasZeroLiftReference())
+    {
+        return;
+    }
+
+    const scalar factor = chA_*Foam::pow(chordLength_/radius_, chH_)
+        *Foam::pow(Foam::cos(degToRad(localTwist_)), chN_);
+    const scalar alpha = degToRad(angleOfAttack_);
+    const scalar alpha0 = degToRad(profileData_.zeroLiftAngleOfAttack());
+    const scalar inviscidLift = 2.0*Foam::constant::mathematical::pi*(alpha - alpha0);
+    const scalar zeroAngleDrag = profileData_.dragCoefficient(0.0);
+
+    liftCoefficient_ += factor*(inviscidLift - liftCoefficient_);
+    dragCoefficient_ += factor*(dragCoefficient_ - zeroAngleDrag);
 }
 
 
@@ -860,6 +917,10 @@ Foam::fv::actuatorLineElement::actuatorLineElement
     a_(1.0),
     b_(1.0),
     d_(1.0),
+    chA_(2.2),
+    chH_(1.0),
+    chN_(4.0),
+    localTwist_(0.0),
     radius_(-VGREAT),
     rotorRadius_(-VGREAT),
     profileName_(dict.lookup("profileName")),

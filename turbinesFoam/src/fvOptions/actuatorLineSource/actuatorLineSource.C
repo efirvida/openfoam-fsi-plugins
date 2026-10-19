@@ -357,11 +357,23 @@ void Foam::fv::actuatorLineSource::createElements()
         // dynamicStall); absent block -> the element default applies
         if (coeffs_.found("rotationalAugmentation"))
         {
-            dict.add
+            const dictionary& raDict = coeffs_.subDict("rotationalAugmentation");
+            dict.add("rotationalAugmentation", raDict);
+            if
             (
-                "rotationalAugmentation",
-                coeffs_.subDict("rotationalAugmentation")
-            );
+                raDict.lookupOrDefault<word>("model", "DuSelig")
+             == "ChaviaropoulosHansen"
+            )
+            {
+                // Geometry section pitch includes the collective offset.
+                // Use the same interpolated section angle, removing ONLY
+                // that offset, to retain immutable twist during pitching/FSI.
+                dict.add
+                (
+                    "localTwist",
+                    pitch - raDict.lookupOrDefault<scalar>("pitchOffset", 0.0)
+                );
+            }
         }
         if (haveRadialGeometry)
         {

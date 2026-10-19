@@ -144,7 +144,7 @@ protected:
         //- Switch for applying rotational augmentation
         bool rotationalAugmentationActive_;
 
-        //- Rotational augmentation model name ("DuSelig" or "Lindenburg")
+        //- Rotational augmentation model (DuSelig, Lindenburg, ChaviaropoulosHansen)
         word rotationalAugmentationModel_;
 
         //- Du-Selig constant (paper default 1)
@@ -155,6 +155,12 @@ protected:
 
         //- Du-Selig constant (paper default 1)
         scalar d_;
+
+        //- Chaviaropoulos-Hansen literature constants and local twist (degrees)
+        scalar chA_;
+        scalar chH_;
+        scalar chN_;
+        scalar localTwist_;
 
         //- Local radial station (sentinel when absent)
         scalar radius_;
@@ -285,6 +291,10 @@ protected:
         //  formulation and the f(alpha) derivation live in
         //  actuatorLineElement.C and odd/tasks/phasevi-lindenburg-design.md.
         void correctLindenburgRotationalAugmentation();
+
+        //- CH baseline: Burgos Tafur (2020), pp.307-308 Eqs.(1)-(4).
+        //  Local twist excludes collective pitch; Cd0 is drag at alpha=0.
+        void correctChaviaropoulosHansenRotationalAugmentation();
 
         //- Calculate projection width epsilon
         virtual scalar calcProjectionEpsilon();

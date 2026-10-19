@@ -4,6 +4,28 @@
 
 ### Features
 
+#### Phase VI: selectable Chaviaropoulos–Hansen rotational augmentation (I7)
+
+**Files:** `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineSource.C`,
+`actuatorLineElement/actuatorLineElement.{C,H}`;
+`turbinesFoam/validation/phaseVI/tools/generate_case.py`, `scripts/runPhaseVI.sh`,
+`scripts/checkModelDefinition.py`, `scripts/slurm/variant-run.slurm`,
+`config/model-variants.yaml`, `README.md`;
+`turbinesFoam/tests/test_model_variants.py`, `test_rotational_augmentation_ch.py`;
+`odd/tasks/model-improvements-register.md`.
+
+**Problem:** I7 could not be selected independently for a reproducible A/B arm.
+
+**Fix:** add inactive-by-default `ChaviaropoulosHansen`, explicit literature
+`a=2.2, h=1, n=4` (Burgos Tafur 2020 pp.307–308 Eqs.1–4), and `ch-ra` with its
+own conformance gate. Reuse Du–Selig's fixed 2π inviscid lift and polar zero-lift
+angle; use the positive drag increment relative to polar drag at zero angle.
+Use twist without pitch, recovering it from interpolated geometry via an explicit
+signed pitch offset. Default rendering and Du–Selig arithmetic are unchanged.
+Forward the selector atomically through the runner, refuse legacy `--submit`
+which would drop it, and allow run-local library loading via optional `LIB_DIR`.
+Not yet A/B tested; no jobs submitted and no fitted coefficient introduced.
+
 #### Phase VI: registered correction A/B bench
 
 **Files:** `turbinesFoam/validation/phaseVI/config/model-variants.yaml`,
