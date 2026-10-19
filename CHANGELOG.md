@@ -4,6 +4,23 @@
 
 ### Features
 
+#### UAE6 archive extraction: enriched S 5-8 m/s and H tables (incl. 5 m/s probes)
+
+**Files:**
+- `turbinesFoam/validation/phaseVI/scripts/extractUAE6Reference.py`, `diagnoseElementResiduals.py`, `compareInflowAngle.py`
+- `turbinesFoam/validation/phaseVI/data/experiment/uae6-archive/` (S spanwise enriched; new H performance/spanwise/probes; inventory, provenance, catalog)
+- `turbinesFoam/tests/test_phasevi_uae6_reference.py`, `test_element_residuals.py`, `test_inflow_angle_reference.py`
+- `turbinesFoam/validation/phaseVI/README.md`
+
+**Problem:** the dimensional tools (`compareSectionLoads.py`, `diagnoseElementResiduals.py`) need `cth`, `ctq`
+and `qnorm_pa`, which existed only for S 7 m/s, so S 5/6/8 m/s could not be judged in force units; H had no
+5 m/s reference and no probe flow-angle table.
+
+**Fix:** the extractor recomputes `cth/ctq/qnorm_pa` from raw frames for S 5-8 m/s and writes archive-derived
+H tables (5-25 m/s) plus the five-hole-probe local/spanwise flow angles; `--cross-check` reproduces the
+committed 7 m/s enriched rows exactly; `diagnoseElementResiduals.py` and `compareInflowAngle.py` accept
+`--experiment-dir` (default unchanged).
+
 #### Validation tools: drift gate in summarizeBands, VTUN correction, launcher END_REVS/POLAR
 
 **Files:**

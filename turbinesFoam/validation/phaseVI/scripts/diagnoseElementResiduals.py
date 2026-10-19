@@ -5,6 +5,7 @@
 Run from validation/phaseVI:
     python3 scripts/diagnoseElementResiduals.py [--alm-dir runs/alm-U7-coarse-d1-pdrag]
         [--revolutions DISCARD END] [--allow-drift] [--allow-short-window]
+        [--experiment-dir data/experiment/uae6-archive]
 
 Uses compareSectionLoads' convergence gate and configured revolution window.
 Blocks: (a) station interpolation, (b) one-step Glauert lag when the appended
@@ -169,6 +170,9 @@ def rebuilt_cn(cl, cd, alpha):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--alm-dir', type=Path, default=Path('runs/alm-U7-coarse-d1-pdrag'))
+    parser.add_argument('--experiment-dir', type=Path,
+                        default=Path(__file__).resolve().parents[1] / 'data/experiment',
+                        help='reference CSV directory (default: phaseVI/data/experiment)')
     parser.add_argument('--speed', type=float, default=7.0)
     parser.add_argument('--sequence', choices=('H', 'S'), default='H')
     parser.add_argument('--revolutions', nargs=2, type=int, metavar=('DISCARD', 'END'),
@@ -183,8 +187,8 @@ def main(argv=None):
                                         revolutions=args.revolutions,
                                         allow_drift=args.allow_drift,
                                         allow_short_window=args.allow_short_window)
-    experiment = read_experiment(root / 'data/experiment', args.speed, args.sequence)
-    rho = read_density(root / 'data/experiment', args.speed, args.sequence)
+    experiment = read_experiment(args.experiment_dir, args.speed, args.sequence)
+    rho = read_density(args.experiment_dir, args.speed, args.sequence)
     cfg = comparison.load_config(comparison.DEFAULT_CONFIG)
     nu = float(cfg['inflow']['kinematic_viscosity'])
     blades = int(cfg['turbine']['n_blades'])

@@ -125,6 +125,29 @@ Consequence: the workbook is **corroborated**, not merely trusted, for both
 sequences. And the earlier objection that Sequence H had no raw backup is gone —
 H is now present with its full 163-point inventory.
 
+## Extracted S/H references
+
+Reproduce the committed archive tables with:
+
+```sh
+python3 scripts/extractUAE6Reference.py --sequences s h --archive-only
+python3 scripts/extractUAE6Reference.py --sequences s h --archive-only --check
+python3 scripts/extractUAE6Reference.py --cross-check
+```
+
+Both sequences cover 5–25 m/s, one canonical 0°-yaw point per speed.
+The spanwise tables now include raw-frame `CTH`/`CTQ`/`QNORM` means
+(`cth`, `ctq`, `qnorm_pa`), so dimensional S 5/6/8 and H 5 comparisons no longer
+lack normalization pressure. H additionally has `sequence_H_probes.csv` with
+measured local and spanwise flow angles at **34/51/67/84/91 %** span. S has
+no probes; its 30/47/63/80/95 % rows are pressure-integration stations.
+
+The combined inventory has 265 hash-pinned fixed-yaw entries (104 S + 161 H),
+with two sweeps per sequence explicitly skipped. See [PROVENANCE.md](PROVENANCE.md)
+for exact channel definitions and the zero-difference S7/H7 enrichment check.
+`compareInflowAngle.py` still compares a force-direction proxy, **not probes**;
+probe-angle interpretation for T13 remains separate from this extraction.
+
 ## Which sequence should the ALM validation use?
 
 The committed case is an upwind, rigid rotor, 0° cone, 3° tip pitch, rotating at

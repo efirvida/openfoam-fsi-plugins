@@ -21,6 +21,11 @@ the experiment let the same amount of air through each annulus. It is also the
 angle whose error would show up as a correct chord-frame coefficient beside a
 wrong plane-frame one.
 
+This is a force-direction proxy, NOT the five-hole-probe local flow angle.
+The separately extracted sequence_H_probes.csv retains the measured probe
+channels at their own stations; no conversion to rotor-plane phi is assumed.
+--experiment-dir selects the reference CSV directory (default data/experiment).
+
 Read-only; no cluster cost.
 
 Usage:  python3 scripts/compareInflowAngle.py --alm-dir runs/alm-U7-coarse-r2 [--sequence S]
@@ -79,6 +84,8 @@ def interpolate(profile, x, col):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--alm-dir", default="runs/alm-U7-coarse-r2")
+    ap.add_argument("--experiment-dir", default="data/experiment",
+                    help="reference CSV directory (default: data/experiment)")
     ap.add_argument("--speed", type=float, default=7.0)
     ap.add_argument("--sequence", choices=("H", "S"), default="H")
     ap.add_argument("--revolutions", nargs=2, type=float, metavar=("DISCARD", "END"),
@@ -92,7 +99,7 @@ def main():
     )
 
     exp = {}
-    for row in read_table(f"data/experiment/sequence_{a.sequence}_spanwise.csv"):
+    for row in read_table(os.path.join(a.experiment_dir, f"sequence_{a.sequence}_spanwise.csv")):
         if abs(float(row["wind_speed_m_s"]) - a.speed) < 1e-9:
             cth, ctq = float(row["cth"]), float(row["ctq"])
             exp[round(float(row["r_over_R"]), 4)] = math.degrees(math.atan2(ctq, cth))

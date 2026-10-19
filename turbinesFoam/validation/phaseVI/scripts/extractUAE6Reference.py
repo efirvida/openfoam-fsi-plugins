@@ -34,6 +34,14 @@ Usage:
     python3 scripts/extractUAE6Reference.py                  # Sequence S
     python3 scripts/extractUAE6Reference.py --sequences s h  # S and H
     python3 scripts/extractUAE6Reference.py --check          # verify, never write
+    python3 scripts/extractUAE6Reference.py --sequences s h --archive-only
+    python3 scripts/extractUAE6Reference.py --sequences s h --archive-only --check
+    python3 scripts/extractUAE6Reference.py --cross-check    # S7/H7 enriched agreement
+
+--archive-only leaves the separate workbook tables unchanged. The combined
+committed inventory is reproduced with --sequences s h; the sequence default
+remains s. H probe local/spanwise angles are emitted separately at their own
+stations, without treating them as rotor-plane inflow angles.
 """
 
 from __future__ import annotations
@@ -90,7 +98,7 @@ POINT_COLUMNS = (
     "err", "VTUN", "YAW", "RPM", "ROTPOW", "LSSTQCOR", "EAEROTH",
     "WTBARO", "WTATEMP",
 ) + tuple(
-    f"{kind}{prefix}" for prefix, _ in STATIONS for kind in ("CN", "CT", "CM")
+    f"{kind}{prefix}" for prefix, _ in STATIONS for kind in ("CN", "CT", "CM", "CTH", "CTQ", "QNORM")
 )
 
 PERFORMANCE_COLUMNS = (
@@ -100,7 +108,16 @@ PERFORMANCE_COLUMNS = (
 )
 SPANWISE_COLUMNS = (
     "file_name", "sequence", "wind_speed_m_s", "r_over_R", "cn", "ct", "cm",
+    "cth", "ctq", "qnorm_pa",
 )
+# channels.csv: 5HPxxA = local flow angle, 5HPxxF = spanwise flow angle.
+# These are probe stations, NOT the five blade-pressure stations. Do not
+# relabel either as rotor-plane phi without an independently defined transform.
+PROBE_STATIONS = (("34", 0.34), ("51", 0.51), ("67", 0.67), ("84", 0.84), ("91", 0.91))
+PROBE_CHANNELS = tuple(f"5HP{prefix}{kind}" for prefix, _ in PROBE_STATIONS
+                       for kind in ("A", "F"))
+PROBE_COLUMNS = ("file_name", "sequence", "wind_speed_m_s", "r_over_R",
+                 "local_flow_angle_deg", "spanwise_flow_angle_deg")
 INVENTORY_COLUMNS = (
     "stem", "sequence", "wind_speed_m_s", "yaw_deg", "repetition", "n_frames",
     "err_flagged_frames", "eng_bytes", "eng_sha256", "hd1_sha256", "role",
@@ -174,13 +191,14 @@ def read_point(stem: Stem, with_hashes: bool) -> tuple[dict, list[dict], dict]:
     `err != 128` frames are masked out before any average: the acquisition system
     flags them as unusable, and 5.5 % of the archive's frames carry a flag.
     """
+    channels = POINT_COLUMNS + (PROBE_CHANNELS if stem.sequence == "h" else ())
     table = pq.read_table(
         str(ARCHIVE_DIR / "parquet" / f"{stem.stem}.parquet"),
-        columns=list(POINT_COLUMNS),
+        columns=list(channels),
     )
     frames = {
         name: table.column(name).to_numpy(zero_copy_only=False)
-        for name in POINT_COLUMNS
+        for name in channels
     }
     keep = frames["err"] == ERR_BYTE_OK
     flagged = int((~keep).sum())
@@ -228,6 +246,8 @@ def read_point(stem: Stem, with_hashes: bool) -> tuple[dict, list[dict], dict]:
         "wtatemp_degc": air_temp,
         "rho_kg_m3": baro / (R_DRY_AIR * (air_temp + KELVIN)),
     }
+    if stem.sequence == "h":
+        row.update({name: mean(name) for name in PROBE_CHANNELS})
     spanwise = [
         {
             "file_name": stem.name,
@@ -237,6 +257,9 @@ def read_point(stem: Stem, with_hashes: bool) -> tuple[dict, list[dict], dict]:
             "cn": mean(f"CN{prefix}"),
             "ct": mean(f"CT{prefix}"),
             "cm": mean(f"CM{prefix}"),
+            "cth": mean(f"CTH{prefix}"),
+            "ctq": mean(f"CTQ{prefix}"),
+            "qnorm_pa": mean(f"QNORM{prefix}"),
         }
         for prefix, fraction in STATIONS
     ]
@@ -428,7 +451,8 @@ def build_committed_enrichment() -> tuple[dict[Path, str], list[str]]:
     return rendered, warnings
 
 
-def build(sequences: list[str], with_hashes: bool) -> tuple[dict[Path, str], list[str]]:
+def build(sequences: list[str], with_hashes: bool,
+          archive_only: bool = False) -> tuple[dict[Path, str], list[str]]:
     """Render the selected tables plus the inventory; return the skip notes too."""
     rendered: dict[Path, str] = {}
     inventory: list[dict] = []
@@ -478,13 +502,40 @@ def build(sequences: list[str], with_hashes: bool) -> tuple[dict[Path, str], lis
         rendered[OUT_DIR / f"sequence_{sequence.upper()}_spanwise.csv"] = (
             write_table(SPANWISE_COLUMNS, spanwise_rows)
         )
+        if sequence == "h":
+            probes = [
+                {"file_name": row["file_name"], "sequence": "H",
+                 "wind_speed_m_s": row["wind_speed_m_s"], "r_over_R": fraction,
+                 "local_flow_angle_deg": row[f"5HP{prefix}A"],
+                 "spanwise_flow_angle_deg": row[f"5HP{prefix}F"]}
+                for row in performance for prefix, fraction in PROBE_STATIONS
+            ]
+            rendered[OUT_DIR / "sequence_H_probes.csv"] = write_table(PROBE_COLUMNS, probes)
     rendered[OUT_DIR / "INVENTORY.csv"] = write_table(
         INVENTORY_COLUMNS, sorted(inventory, key=_inventory_sort_key)
     )
-    enriched, enrichment_warnings = build_committed_enrichment()
-    rendered.update(enriched)
-    notes += enrichment_warnings
+    if not archive_only:
+        enriched, enrichment_warnings = build_committed_enrichment()
+        rendered.update(enriched)
+        notes += enrichment_warnings
     return rendered, notes
+
+
+def crosscheck() -> int:
+    """Report relative differences against the enriched delivered 7 m/s rows."""
+    clean = True
+    for sequence in COMMITTED_SEQUENCES:
+        name = f"sequence_{sequence}_spanwise.csv"
+        actual = {_spanwise_key(row): row for row in read_committed_rows(OUT_DIR / name)}
+        expected = [row for row in read_committed_rows(COMMITTED_DIR / name)
+                    if float(row["wind_speed_m_s"]) == 7.0]
+        for column in ENRICHED_COLUMNS["spanwise"]:
+            differences = [abs(float(actual[_spanwise_key(row)][column]) - float(row[column]))
+                           / abs(float(row[column])) for row in expected]
+            maximum = max(differences)
+            print(f"{sequence} 7 m/s {column}: max relative difference = {maximum:.10g}")
+            clean &= maximum <= 1e-6
+    return 0 if clean else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -502,13 +553,25 @@ def main(argv: list[str] | None = None) -> int:
         help="compare the committed tables against a fresh extraction and exit "
              "non-zero on any drift; never writes",
     )
+    parser.add_argument(
+        "--archive-only", action="store_true",
+        help="only render archive tables; do not enrich the separate workbook tables",
+    )
+    parser.add_argument(
+        "--cross-check", action="store_true",
+        help="read-only: report S/H 7 m/s cth/ctq/qnorm maximum relative differences "
+             "against the enriched workbook tables (exit 1 above 1e-6)",
+    )
     args = parser.parse_args(argv)
+    if args.cross_check:
+        return crosscheck()
     sequences = [value.strip().lower() for value in args.sequences]
     if not ARCHIVE_DIR.is_dir():
         print(f"archive not found: {ARCHIVE_DIR}", file=sys.stderr)
         return 2
     try:
-        rendered, notes = build(sequences, with_hashes=not args.no_hash)
+        rendered, notes = build(sequences, with_hashes=not args.no_hash,
+                                archive_only=args.archive_only)
     except (FileNotFoundError, ValueError) as exc:
         print(f"extraction error: {exc}", file=sys.stderr)
         return 2

@@ -47,7 +47,7 @@ PERFORMANCE_COLUMNS = [
     "wtbaro_pa", "wtatemp_degc", "rho_kg_m3",
 ]
 SPANWISE_COLUMNS = ["file_name", "sequence", "wind_speed_m_s", "r_over_R",
-                    "cn", "ct", "cm"]
+                    "cn", "ct", "cm", "cth", "ctq", "qnorm_pa"]
 STATIONS = [0.3, 0.47, 0.63, 0.8, 0.95]
 
 
@@ -97,12 +97,84 @@ def test_stem_grammar_rejects_non_fixed_yaw_points(stem):
     assert extract.parse_stem(stem) is None
 
 
-def test_committed_reference_covers_the_0deg_power_curve():
-    performance = read_rows(REFERENCE_DIR / "sequence_S_performance.csv")
+@pytest.mark.parametrize("sequence", ["S", "H"])
+def test_archive_frame_enrichment(tmp_path, monkeypatch, sequence):
+    """All added channels use the same good-frame mask, not header means."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    archive = tmp_path / "raw"
+    (archive / "parquet").mkdir(parents=True)
+    name = f"uae6.z07.00.{sequence.lower()}0500000"
+    columns = {key: [2.0, 4.0, 999.0] for key in extract.POINT_COLUMNS}
+    columns.update(err=[128, 128, 0], YAW=[0.0, 0.0, 90.0])
+    for prefix, _ in extract.STATIONS:
+        for kind, value in (("CTH", 0.2), ("CTQ", 0.03), ("QNORM", 100.0)):
+            columns[f"{kind}{prefix}"] = [value, 3 * value, 999.0]
+    if sequence == "H":
+        for prefix in ("34", "51", "67", "84", "91"):
+            for kind in ("A", "F"):
+                columns[f"5HP{prefix}{kind}"] = [1.0, 3.0, 999.0]
+    pq.write_table(pa.table(columns), archive / "parquet" / f"{name}.parquet")
+    (archive / f"{name}.eng").write_bytes(b"synthetic")
+    monkeypatch.setattr(extract, "ARCHIVE_DIR", archive)
+    before = {p: p.read_bytes() for p in archive.rglob("*") if p.is_file()}
+    performance, stations, digest = extract.read_point(extract.parse_stem(name), False)
+    assert performance["rpm"] == 3.0  # existing field preserved
+    assert digest["err_flagged_frames"] == 1
+    for row in stations:
+        assert row["cn"] == 3.0
+        assert row["cth"] == pytest.approx(0.4)
+        assert row["ctq"] == pytest.approx(0.06)
+        assert row["qnorm_pa"] == 200.0
+    if sequence == "H":
+        for channel in extract.PROBE_CHANNELS:
+            assert performance[channel] == 2.0
+    assert {p: p.read_bytes() for p in archive.rglob("*") if p.is_file()} == before
+    (archive / f"{name}.hd1").write_text("synthetic header")
+    out = tmp_path / "out"
+    monkeypatch.setattr(extract, "ROOT", tmp_path)
+    monkeypatch.setattr(extract, "OUT_DIR", out)
+    # This mode must not even inspect or render the separate workbook tables.
+    monkeypatch.setattr(extract, "build_committed_enrichment",
+                        lambda: pytest.fail("archive-only touched workbook tables"))
+    assert extract.main(["--sequences", sequence, "--no-hash", "--archive-only"]) == 0
+    if sequence == "H":
+        probes = read_rows(out / "sequence_H_probes.csv")
+        assert len(probes) == 5
+        assert [float(row["r_over_R"]) for row in probes] == [0.34, 0.51, 0.67, 0.84, 0.91]
+        assert all(float(row["local_flow_angle_deg"]) == 2 for row in probes)
+        assert all(float(row["spanwise_flow_angle_deg"]) == 2 for row in probes)
+    written = {p: p.read_bytes() for p in out.iterdir()}
+    assert extract.main(["--sequences", sequence, "--no-hash", "--archive-only", "--check"]) == 0
+    assert {p: p.read_bytes() for p in out.iterdir()} == written
+    target = out / f"sequence_{sequence}_spanwise.csv"
+    target.write_text(target.read_text().replace("200", "201"))
+    stale = {p: p.read_bytes() for p in out.iterdir()}
+    assert extract.main(["--sequences", sequence, "--no-hash", "--archive-only", "--check"]) == 1
+    assert {p: p.read_bytes() for p in out.iterdir()} == stale
+
+
+@pytest.mark.parametrize("sequence", ["S", "H"])
+def test_enriched_seven_ms_crosscheck(sequence):
+    derived = read_rows(REFERENCE_DIR / f"sequence_{sequence}_spanwise.csv")
+    expected = read_rows(PACKAGE / "data/experiment" / f"sequence_{sequence}_spanwise.csv")
+    for row in expected:
+        if float(row["wind_speed_m_s"]) != 7:
+            continue
+        match = next(r for r in derived if r["file_name"] == row["file_name"]
+                     and float(r["r_over_R"]) == float(row["r_over_R"]))
+        for key in ("cth", "ctq", "qnorm_pa"):
+            assert float(match[key]) == pytest.approx(float(row[key]), rel=1e-9)
+
+
+@pytest.mark.parametrize("sequence", ["S", "H"])
+def test_committed_reference_covers_the_0deg_power_curve(sequence):
+    performance = read_rows(REFERENCE_DIR / f"sequence_{sequence}_performance.csv")
     assert list(performance[0]) == PERFORMANCE_COLUMNS
     assert len(performance) == 21
     assert sorted(int(row["wind_speed_m_s"]) for row in performance) == list(range(5, 26))
-    assert {row["sequence"] for row in performance} == {"S"}
+    assert {row["sequence"] for row in performance} == {sequence}
     for row in performance:
         # The canonical rows are the 0 deg points by construction.
         assert abs(float(row["yaw_deg"])) <= extract.YAW_ABS_TOLERANCE_DEG
@@ -110,17 +182,30 @@ def test_committed_reference_covers_the_0deg_power_curve():
         assert float(row["tsr"]) > 0.0
         assert float(row["rho_kg_m3"]) == pytest.approx(1.2, abs=0.15)
 
-    spanwise = read_rows(REFERENCE_DIR / "sequence_S_spanwise.csv")
+    spanwise = read_rows(REFERENCE_DIR / f"sequence_{sequence}_spanwise.csv")
     assert list(spanwise[0]) == SPANWISE_COLUMNS
     assert len(spanwise) == 21 * len(STATIONS)
     for row in spanwise:
-        assert row["sequence"] == "S"
+        assert row["sequence"] == sequence
+        assert float(row["qnorm_pa"]) > 0
+        assert all(row[key] for key in ("cth", "ctq"))
     per_speed = {}
     for row in spanwise:
         per_speed.setdefault(row["file_name"], []).append(float(row["r_over_R"]))
     assert len(per_speed) == 21
     for stations in per_speed.values():
         assert sorted(stations) == STATIONS
+
+
+def test_crosscheck_cli_is_read_only(capsys):
+    paths = list(REFERENCE_DIR.glob("*.csv"))
+    before = {p: p.read_bytes() for p in paths}
+    assert extract.main(["--cross-check"]) == 0
+    expected = "".join(f"{sequence} 7 m/s {column}: max relative difference = 0\n"
+                       for sequence in ("H", "S")
+                       for column in ("cth", "ctq", "qnorm_pa"))
+    assert capsys.readouterr() == (expected, "")
+    assert {p: p.read_bytes() for p in paths} == before
 
 
 def test_reference_reproduces_the_workbook_rows():
@@ -205,6 +290,7 @@ def test_inventory_accounts_for_every_sequence_s_archive_file():
     assert skipped == ["uae6.z18.00.s07ysu00", "uae6.z18.00.s10ysu00"]
 
     inventory = read_rows(REFERENCE_DIR / "INVENTORY.csv")
+    inventory = [row for row in inventory if row["sequence"] == "S"]
     assert len(inventory) + len(skipped) == len(stems)
     roles: dict[str, int] = {}
     for row in inventory:

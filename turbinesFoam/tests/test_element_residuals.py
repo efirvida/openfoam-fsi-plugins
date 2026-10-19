@@ -113,6 +113,35 @@ def test_element_csv_appends_angles_without_changing_existing_columns():
                       "end_effect_phi_deg,inflow_ref_angle_deg")
 
 
+@pytest.mark.parametrize("directory", [None, "reference-fixture"])
+def test_experiment_directory_pass_through(monkeypatch, directory):
+    import diagnoseElementResiduals as diagnostic
+
+    monkeypatch.setattr(diagnostic, "converged_window", lambda *a, **k: (0, 1, {}))
+    seen = []
+
+    class Stop(Exception):
+        pass
+
+    def read(directory, speed, sequence):
+        seen.append((Path(directory), speed, sequence))
+        return {}
+
+    def density(directory, speed, sequence):
+        seen.append((Path(directory), speed, sequence))
+        raise Stop
+
+    monkeypatch.setattr(diagnostic, "read_experiment", read)
+    monkeypatch.setattr(diagnostic, "read_density", density)
+    argv = ["--sequence", "S", "--speed", "6"]
+    if directory is not None:
+        argv += ["--experiment-dir", directory]
+    with pytest.raises(Stop):
+        diagnostic.main(argv)
+    expected = Path(directory) if directory else SCRIPTS.parent / "data/experiment"
+    assert seen == [(expected, 6.0, "S")] * 2
+
+
 def test_normalisation_ratio():
     assert normalisation_ratio(104.0, 1.3, 10.0) == pytest.approx(1.6)
 

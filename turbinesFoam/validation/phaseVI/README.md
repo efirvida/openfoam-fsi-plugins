@@ -624,6 +624,35 @@ section-load comparison. The appended `c_ref_n_plane`/`c_ref_t_plane` columns
 what produces the rotor thrust and torque, so the **power** comparison is read
 from the plane columns. The archive-only plane channels (`CTH`/`CTQ`/`QNORM`)
 are joined onto the committed workbook tables by `extractUAE6Reference.py`.
+The extractor also writes enriched raw-archive S and H tables at every speed
+5–25 m/s (including S 5/6/8 and H 5), plus H's measured five-hole-probe angles:
+
+```sh
+python3 scripts/extractUAE6Reference.py --sequences s h --archive-only
+python3 scripts/extractUAE6Reference.py --sequences s h --archive-only --check
+python3 scripts/extractUAE6Reference.py --cross-check
+python3 scripts/compareSectionLoads.py --alm-dir runs/alm-U7-coarse-seqS-v12 \
+    --sequence S --experiment-dir data/experiment/uae6-archive
+```
+
+`--archive-only` avoids changing the separate workbook tables; omitting it keeps
+the previous enrichment behavior. Select both sequences when reproducing the
+combined hash inventory. `--check` never writes; `--cross-check` prints maximum
+relative differences for `cth`/`ctq`/`qnorm_pa` at S7 and H7 (all six are zero).
+The S7 force-times-arm output is identical between reference directories; the
+frame residuals differ because archive `cn`/`ct` retain more digits than the
+workbook's four decimals (including `R_exp` 0.870 versus 0.871 at r/R 0.63).
+
+`diagnoseElementResiduals.py` and `compareInflowAngle.py` also accept
+`--experiment-dir`, with their previous defaults unchanged. The latter reads
+`cth`/`ctq`: it compares a **force-direction proxy, not measured probe inflow**.
+`sequence_H_probes.csv` retains the archive-described local and spanwise flow
+angles at 34/51/67/84/91 % span, without an invented rotor-plane transform.
+Do not use the inflow tool's historical H7 uninduced-angle column as an H5
+kinematic prediction. Probe interpretation and H5 run/configuration are T13,
+not part of this extraction. Details: [archive provenance](data/experiment/uae6-archive/PROVENANCE.md).
+
+
 For the mesh-backed `asm-mesh` model the surface station table carries only the
 plane decomposition, so its chord columns are a declared open defect while its
 plane columns are exact.

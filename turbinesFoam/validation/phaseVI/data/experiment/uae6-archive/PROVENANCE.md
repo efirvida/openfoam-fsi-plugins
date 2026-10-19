@@ -4,10 +4,10 @@
 
 | Field | Value |
 |---|---|
-| Dataset | NREL Unsteady Aerodynamics Experiment Phase VI (UAE6), **Sequence S** |
+| Dataset | NREL Unsteady Aerodynamics Experiment Phase VI (UAE6), **Sequences S and H** |
 | Definition | NREL/TP-500-29955, local copy `turbinesFoam/articles/29955.pdf` |
 | Definition sha256 | `822ee980e97780599ad4ec1dc8b4cc8ad41131b0cbbdffa19999d571f6ce4958` |
-| Raw archive | `turbinesFoam/articles/uae6/` — `<stem>.hd1` + `<stem>.eng`, 106 Sequence S test points |
+| Raw archive | `turbinesFoam/articles/uae6/` — `<stem>.hd1` + `<stem>.eng`, 106 Sequence S and 163 Sequence H test points |
 | Converted | `turbinesFoam/articles/uae6/parquet/` (produced by `eng2parquet.py`, the only writer) |
 | Channel table | `turbinesFoam/articles/uae6/channels.csv` — 285 channels |
 | Extract date | 2026-10-07 |
@@ -23,10 +23,18 @@ and no archive binary is redistributed, matching the rule already recorded in
 decodes the file names, masks unusable frames and writes the tables.
 
 ```sh
-python3 scripts/extractUAE6Reference.py                 # Sequence S (default)
-python3 scripts/extractUAE6Reference.py --sequences s h # S and H
-python3 scripts/extractUAE6Reference.py --check         # verify only, never writes
+python3 scripts/extractUAE6Reference.py --sequences s h --archive-only
+python3 scripts/extractUAE6Reference.py --sequences s h --archive-only --check
+python3 scripts/extractUAE6Reference.py --cross-check
 ```
+
+`--archive-only` leaves the separate workbook tables untouched. Omitting it
+preserves the existing workbook-enrichment step; the sequence default remains S.
+`INVENTORY.csv` covers the sequences selected in that invocation: use **s h** to
+reproduce this combined committed inventory (265 fixed-yaw points; four sweeps
+reported and skipped). `--check` recomputes and compares without writing.
+`--cross-check` needs only the derived CSVs, not the raw archive, and reports the
+maximum relative difference at 7 m/s (exit 1 above 1e-6).
 
 Requires `numpy` and `pyarrow`. It exits 2 with a message when the archive is
 absent, when no file matches the requested sequence, or when a file name
@@ -109,20 +117,74 @@ committed in `data/experiment/`, which comes from a different encoding (the WDH
 | `yaw_token` | `0000` | `0000` | exact |
 | `repetition` | `0` | `0` | exact |
 
-Spanwise `cn`/`ct`/`cm` at the five stations (`s0700000`): **identical** to the
-workbook to every printed digit.
+Spanwise `cn`/`ct`/`cm` at the five stations (`s0700000`) agree at the
+workbook's four-decimal precision; the archive retains more digits. They are
+not byte-identical. In the S7 `compareSectionLoads` checks, the entire dimensional
+force-times-arm table is identical, but the rotation residuals and one displayed
+resultant differ: at r/R 0.63, `R_exp` rounds to 0.870 (workbook) versus 0.871
+(archive). The two S7 `diagnoseElementResiduals` invocations also succeed but
+are not byte-identical: e.g. the r/R 0.30 normalised residual is +3.464 %
+(workbook) versus +3.469 % (archive), from the original four-decimal `cn`.
+The tiny density recomputation difference can also change the last displayed
+`q_sim` digit. Do not round the raw recomputation to conceal these distinctions.
 
 `h0700000` was crossed the same way when the H sequence was catalogued
 (5.9458 kW / 789.8572 Nm / 1132.0692 N, `cn` at 30 % span 0.8139), which is why
 Sequence H is a usable confirmation later.
+
+## Enriched loads and H probe channels (T14)
+
+The existing enrichment producer was introduced in commit `5c9bfd4`
+(`ENRICHED_CHANNELS` / `_point_enrichment_means` in the extractor). Archive
+spanwise output now uses the same channels, good-frame mask and float64
+arithmetic mean directly in `read_point`, at every extracted speed, including
+S 5/6/7/8 and H 5 m/s. No load coefficient or pressure is inferred.
+
+| CSV column | Raw channel (`xx` = 30/47/63/80/95) | Archive description / units |
+|---|---|---|
+| `cth` | `CTHxx` | Thrust coefficient at xx% span, dimensionless |
+| `ctq` | `CTQxx` | Torque coefficient at xx% span, dimensionless |
+| `qnorm_pa` | `QNORMxx` | Normalization factor at xx% span, Pascal |
+
+`sequence_H_probes.csv` separately retains `5HPxxA` ("5 hole probe xx% local
+flow angle") and `5HPxxF` ("5 hole probe xx% spanwise flow angle"), both in degrees,
+with xx = **34/51/67/84/91**, as described by the archive's `channels.csv`.
+These are not the blade-pressure stations. The same canonical-file selection
+and masked float64 means apply. No probe table is emitted for probe-free S.
+
+**Important for T13:** `compareInflowAngle.py` reads only `cth`/`ctq` from the
+spanwise table. It compares a **force-direction proxy** `atan2(CTQ, CTH)`, not
+probe data. It now accepts `--experiment-dir`, but this does not turn the proxy
+into a measured probe inflow angle. A rotor-plane transformation of the probe
+local flow angle still needs a sourced geometry/convention definition; none is
+invented here. Its historical uninduced-angle column also assumes H7 kinematics,
+so it must not be used as an H5 kinematic prediction without a separate change.
+
+Read-only acceptance check (`python3 scripts/extractUAE6Reference.py --cross-check`):
+
+```text
+H 7 m/s cth: max relative difference = 0
+H 7 m/s ctq: max relative difference = 0
+H 7 m/s qnorm_pa: max relative difference = 0
+S 7 m/s cth: max relative difference = 0
+S 7 m/s ctq: max relative difference = 0
+S 7 m/s qnorm_pa: max relative difference = 0
+```
+
+These appended workbook columns already came from masked raw-frame means, not
+single-precision header sums: exact agreement is expected. The single-precision
+caveat concerns the original workbook statistics, not these enriched columns.
 
 ## Files and units
 
 | File | Content | Units |
 |---|---|---|
 | `sequence_S_performance.csv` | 21 canonical Sequence S rows | as `data/experiment/PROVENANCE.md` |
-| `sequence_S_spanwise.csv` | 21 rows × 5 stations | `r_over_R` fraction, `cn`/`ct`/`cm` non-dimensional |
-| `INVENTORY.csv` | one row per Sequence S archive file | see below |
+| `sequence_S_spanwise.csv` | 21 rows × 5 stations | `r_over_R` fraction, `cn`/`ct`/`cm`/`cth`/`ctq` dimensionless, `qnorm_pa` Pa |
+| `sequence_H_performance.csv` | 21 canonical H rows, 5–25 m/s | same schema/units as S, including `rho_kg_m3` |
+| `sequence_H_spanwise.csv` | 21 × 5 blade-pressure stations | same enriched schema/units as S |
+| `sequence_H_probes.csv` | 21 × 5 probe stations | `r_over_R` fraction; `local_flow_angle_deg` and `spanwise_flow_angle_deg` in degrees |
+| `INVENTORY.csv` | one row per fixed-yaw S/H archive file | see below |
 
 `INVENTORY.csv` columns: `stem` (the archive file name, including its
 `uae6.<config>.00.` prefix), `sequence`, `wind_speed_m_s`, `yaw_deg` (decoded
