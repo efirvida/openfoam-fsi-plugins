@@ -75,6 +75,23 @@ byte-identical. `blade_phasevi.load_stations` / `build` accept a station count o
 
 ### Bug Fixes
 
+#### Phase VI runner: `--restart` silently restarted from 0 and truncated the first segment
+
+**Files:**
+- `turbinesFoam/validation/phaseVI/scripts/runPhaseVI.sh`
+- `turbinesFoam/validation/phaseVI/scripts/slurm/v1-2-{evaluation,lag,run,small-eps}.slurm` (headers)
+- `turbinesFoam/tests/test_phasevi_case.py`
+
+**Problem:** `--restart` rendered `startFrom latestTime`, but `--run` then executed
+`decomposePar -force`, which deletes the `processor*/<time>` directories, so the solver started again
+from 0 and the turbine/element CSV writers reopened `postProcessing/<...>/0/`, truncating the written
+segment. Three P2.3 resubmissions (S 5/6 m/s v1.2 and the R1 level-2 run) lost their state this way.
+A true resume would also write a new `postProcessing/<start time>/` that the analysis tools never read.
+
+**Fix:** `--restart` now refuses a run directory with written state (exit 2, nothing rendered or
+deleted) with an explanation; on a fresh directory it still starts from `startTime`. The v1.2
+launchers no longer claim to be restartable: long runs get a `--time` for their full length.
+
 #### 1. Guard `profileData::interpolate` against a constant table
 
 **Files:**

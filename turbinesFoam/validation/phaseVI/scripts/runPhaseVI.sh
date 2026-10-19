@@ -58,7 +58,8 @@
 # to keep the augmentation/root arms apart).
 #
 # --stage0 caps the run at 0.25 revolutions (spec bound 0.3) for the authorized
-# development queue. --restart resumes from the latest written time (falls back
+# development queue. --restart refuses a run directory with written state (no true
+# resume exists: see the restart block); on a fresh directory it starts from startTime (falls back
 # to startTime when no time has been written yet). --rotational-augmentation
 # on|off overrides config/case.yaml for this render; when the flag is absent the
 # YAML `actuator.rotational_augmentation.active` value governs unchanged.
@@ -424,7 +425,18 @@ if [ "$restart" -eq 1 ]; then
             2>/dev/null | awk -F/ '$NF + 0 > 0 {print; exit}')
     fi
     if [ -n "$written_time" ]; then
-        render_args+=(--start-from latestTime)
+        # A true resume does not exist yet: --run re-decomposes with
+        # `decomposePar -force` (deleting processor*/<time>) and the CSV
+        # writers reopen postProcessing/<...>/<start time>/, truncating the
+        # first segment; a resumed segment would also land in a new
+        # postProcessing/<time>/ the analysis tools do not read. Refuse
+        # untouched rather than silently restarting from 0.
+        echo "ERROR: --restart cannot resume $run_dir: it holds written state" \
+            "(${written_time#"$run_dir"/}); rerunning would restart from 0 and" \
+            "truncate its postProcessing CSVs. Run to the full length in one" \
+            "allocation (raise --time), or remove processor*/ and postProcessing/" \
+            "explicitly to rerun from 0." >&2
+        exit 2
     else
         echo "WARNING: --restart requested but no written time exists; using startTime" >&2
     fi

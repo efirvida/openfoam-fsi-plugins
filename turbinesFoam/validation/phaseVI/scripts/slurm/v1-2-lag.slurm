@@ -14,7 +14,7 @@
 #     DELTA_T      optional, default 0.001 s
 #     sbatch --export=ALL,MODEL=alm,SPEED=5,SEQUENCE=S,LABEL=v12 \
 #            --output=runs/v12-alm-S-U5.out --error=runs/v12-alm-S-U5.err scripts/slurm/v1-2-run.slurm
-# 12 revolutions, 84 tasks, blade dz 0.05 m. Restartable: resubmit the same line to continue.
+# 12 revolutions, 84 tasks, blade dz 0.05 m. NOT restartable: runPhaseVI.sh refuses --restart on written state; give --time for the full length.
 # Do not rebuild libturbinesFoam while a run is queued or running.
 #SBATCH --job-name=phaseVI-v12lag
 #SBATCH --partition=sequana_cpu

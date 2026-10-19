@@ -1724,3 +1724,61 @@ def test_polar_override_still_selects_the_named_file(cfg):
     )
     assert "data/polars/S809_OSU_Re1M_total.dat" in text
     assert "S809_OSU_Re1M_pressure.dat" not in text
+
+
+def test_runner_restart_refuses_instead_of_wiping_written_state(tmp_path):
+    """`--restart` must never silently restart from 0.
+
+    The --run path re-decomposes with `decomposePar -force` (deleting the
+    processor* time directories) and the CSV writers open
+    postProcessing/<...>/<start time>/ again, which truncated the turbine and
+    element CSVs of the first segment (P2.3 session 4: S 5/6 m/s and R1 level 2
+    lost their written state). Until a real resume exists, a run directory with
+    written state is refused untouched; a fresh one still starts from startTime.
+    """
+    sandbox = tmp_path / "sandbox"
+    package = sandbox / "validation" / "phaseVI"
+    package.parent.mkdir(parents=True)
+    shutil.copytree(
+        PACKAGE,
+        package,
+        ignore=shutil.ignore_patterns("runs", "results", "polyMesh", "__pycache__"),
+    )
+    (sandbox / "geometry").symlink_to(TURBINESFOAM / "geometry")
+    environment = package / "scripts" / "check_environment.sh"
+    environment.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    environment.chmod(0o755)
+    mesh = package / "runs" / "mesh-coarse" / "constant" / "polyMesh"
+    mesh.mkdir(parents=True)
+    (mesh / ".keep").write_text("", encoding="utf-8")
+    shim = tmp_path / "bin"
+    shim.mkdir()
+    (shim / "python3").symlink_to(sys.executable)
+    env = {key: value for key, value in os.environ.items() if not key.startswith("SLURM_")}
+    env["PATH"] = str(shim) + os.pathsep + env.get("PATH", "")
+
+    def prepare(*flags):
+        return subprocess.run(
+            ["sh", str(package / "scripts" / "runPhaseVI.sh"),
+             "-m", "alm", "-u", "7", "-mesh", "coarse", "--run-label", "rs", *flags],
+            cwd=package, capture_output=True, text=True, env=env,
+        )
+
+    fresh = prepare("--restart")
+    assert fresh.returncode == 0, fresh.stderr
+    assert "no written time exists; using startTime" in fresh.stderr
+    run_dir = package / "runs" / "alm-U7-coarse-rs"
+    written = run_dir / "processor0" / "10.044"
+    written.mkdir(parents=True)
+    csv = run_dir / "postProcessing" / "turbines" / "0" / "turbine.csv"
+    csv.parent.mkdir(parents=True)
+    csv.write_text("time,cp\n10.044,0.4\n", encoding="utf-8")
+    snapshot = {p: p.read_bytes() for p in run_dir.rglob("*") if p.is_file()}
+
+    refused = prepare("--restart")
+    assert refused.returncode == 2
+    assert "Wrote" not in refused.stdout  # refused before the render
+    assert "--restart cannot resume" in refused.stderr
+    assert "processor0/10.044" in refused.stderr
+    assert written.is_dir()
+    assert {p: p.read_bytes() for p in run_dir.rglob("*") if p.is_file()} == snapshot

@@ -13,7 +13,7 @@
 #     POLAR        optional, default S809_OSU_Re1M_pressure.dat (any other polar is NOT of record)
 #     sbatch --export=ALL,MODEL=alm,SPEED=5,SEQUENCE=S,LABEL=v12 \
 #            --output=runs/v12-alm-S-U5.out --error=runs/v12-alm-S-U5.err scripts/slurm/v1-2-run.slurm
-# 12 revolutions by default, 84 tasks, blade dz 0.05 m. Restartable: resubmit the same line to continue.
+# 12 revolutions by default, 84 tasks, blade dz 0.05 m. NOT restartable: runPhaseVI.sh refuses --restart on written state; give --time for the full length.
 # Do not rebuild libturbinesFoam while a run is queued or running.
 #SBATCH --job-name=phaseVI-v12run
 #SBATCH --partition=sequana_cpu
