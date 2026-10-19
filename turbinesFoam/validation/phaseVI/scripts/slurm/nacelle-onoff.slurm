@@ -9,7 +9,7 @@
 #            --error=runs/nacelle-U7-on.err  scripts/slurm/nacelle-onoff.slurm
 # Same options as the p21 ALM 7 m/s run (coarse level 0, delta t = 0.001 s, 12 revolutions,
 # 84 tasks, blade dz 0.05 m); the only difference between the pair is --nacelle. Runs are
-# alm-U7-coarse-nacoff / alm-U7-coarse-nacon. Restartable: resubmit the same line to continue.
+# alm-U7-coarse-nacoff / alm-U7-coarse-nacon. NOT restartable: runPhaseVI.sh refuses --restart on written state.
 # Do not rebuild libturbinesFoam while a run is queued or running.
 #SBATCH --job-name=phaseVI-nacelle
 #SBATCH --partition=sequana_cpu

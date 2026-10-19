@@ -86,9 +86,11 @@ of aborting the remaining runs. Each run's console output is captured to a
 per-run log under `runs/campaign-logs/<job>.<task>.<run>.log` (the solver's own
 `log.decomposePar` / `log.pimpleFoam` stay in the run directory). If any run
 failed, the task prints `Array task <id> summary: <n>/<m> run(s) failed: ...`
-and exits **1**; otherwise it exits 0. A re-submission of the same array is
-safe: each run re-renders and `--restart` is a no-op once a run has reached
-`endTime`, so only the incomplete or failed runs make progress.
+and exits **1**; otherwise it exits 0. A re-submission of the same array does
+NOT resume: `runPhaseVI.sh --restart` refuses every run directory that already
+holds a written time (exit 2, reported as a failed run, nothing deleted), because
+the run path would restart it from 0 and truncate its CSVs. Rerun only the runs
+that need it, from 0, after removing their `processor*/` and `postProcessing/`.
 
 ## Resource sizing (30k cells/core heuristic)
 

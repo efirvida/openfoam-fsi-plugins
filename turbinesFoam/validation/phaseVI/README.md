@@ -141,9 +141,12 @@ shared `runs/mesh-<mesh>/constant/polyMesh`, and writes `run.json` (git
 commit, OpenFOAM version, config sha256, variant, solver, `n_chordwise`,
 `mesh_factor`, `ranks`, start time). The committed `case/` skeleton is never modified.
 
-- `--restart` sets `startFrom latestTime` when a written time exists (otherwise
-  it warns and keeps `startTime`); the production and Stage 3 arrays use it for
-  requeues.
+- `--restart` refuses (exit 2, nothing rendered or deleted) a run directory that
+  already holds a written time: there is no true resume, because `--run`
+  re-decomposes with `decomposePar -force` and the CSV writers truncate
+  `postProcessing/<...>/0/`. On a fresh directory it warns and keeps `startTime`.
+  Give a run a `--time` for its full length; to rerun from 0, remove
+  `processor*/` and `postProcessing/` explicitly.
 - `--stage0` caps `endTime` at 0.25 revolutions (spec bound ≤ 0.3) so a 48-rank
   job fits the 20-minute `sequana_cpu_dev` partition.
 - `--solver iddes` renders the Stage 3 LES `kOmegaSSTIDDES` variant (see

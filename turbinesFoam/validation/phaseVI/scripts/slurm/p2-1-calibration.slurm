@@ -8,7 +8,7 @@
 #            --output=runs/p21-asm-mesh-U7.out --error=runs/p21-asm-mesh-U7.err \
 #            scripts/slurm/p2-1-calibration.slurm
 # Coarse level 0, delta t = 0.001 s, 12 revolutions, 84 tasks, blade dz 0.05 m (rule
-# min(0.05, h/2) on the coarse mesh). Restartable: resubmit the same line to continue.
+# min(0.05, h/2) on the coarse mesh). NOT restartable: runPhaseVI.sh refuses --restart on written state.
 # Do not rebuild libturbinesFoam while a run is queued or running.
 #SBATCH --job-name=phaseVI-p21
 #SBATCH --partition=sequana_cpu
