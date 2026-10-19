@@ -81,7 +81,7 @@ def test_config_schema(cfg):
     assert turbine["pitch_deg"] == 3.0
     assert turbine["diameter"] == 2.0 * turbine["radius"]
     assert turbine["hub_height"] == 12.192
-    assert speed_keys(cfg) == ["7", "10", "13", "15", "20", "25"]
+    assert speed_keys(cfg) == ["5", "7", "10", "13", "15", "20", "25"]  # 5 m/s: P2.3 T13
     assert cfg["solver"]["application"] == "pimpleFoam"
     assert cfg["solver"]["turbulence_model"] == "kOmegaSST"
     assert cfg["solver"]["adjust_time_step"] is False
@@ -1559,7 +1559,7 @@ def test_sequence_s_rejects_a_speed_outside_the_archive(cfg):
 
 
 def test_sequence_h_selection_is_unchanged_by_the_s_table(cfg):
-    assert speed_keys(cfg) == ["7", "10", "13", "15", "20", "25"]
+    assert speed_keys(cfg) == ["5", "7", "10", "13", "15", "20", "25"]  # 5 m/s: P2.3 T13
     with pytest.raises(KeyError):
         select_speed(cfg, "9", "H")
 
@@ -1782,3 +1782,26 @@ def test_runner_restart_refuses_instead_of_wiping_written_state(tmp_path):
     assert "processor0/10.044" in refused.stderr
     assert written.is_dir()
     assert {p: p.read_bytes() for p in run_dir.rglob("*") if p.is_file()} == snapshot
+
+
+def test_h_speeds_accept_optional_archive_5ms_and_keep_the_required_set():
+    """H 5 m/s (P2.3 T13) is an optional, archive-validated speed; the six
+    required speeds stay mandatory and unknown speeds stay rejected."""
+    import copy
+    from case_config import assert_tsr_matches_experiment, validate_config
+
+    cfg = load_config()
+    validate_config(cfg)
+    assert_tsr_matches_experiment(cfg)  # 5 m/s checked against the archive H table
+    missing = copy.deepcopy(cfg)
+    del missing["kinematics"]["speeds"][7]
+    with pytest.raises(ValueError, match="must define 7/10/13/15/20/25 m/s"):
+        validate_config(missing)
+    unknown = copy.deepcopy(cfg)
+    unknown["kinematics"]["speeds"][6] = dict(cfg["kinematics"]["speeds"][5])
+    with pytest.raises(ValueError, match="must define 7/10/13/15/20/25 m/s"):
+        validate_config(unknown)
+    wrong = copy.deepcopy(cfg)
+    wrong["kinematics"]["speeds"][5]["tsr"] = 7.0
+    with pytest.raises(ValueError, match="5 m/s: configured TSR 7.0 differs"):
+        assert_tsr_matches_experiment(wrong)

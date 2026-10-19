@@ -140,8 +140,13 @@ def validate_config(cfg: dict[str, Any]) -> None:
             )
 
     speeds = _speeds(cfg)
-    if sorted(speeds) != ["10", "13", "15", "20", "25", "7"]:
-        raise ValueError("kinematics.speeds must define exactly 7/10/13/15/20/25 m/s")
+    # The six campaign speeds are required; 5 m/s is an optional diagnostic
+    # speed validated against the archive-derived H table (P2.3 T13).
+    required, optional = {"7", "10", "13", "15", "20", "25"}, {"5"}
+    if not required <= set(speeds) or not set(speeds) <= required | optional:
+        raise ValueError(
+            "kinematics.speeds must define 7/10/13/15/20/25 m/s (5 m/s optional)"
+        )
     for key, entry in speeds.items():
         for field in ("tsr", "rotor_speed_rpm", "row"):
             if field not in entry:
@@ -272,6 +277,13 @@ def assert_tsr_matches_experiment(
     with path.open(encoding="utf-8") as stream:
         for row in csv.DictReader(stream):
             measured[f"{float(row['wind_speed_m_s']):g}"] = float(row["rpm"])
+    archive_path = EXPERIMENT_DIR / "uae6-archive" / "sequence_H_performance.csv"
+    if experiment_csv is None and archive_path.exists():
+        # Speeds absent from the committed table (5 m/s) come from the archive.
+        with archive_path.open(encoding="utf-8") as stream:
+            for row in csv.DictReader(stream):
+                if row.get("yaw_token", "0000") == "0000" and row.get("repetition", "0") == "0":
+                    measured.setdefault(f"{float(row['wind_speed_m_s']):g}", float(row["rpm"]))
     for key in speed_keys(cfg):
         if key not in measured:
             raise ValueError(f"{path}: no measured row for {key} m/s")

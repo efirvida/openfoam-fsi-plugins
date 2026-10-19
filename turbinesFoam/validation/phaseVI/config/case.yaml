@@ -42,6 +42,11 @@ profile:
 kinematics:
   sequence: H
   speeds:
+    # 5 m/s: archive-derived row (data/experiment/uae6-archive), P2.3 T13 probe comparison.
+    5:
+      tsr: 7.549
+      rotor_speed_rpm: 71.674
+      row: h0500000
     7:
       tsr: 5.408
       rotor_speed_rpm: 71.878
