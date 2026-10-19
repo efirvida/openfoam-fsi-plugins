@@ -11,7 +11,8 @@
 #                 [--restart] [--rotational-augmentation on|off]
 #                 [--root-effects on|off] [--refine-level N] [--mesh-factor F]
 #                 [--nacelle on|off]
-#                 [--blade-dz DZ]
+#                 [--blade-dz DZ] [--end-effects-model Glauert|Shen|liftingLine]
+#                 [--velocity-sample-radius R] [--n-velocity-samples N]
 #                 [--run] [--submit]
 #
 # -m/-u select the model and the per-speed measured TSR from config/case.yaml.
@@ -92,6 +93,11 @@ solver=urans
 nchordwise=""
 n_elements=""
 ranks_override=""
+# A/B renderer flags: --end-effects-model Glauert|Shen|liftingLine,
+# --velocity-sample-radius R (epsilon units), --n-velocity-samples N.
+end_effects_model=""
+velocity_sample_radius=""
+n_velocity_samples=""
 rotational_augmentation=""
 root_effects=""
 tip_effects=""
@@ -120,6 +126,9 @@ while [ $# -gt 0 ]; do
         --nchordwise) nchordwise="$2"; shift ;;
         --n-elements) n_elements="$2"; shift ;;
         --ranks) ranks_override="$2"; shift ;;
+        --end-effects-model) end_effects_model="$2"; shift ;;
+        --velocity-sample-radius) velocity_sample_radius="$2"; shift ;;
+        --n-velocity-samples) n_velocity_samples="$2"; shift ;;
         --rotational-augmentation) rotational_augmentation="$2"; shift ;;
         --root-effects) root_effects="$2"; shift ;;
         --tip-effects) tip_effects="$2"; shift ;;
@@ -199,6 +208,27 @@ if [ -n "$ranks_override" ]; then
         echo "ERROR: --ranks must be a positive integer" >&2
         exit 2
     fi
+fi
+case "$end_effects_model" in
+    ''|Glauert|Shen|liftingLine) ;;
+    *) echo "ERROR: --end-effects-model must be Glauert, Shen or liftingLine" >&2; exit 2 ;;
+esac
+if [ -n "$velocity_sample_radius" ]; then
+    if ! python3 -c 'import math, sys; v = float(sys.argv[1]); sys.exit(0 if v >= 0 and math.isfinite(v) else 1)' "$velocity_sample_radius" 2>/dev/null; then
+        echo "ERROR: --velocity-sample-radius must be a non-negative finite number" >&2; exit 2
+    fi
+fi
+if [ -n "$n_velocity_samples" ]; then
+    case "$n_velocity_samples" in
+        *[!0-9]*) echo "ERROR: --n-velocity-samples must be a positive integer" >&2; exit 2 ;;
+    esac
+    if [ "$n_velocity_samples" -le 0 ]; then
+        echo "ERROR: --n-velocity-samples must be a positive integer" >&2; exit 2
+    fi
+fi
+# Legacy --submit does not carry these overrides; refuse rather than silently drop them.
+if [ "$submit" -eq 1 ] && { [ -n "$end_effects_model" ] || [ -n "$velocity_sample_radius" ] || [ -n "$n_velocity_samples" ]; }; then
+    echo "ERROR: use scripts/slurm/variant-run.slurm for A/B sampling/end-effects flags" >&2; exit 2
 fi
 if [ -n "$rotational_augmentation" ]; then
     case "$rotational_augmentation" in
@@ -380,6 +410,15 @@ if [ -n "$mesh_factor" ]; then
 fi
 if [ -n "$blade_dz" ]; then
     render_args+=(--blade-dz "$blade_dz")
+fi
+if [ -n "$end_effects_model" ]; then
+    render_args+=(--end-effects-model "$end_effects_model")
+fi
+if [ -n "$velocity_sample_radius" ]; then
+    render_args+=(--velocity-sample-radius "$velocity_sample_radius")
+fi
+if [ -n "$n_velocity_samples" ]; then
+    render_args+=(--n-velocity-samples "$n_velocity_samples")
 fi
 render_args+=(--nacelle "$nacelle")
 if [ -n "$delta_t" ]; then

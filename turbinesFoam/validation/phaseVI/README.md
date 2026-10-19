@@ -525,6 +525,55 @@ than the 0.25-rev window's observed ≈11 % systematic bias — so this short ru
 resolves only the sign shift (clearly negative → ≈0), not whether any residual
 failure remains; the primary criterion is still reported unweakened.
 
+## Model variants (A/B bench)
+
+`config/model-variants.yaml` registers diagnostic arms as **v1.2 plus renderer
+flag overrides**. No coefficient is fitted. Non-baseline variants are never of
+record for v1.2; `summarizeBands.py` keeps its unchanged baseline-only gate.
+
+| Variant | Exact renderer overrides | Reference / interpretation |
+|---|---|---|
+| `v1.2` | none | Model Definition v1.2 |
+| `shen-tip` | `--end-effects-model Shen` | I10, Shen, Mikkelsen, Sorensen & Bak, *Wind Energy* 8:457–475 (2005); explicit `ShenCoeffs c1=0.125, c2=21` |
+| `dag-sorensen-tip` | `--tip-correction on` | Dağ & Sørensen (2020), existing prescribed helical wake; other settings unchanged |
+| `ring-sampling` | `--velocity-sample-radius 3.3 --n-velocity-samples 16` | v1.1 freeze: 16 equally spaced ring samples, radius **3.3 times local projection epsilon**, not 3.3 metres |
+| `du-selig-ra` | `--rotational-augmentation on` | Du & Selig (1998); existing `DuSelig`, `a=b=d=1` |
+
+**Shen is not a pure tip substitution:** selecting the solver's Shen model also
+replaces the hub/root loss formula. The on/off root and tip switches remain on.
+`--end-effects-model Glauert|Shen|liftingLine` selects existing solver models;
+the default Glauert render is byte-identical. `liftingLine` is available but is
+not a registered arm in this first bench. Later C2–C4 arms belong in the same
+registry only after their renderer switches exist.
+
+From the Phase VI directory, validate an arm **before submitting**:
+
+```sh
+VARIANT=ring-sampling sh scripts/slurm/variant-run.slurm --check
+# Submit manually only after preflight (84 tasks, no --nodes):
+sbatch --export=ALL,VARIANT=ring-sampling,MODEL=alm,SPEED=7,SEQUENCE=S scripts/slurm/variant-run.slurm
+python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-seqS-var-ring-sampling --variant ring-sampling
+python3 scripts/summarizeVariants.py results/cmp-baseline results/cmp-ring
+```
+
+Unknown variants are refused before module loading or case preparation. The
+launcher accepts the v1-2-run environment (`MODEL`, `SPEED`, `SEQUENCE`, optional
+`REFINE_LEVEL`, `DELTA_T`, `END_REVS`, `POLAR`, `LABEL`), defaulting `LABEL` to
+`var-<variant>`. It passes explicit baseline switches plus the registry overrides
+through `runPhaseVI.sh`; no rendered file is hand-edited. The runner also accepts
+`--end-effects-model`, `--velocity-sample-radius`, `--n-velocity-samples` directly;
+legacy `--submit` refuses these rather than dropping them. Existing `--restart`
+refusal on written state remains: use a fresh label for a new arm.
+
+The summary prints one table per sequence/speed, with P, T and five c_n errors
+in percent versus experiment; parentheses give the change from the same model's
+v1.2 row in **percentage points**. Missing values or missing/ambiguous baselines
+show `n/a`. Drifting baselines are not used as references. DRIFT and own-variant
+NON-CONFORMING rows are marked; nonconformance exits 1. Identity comes from
+`run.json`'s optional `variant`, the default `var-<variant>` label, or unique
+conformance. With a custom label, record `variant` in run metadata if an invalid
+arm must still be identifiable. No checker or summary writes run data.
+
 ## Definition conformance
 
 ```sh

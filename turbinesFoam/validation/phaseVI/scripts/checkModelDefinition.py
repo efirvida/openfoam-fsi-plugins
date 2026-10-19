@@ -21,6 +21,7 @@ blade_dz is checked only when non-null metadata is recorded; geometry is not
 inferred from the committed non-equispaced render.
 """
 import argparse
+import copy
 import json
 import math
 from pathlib import Path
@@ -37,6 +38,68 @@ def load_definition(path=DEFAULT_DEFINITION):
     if not isinstance(definition, dict) or not isinstance(definition.get("knobs"), dict):
         raise ValueError("definition must contain a knobs mapping")
     return definition
+
+
+FLAG_RULES = {
+    '--end-effects-model': 'endEffectsModel',
+    '--tip-correction': 'tipCorrection.active',
+    '--rotational-augmentation': 'rotationalAugmentation.active',
+    '--velocity-sample-radius': 'velocitySampleRadius',
+    '--n-velocity-samples': 'nVelocitySamples',
+}
+
+
+def load_variants():
+    registry = yaml.safe_load((DEFAULT_DEFINITION.parent / 'model-variants.yaml').read_text())
+    variants = registry['variants']
+    for name, entry in variants.items():
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', name):
+            raise ValueError(f'invalid variant name: {name}')
+        for flag, value in entry['flags'].items():
+            if flag not in FLAG_RULES:
+                raise ValueError(f'unsupported variant flag: {flag}')
+            if flag == '--end-effects-model':
+                valid = value in ('Glauert', 'Shen', 'liftingLine')
+            elif flag in ('--tip-correction', '--rotational-augmentation'):
+                valid = value in ('on', 'off')
+            else:
+                valid = (isinstance(value, (int, float)) and not isinstance(value, bool)
+                         and math.isfinite(value) and value >= 0)
+                if flag == '--n-velocity-samples':
+                    valid = valid and isinstance(value, int) and value > 0
+            if not valid:
+                raise ValueError(f'invalid variant flag value: {flag}={value}')
+    return variants
+
+
+def variant_definition(definition, name):
+    variants = load_variants()
+    if name not in variants:
+        raise ValueError(f'unknown variant: {name}')
+    result = copy.deepcopy(definition)
+    result['version'] = name
+    knobs = result['knobs']
+    for flag, value in variants[name]['flags'].items():
+        rule = knobs[FLAG_RULES[flag]]
+        rule['expected'] = value
+        rule.pop('inert', None)
+    # Constants become active with their correction, so certify them as well.
+    def add(path, value, default=None):
+        knobs[path] = dict(path=path, expected=value, solver_default=default)
+    if knobs['endEffectsModel']['expected'] == 'Shen':
+        for key in ('tipEffects', 'rootEffects'):
+            knobs[key]['path'] = 'endEffects.ShenCoeffs.' + key
+        add('endEffects.ShenCoeffs.c1', 0.125)
+        add('endEffects.ShenCoeffs.c2', 21)
+    if knobs['rotationalAugmentation.active']['expected'] == 'on':
+        add('rotationalAugmentation.model', 'DuSelig', 'DuSelig')
+        for key in ('a', 'b', 'd'):
+            add('rotationalAugmentation.' + key, 1, 1)
+    if knobs['tipCorrection.active']['expected'] == 'on':
+        for key, value in [('model', 'DagSorensen'), ('wakeTurns', 2),
+                           ('wakeAzimuthalStep', 2), ('epsilon', 0)]:
+            add('tipCorrection.' + key, value, value)
+    return result
 
 
 def parse_dictionary(text):
@@ -192,12 +255,26 @@ def check_run(run_dir, definition):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("run_dirs", nargs="+", type=Path)
+    parser.add_argument("run_dirs", nargs="*", type=Path)
+    parser.add_argument('--variant', help='check a named A/B arm, never of record for v1.2')
+    parser.add_argument('--renderer-flags', action='store_true',
+                        help='print validated variant override tokens, one per line; no run required')
     parser.add_argument("--definition", type=Path, default=DEFAULT_DEFINITION)
     args = parser.parse_args(argv)
     status = 0
     try:
         definition = load_definition(args.definition)
+        if args.variant is not None:
+            definition = variant_definition(definition, args.variant)
+        if args.renderer_flags:
+            if args.variant is None:
+                raise ValueError('--renderer-flags requires --variant')
+            for flag, value in load_variants()[args.variant]['flags'].items():
+                print(flag)
+                print(value)
+            return 0
+        if not args.run_dirs:
+            parser.error('at least one run directory is required')
     except (OSError, ValueError, yaml.YAMLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

@@ -728,6 +728,18 @@ def render_fv_options(
             blade_keys += "                kernel gaussian;\n"
     dynamic = actuator["dynamic_stall"]
     end_effects = actuator["end_effects"]
+    root = bool(end_effects['root']) if root_effects is None else bool(root_effects)
+    tip = bool(end_effects['tip']) if tip_effects is None else bool(tip_effects)
+    model = end_effects['model']
+    if model not in ('Glauert', 'Shen', 'liftingLine'):
+        raise ValueError(f"unknown end effects model: {model}")
+    # Shen et al., Wind Energy 8:457-475 (2005), standard constants.
+    # Its root formula is also Shen, NOT the Glauert Prandtl hub formula.
+    shen_block = ("\n            ShenCoeffs\n            {\n"
+                  "                c1 0.125;\n                c2 21;\n"
+                  f"                tipEffects {'on' if tip else 'off'};\n"
+                  f"                rootEffects {'on' if root else 'off'};\n"
+                  "            }" if model == 'Shen' else '')
     augmentation = (
         actuator.get("rotational_augmentation")
         if rotational_augmentation is None
@@ -751,8 +763,6 @@ def render_fv_options(
             f"            d {float(augmentation['d']):.8g};\n"
             "        }"
         )
-    root = bool(end_effects["root"]) if root_effects is None else bool(root_effects)
-    tip = bool(end_effects["tip"]) if tip_effects is None else bool(tip_effects)
     # The Prandtl hub loss is built from the hub surface radius. `hubRadius`
     # is a property of the rotor, so it renders whenever it is configured,
     # independent of the root-effect toggle; a case that sets no value renders
@@ -832,7 +842,7 @@ def render_fv_options(
             {{
                 tipEffects {'on' if tip else 'off'};
                 rootEffects {'on' if root else 'off'};
-            }}
+            }}{shen_block}
         }}{tip_correction_block}
 
         blades
@@ -1250,6 +1260,8 @@ def main(argv: list[str] | None = None) -> int:
         help="render the Glauert root-effect setting; default from "
              "config/case.yaml (on). `off` is the render-time ablation",
     )
+    parser.add_argument('--end-effects-model', choices=('Glauert', 'Shen', 'liftingLine'),
+                        help='select existing solver end-effects model; Shen uses c1=0.125, c2=21 and replaces root loss too; default Glauert')
     parser.add_argument(
         "--tip-effects",
         choices=("on", "off"),
@@ -1384,6 +1396,8 @@ def main(argv: list[str] | None = None) -> int:
             ) * 2.0 ** int(args.refine_level)
         if args.delta_t is not None:
             cfg["mesh"]["resolutions"][args.mesh]["delta_t"] = float(args.delta_t)
+        if args.end_effects_model is not None:
+            cfg['actuator']['end_effects']['model'] = args.end_effects_model
         augmentation = dict(cfg["actuator"]["rotational_augmentation"])
         if args.rotational_augmentation is not None:
             augmentation["active"] = args.rotational_augmentation == "on"

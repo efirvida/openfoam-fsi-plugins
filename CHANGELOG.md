@@ -4,6 +4,22 @@
 
 ### Features
 
+#### Phase VI: registered correction A/B bench
+
+**Files:** `turbinesFoam/validation/phaseVI/config/model-variants.yaml`,
+`scripts/checkModelDefinition.py`, `scripts/summarizeVariants.py`,
+`scripts/slurm/variant-run.slurm`, `scripts/runPhaseVI.sh`, `tools/generate_case.py`,
+`README.md`; `turbinesFoam/tests/test_model_variants.py`.
+
+**Problem:** existing correction switches lacked a reproducible named A/B registry,
+own-arm conformance checking, and a comparison table against v1.2.
+
+**Fix:** register baseline, standard Shen (c1=0.125, c2=21), Dağ–Sørensen,
+ring sampling and Du–Selig arms; forward validated renderer flags through the
+runner and provide a preflightable 84-task launcher. Summarize percentage errors
+and baseline changes with drift/nonconformance markers. Default renders and the
+v1.2 of-record gate stay unchanged; Shen's hub-formula change is explicit.
+
 #### UAE6 archive extraction: enriched S 5-8 m/s and H tables (incl. 5 m/s probes)
 
 **Files:**

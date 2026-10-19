@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Each flags mapping is an override of Model Definition v1.2, not a new baseline.
+# Future C2-C4 arms can add renderer flags here once implemented and validated.
+variants:
+  v1.2:
+    reference: 'Model Definition v1.2, config/model-definition.yaml'
+    flags: {}
+  shen-tip:
+    reference: 'I10: Standard Shen tip correction (c2 = 21); Shen, Mikkelsen, Sorensen, Bak, Wind Energy 8:457-475 (2005)'
+    note: 'Not a pure tip substitution: the solver Shen model also replaces the hub/root loss formula. Explicit literature constants c1=0.125, c2=21; no fit.'
+    flags:
+      --end-effects-model: Shen
+  dag-sorensen-tip:
+    reference: 'Dag & Sorensen, Wind Energy 23:148-160 (2020), prescribed helical wake tip correction'
+    note: 'Retains Glauert + Prandtl hub; wakeTurns=2, wakeAzimuthalStep=2 degrees, epsilon=0 selects local projection width.'
+    flags:
+      --tip-correction: 'on'
+  ring-sampling:
+    reference: 'Phase VI v1.1 freeze; actuatorLineElement::calculateRelativeVelocity in turbinesFoam/src'
+    note: '16 equally spaced points on the inflow ring, radius 3.3 times local projection epsilon (not metres); existing sampling algorithm, not a fitted constant.'
+    flags:
+      --velocity-sample-radius: 3.3
+      --n-velocity-samples: 16
+  du-selig-ra:
+    reference: 'Du & Selig, AIAA-98-0021 (1998), solver DuSelig implementation'
+    note: 'Paper constants a=b=d=1, unchanged from v1.2 inactive block.'
+    flags:
+      --rotational-augmentation: 'on'
