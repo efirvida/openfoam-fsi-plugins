@@ -16,6 +16,41 @@
 
 ### Features
 
+#### Phase VI: isolated paper-like ALM preparation (S1–S3)
+
+**Files:** `turbinesFoam/validation/phaseVI/paper-yaw-2021/{config.json,prepare.py,README.md}`,
+`turbinesFoam/tests/test_phasevi_paper_yaw_2021.py`,
+`turbinesFoam/validation/tools/README.md`; generated dictionaries/report under
+`phaseVI/runs/paper-yaw-2021-v2/` (ignored run artifacts, not a mesh).
+The unexecuted original `runs/paper-yaw-2021/` is preserved but superseded.
+
+**Problem:** comparing aerodynamic formulations with the article's dt on the
+old mesh would confound mesh/numerics and imply unearned execution readiness.
+
+**Fix:** prepare 7/13 m/s numerically matched control versus Shen tip-only + SGC
++ 16-point displaced-sampling ALM, with realizableKE, 71.63 rpm through effective
+TSR, dt=0.001 s, CrankNicolson 0.9 and symmetry far boundaries. Apply published
+PBiCG/DILU and nu=1.46e-5 m2/s; retain rho=1.23 kg/m3 as reference metadata
+and fvOptions rhoRef (not consumed by the incompressible per-unit-density force
+path). Enable SGC equivalent incidence for eq5 with `calcAlphaEquiv=true`;
+the 3G Sheng-family counterpart is not equation-for-equation proof. Preserve all
+baseline inputs/root polars and audit exact dictionaries with hashes of actual
+rendering inputs only, excluding incidental baseline logs/caches.
+Prominently disclose conformal castellation/transition cells as a reconstruction
+of reported resolution criteria, NOT identical paper topology; nested zone
+bounds, epsilon/polars and SGC coefficients are explicit assumptions.
+
+Observed **preparation report**, not simulation: planned finest widths
+(0.099781746, 0.098387097, 0.099456522) m, nominal 3,811,364 cells (not measured,
+not tuned to the article's approximately 400k); angular step 0.42978 degrees,
+tip displacement 0.037722912 m, displacement/min(h)=0.383413199; nominal
+advective Co at 7/13 m/s is 0.071147541 / 0.132131148 (**NOT measured Co**).
+Public prepare/check/report exited 0. `execution_ready=false`: no meshing,
+checkMesh, measured-Co/time proof or root-SGC compatibility evidence obtained;
+source inspection risk is not a reproduced runtime failure. No jobs or solver
+runs authorized or performed. Focused public CLI tests cover published settings,
+actual effective dictionary values, provenance exclusions and nonmutation.
+
 #### Phase VI: selectable Chaviaropoulos–Hansen rotational augmentation (I7)
 
 **Files:** `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineSource.C`,

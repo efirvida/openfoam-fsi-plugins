@@ -55,6 +55,7 @@ Related tools outside this directory:
 | `nacelle-asn/scripts/compareNacelle.py` | nacelle actuator-surface comparison |
 | `phaseVI/tools/generate_case.py` | renders the committed case; `--check` is non-destructive |
 | `phaseVI/tools/case_config.py` | loads and validates `config/case.yaml` |
+| [`phaseVI/paper-yaw-2021/prepare.py`](../phaseVI/paper-yaw-2021/README.md) | preparation-only `--prepare` / read-only `--check` / `--report`, all with required `--output DIR`; four matched 7/13 m/s control/paper-like ALM dictionaries, input/dictionary hashes and nominal mesh/timestep arithmetic; never execution approval or a P/Q/Cp producer |
 
 ### `window_response.py` — what did a model switched on at a restart do, window by window?
 
