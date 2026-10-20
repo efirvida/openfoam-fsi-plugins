@@ -521,3 +521,24 @@ def test_drift_ignores_a_trailing_partial_revolution():
     result = compare.drift_flags(rows, 0.0, period)
     assert result["cp"]["per_revolution"] == pytest.approx([0.30, 0.30, 0.30])
     assert result["cp"]["flag"] is False
+
+
+def test_resumed_segments_are_merged_and_later_segment_wins(tmp_path):
+    """A resumed run writes postProcessing/<object>/<resume time>/; the reader
+    must join it to segment 0, the later segment replacing the overlap."""
+    base = tmp_path / "postProcessing" / "turbines"
+    for name, times in (("0", [0.1, 0.2, 0.3]), ("0.2", [0.2, 0.3, 0.4])):
+        (base / name).mkdir(parents=True)
+        with (base / name / "turbine.csv").open("w", encoding="utf-8") as out:
+            out.write("time,value\n")
+            for t in times:
+                out.write(f"{t},{1.0 if name == '0' else 2.0}\n")
+    rows = compare.read_rows_resumed(base / "0" / "turbine.csv")
+    assert [r["time"] for r in rows] == [0.1, 0.2, 0.3, 0.4]
+    assert [r["value"] for r in rows] == [1.0, 2.0, 2.0, 2.0]
+
+
+def test_unresumed_run_reads_segment_zero_unchanged(tmp_path):
+    run = write_run(tmp_path)
+    path = run / compare.TURBINE_CSV
+    assert compare.read_rows_resumed(path) == compare.read_rows(path)

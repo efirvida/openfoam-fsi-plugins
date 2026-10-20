@@ -124,6 +124,38 @@ def _exit(message: str, code: int) -> int:
     return code
 
 
+def read_rows_resumed(path: Path) -> list[dict[str, float]]:
+    """Read `<object>/0/<file>` joined with its resume segments.
+
+    A run continued with resume-run.slurm writes `<object>/<resume time>/<file>`
+    next to segment 0. Segments are ordered by their numeric directory name and
+    each later segment replaces the earlier rows it overlaps.
+    """
+    rows = read_rows(path)
+    for segment, _ in sorted(
+        (
+            (d, float(d.name)) for d in path.parent.parent.iterdir()
+            if d.is_dir() and d != path.parent and _is_number(d.name)
+            and (d / path.name).is_file()
+            and float(d.name) > 0
+        ),
+        key=lambda item: item[1],
+    ):
+        later = read_rows(segment / path.name)
+        if later:
+            first = later[0]["time"]
+            rows = [row for row in rows if row["time"] < first] + later
+    return rows
+
+
+def _is_number(text: str) -> bool:
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
+
+
 def read_rows(path: Path) -> list[dict[str, float]]:
     with path.open(encoding="utf-8") as stream:
         rows = []
@@ -292,7 +324,7 @@ def read_elements(element_dir: Path):
         raise FileNotFoundError(str(element_dir / "*.csv"))
     elements = []
     for path in files:
-        rows = read_rows(path)
+        rows = read_rows_resumed(path)
         if not rows:
             raise MissingInput(f"{path}: no data rows")
         elements.append((path, rows))
@@ -563,7 +595,7 @@ def analyse_model(run_dir: Path, cfg, speed, sequence, rho, allow_short,
     if not surface and not element_dir.is_dir():
         raise FileNotFoundError(str(element_dir))
     start, end, period = window_bounds(cfg, speed, sequence)
-    rows = read_rows(turbine_path)
+    rows = read_rows_resumed(turbine_path)
     if not rows:
         raise MissingInput(f"{turbine_path}: no data rows")
     entry = select_speed(cfg, speed, sequence)

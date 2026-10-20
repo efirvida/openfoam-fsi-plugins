@@ -2,6 +2,18 @@
 
 ## [Unreleased] — 2026-10-01
 
+### Fixes
+
+#### Phase VI: comparison reads resumed runs
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/comparePhaseVI.py`,
+`turbinesFoam/tests/test_phasevi_compare.py`.
+
+**Problem:** only `postProcessing/<object>/0/` was read, so a run continued with
+`resume-run.slurm` was truncated or rejected as a short window.
+
+**Fix:** `read_rows_resumed` joins the resume segments; the later one replaces the overlap.
+
 ### Features
 
 #### Phase VI: selectable Chaviaropoulos–Hansen rotational augmentation (I7)
