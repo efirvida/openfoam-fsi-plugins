@@ -82,3 +82,25 @@ def test_eps_writes_turbine_and_spanwise_figures(tmp_path):
                          str(reference), *arms]) == 0
     assert sorted(p.name for p in out_dir.glob("*.png")) == [
         "p14-epsilon-spanwise.png", "p14-epsilon-turbine.png"]
+
+
+def write_segments(base: Path, name: str, header: str, segments) -> None:
+    """Write `<base>/<segment>/<name>` for each (segment, rows) pair."""
+    for segment, rows in segments:
+        (base / segment).mkdir(parents=True, exist_ok=True)
+        with (base / segment / name).open("w", encoding="utf-8") as out:
+            out.write(header + "\n")
+            for row in rows:
+                out.write(",".join(str(v) for v in row) + "\n")
+
+
+def test_cp_history_joins_resume_segments(tmp_path):
+    """A resumed run's cp history continues past segment 0; the later segment
+    replaces the overlap and supplies the last tsr."""
+    write_segments(tmp_path / "postProcessing" / "turbines", "turbine.csv",
+                   "time,tsr,cp", [("0", [(0.1, 7.0, 0.1), (0.2, 7.0, 0.1)]),
+                                   ("0.2", [(0.2, 7.5, 0.2), (0.3, 7.5, 0.3)])])
+    times, cp, tsr = figures.read_cp_history(tmp_path)
+    assert times == [0.1, 0.2, 0.3]
+    assert cp == [0.1, 0.2, 0.3]
+    assert tsr == 7.5
