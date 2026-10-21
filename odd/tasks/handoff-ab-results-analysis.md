@@ -4,6 +4,7 @@ Fresh session, effort `medium`. Feature document: `odd/tasks/alm-correction-flag
 Rules: AGENTS.md; Slurm `--ntasks` only (no nodes, no memory); do not rebuild `libturbinesFoam` while jobs run; no fitted coefficients.
 
 ## State
+- Superseded by L10 of `alm-correction-flags.md` (2026-10-21): job ids and interim S U5 results live there.
 - Branch `main`; last commits `94edd3c` (comparePhaseVI joins resume segments) and the L9 note. Nothing pushed (owner decides).
 - Done: C1 (A/B switches), C4 (`ch-ra`). Pending: C2 (Muscari 2024 / Xie 2021 velocity sampling, build into `runs/lib-c2`, NOT `runs/lib-flags`), C3 (filtered lifting line).
 - Sequence S U7/U8 A/B table is complete (L7). Conclusion: no isolated switch removes the speed-dependent error (v1.2: U5 P +28 %, U6 +14 %, U7 -2 %, U8 -20 %) without breaking U7 or root/tip. shen-tip fixes U8 but U7 +12 % and tip cn +44 %; du-selig-ra/ch-ra help U8 but cn0.30 +28..32 % at U7; dag-sorensen-tip and ring-sampling are neutral.
@@ -20,10 +21,10 @@ Rules: AGENTS.md; Slurm `--ntasks` only (no nodes, no memory); do not rebuild `l
 ## Commands that work (from `turbinesFoam/validation/phaseVI`)
 ```sh
 E=data/experiment/uae6-archive    # REQUIRED: data/experiment/ has only the S 7 m/s row
-python3 scripts/comparePhaseVI.py --run-dir runs/alm-U5-coarse-seqS-var-shen-tip --experiment $E --speed 5 --sequence S --out /tmp/ab/S-U5-var-shen-tip
-python3 scripts/comparePhaseVI.py --run-dir runs/alm-U5-coarse-seqS-v12 --experiment $E --speed 5 --sequence S --out /tmp/ab/S-U5-v12
-python3 scripts/summarizeVariants.py $(ls -d /tmp/ab/S-U*/)   # directories only, not the .log files
+python3 scripts/comparePhaseVI.py --alm-dir runs/alm-U5-coarse-seqS-var-shen-tip --revolutions 16 24 --experiment $E --speed 5 --sequence S --out $TMPDIR/ab/S-U5-var-shen-tip
+python3 scripts/comparePhaseVI.py --alm-dir runs/alm-U5-coarse-seqS-v12 --revolutions 16 24 --experiment $E --speed 5 --sequence S --out $TMPDIR/ab/S-U5-v12
+python3 scripts/summarizeVariants.py $(ls -d $TMPDIR/ab/S-U*/)   # directories only, not the .log files
 ```
-`/tmp/ab` is temporary: regenerate if gone. Each comparison takes ~15-20 s; run long loops with `bash_background`.
+`$TMPDIR/ab` is temporary: regenerate if gone (`/tmp/ab` may belong to another user on some login nodes). Use `--alm-dir`, never `--run-dir`: the latter keys the model by directory name and the summary then prints `n/a` for every change vs v1.2. Continue a TIMEOUT run with `resume-run.slurm` (`RUN_DIR`, plus `LIB_DIR` for an arm), never by resubmitting `variant-run.slurm` (its `--restart` refuses written state). Each comparison takes ~15-20 s; run long loops with `bash_background`.
 Gotchas: the summary prints `n/a` for change-vs-v1.2 when the output directory name does not follow `S-U<n>-<variant>`/`var-<variant>`; a run that was resumed has several `postProcessing/turbines/<time>/` segments (use `case_state.py` carefully, it reads segment 0 only).
 Unrelated: jobs `b3-2-measure` in the queue belong to `fem-shell`.

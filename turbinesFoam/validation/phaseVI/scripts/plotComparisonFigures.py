@@ -32,6 +32,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
+from comparePhaseVI import read_rows_resumed  # noqa: E402
+
 ROTOR_RADIUS = 5.029
 TURBINE_CSV = Path("postProcessing") / "turbines" / "0" / "turbine.csv"
 MODELS = ("alm", "asm", "asm-mesh")
@@ -174,7 +176,7 @@ def plot_spanwise_error(cases: list[tuple[float, Path]], out_dir: Path) -> Path:
 
 
 def read_cp_history(run_dir: Path) -> tuple[list[float], list[float], float]:
-    rows = read_csv(run_dir / TURBINE_CSV)
+    rows = read_rows_resumed(run_dir / TURBINE_CSV)
     return ([float(r["time"]) for r in rows], [float(r["cp"]) for r in rows],
             float(rows[-1]["tsr"]))
 

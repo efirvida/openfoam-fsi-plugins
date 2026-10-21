@@ -14,6 +14,20 @@
 
 **Fix:** `read_rows_resumed` joins the resume segments; the later one replaces the overlap.
 
+#### Phase VI: figures, proxy and resume launcher honour resumed A/B runs
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/plotComparisonFigures.py`,
+`turbinesFoam/validation/phaseVI/scripts/proxyRotationalAugmentation.py`,
+`turbinesFoam/validation/phaseVI/scripts/slurm/resume-run.slurm`,
+`turbinesFoam/tests/test_plot_comparison_figures.py`, `turbinesFoam/tests/test_phasevi_proxy.py`.
+
+**Problem:** the cp-history figure and the rotational-augmentation proxy still read segment 0
+only; `resume-run.slurm` always loaded the installed `libturbinesFoam`, so an A/B arm started
+with a run-local library (`runs/lib-flags`) would have been continued with a different binary.
+
+**Fix:** both readers use `comparePhaseVI.read_rows_resumed`; `resume-run.slurm` accepts the
+optional `LIB_DIR` of `variant-run.slurm` and prepends it to `LD_LIBRARY_PATH`.
+
 ### Features
 
 #### Phase VI: selectable Chaviaropoulos–Hansen rotational augmentation (I7)
