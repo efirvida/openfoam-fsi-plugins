@@ -35,6 +35,9 @@ Turbine cp/cd drift above 1% exits 2; --allow-drift warns and continues.
 """
 from __future__ import annotations
 import argparse, csv, glob, math, os, re, statistics
+from pathlib import Path
+
+from comparePhaseVI import read_rows_resumed  # noqa: E402
 
 from compareSectionLoads import converged_window
 
@@ -56,7 +59,7 @@ def sim_profile(alm_dir, lo, hi):
     d = os.path.join(alm_dir, "postProcessing/actuatorLineElements/0")
     out = []
     for p in sorted(glob.glob(f"{d}/*blade1.element*.csv"), key=el_index):
-        rows = [r for r in read_table(p) if lo <= float(r["time"]) <= hi]
+        rows = [r for r in read_rows_resumed(Path(p)) if lo <= float(r["time"]) <= hi]
         if not rows:
             continue
         rr = CUT / R + float(rows[0]["root_dist"]) * (1 - CUT / R)

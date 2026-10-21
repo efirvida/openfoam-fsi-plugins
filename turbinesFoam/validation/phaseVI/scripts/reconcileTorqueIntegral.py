@@ -23,7 +23,10 @@ Usage:
     python3 scripts/reconcileTorqueIntegral.py --alm-dir runs/alm-U7-coarse-r2
 """
 from __future__ import annotations
-import argparse, csv, glob, math, os, re
+import argparse, glob, math, os, re
+from pathlib import Path
+
+from comparePhaseVI import read_rows_resumed  # noqa: E402
 
 R, R_ROOT, N_BLADES, CUT_R = 5.029, 0.5083, 2, 0.5083
 TSR, U_REF = 5.408, 7.0
@@ -48,7 +51,7 @@ def main():
 
     rows = []
     for p in files:
-        rs = [r for r in csv.DictReader(open(p)) if float(r["time"]) >= a.discard_revs * period]
+        rs = [r for r in read_rows_resumed(Path(p)) if float(r["time"]) >= a.discard_revs * period]
         if not rs:
             continue
         m = lambda k: sum(float(r[k]) for r in rs) / len(rs)   # noqa: E731
@@ -78,7 +81,7 @@ def main():
     turl = os.path.join(a.alm_dir, "postProcessing/turbines/0/turbine.csv")
     cp = None
     if os.path.exists(turl):
-        rs = [r for r in csv.DictReader(open(turl)) if float(r["time"]) >= a.discard_revs * period]
+        rs = [r for r in read_rows_resumed(Path(turl)) if float(r["time"]) >= a.discard_revs * period]
         cp = sum(float(r["cp"]) for r in rs) / len(rs)
     ct_declared = (cp / TSR) if cp is not None else float("nan")
 

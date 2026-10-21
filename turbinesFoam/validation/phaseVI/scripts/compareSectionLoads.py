@@ -61,6 +61,7 @@ import sys
 from pathlib import Path
 
 import comparePhaseVI
+from comparePhaseVI import read_rows_resumed  # noqa: E402
 from closeExperimentIntegral import case_chord
 
 R, CUT, TSR, U_REF = 5.029, 0.5083, 5.408, 7.0
@@ -80,7 +81,7 @@ def converged_window(run_dir, speed, sequence, revolutions=None, allow_drift=Fal
         cfg["solver"]["discard_revolutions"] = int(revolutions[0])
         cfg["solver"]["end_revolutions"] = int(revolutions[1])
     start, end, period = comparePhaseVI.window_bounds(cfg, speed, sequence)
-    rows = comparePhaseVI.read_rows(Path(run_dir) / comparePhaseVI.TURBINE_CSV)
+    rows = read_rows_resumed(Path(run_dir) / comparePhaseVI.TURBINE_CSV)
     tsr = float(comparePhaseVI.select_speed(cfg, speed, sequence)["tsr"])
     try:
         comparePhaseVI.analyse_turbine(rows, start, end, period, allow_short_window, tsr)
@@ -148,12 +149,10 @@ def sim_profile(alm_dir, lo, hi):
         glob.glob(os.path.join(element_dir, "*blade1.element*.csv")),
         key=element_number,
     ):
-        with open(path) as stream:
-            rows = [
-                row
-                for row in csv.DictReader(stream)
-                if lo <= float(row["time"]) <= hi
-            ]
+        rows = [
+            row for row in read_rows_resumed(Path(path))
+            if lo <= float(row["time"]) <= hi
+        ]
         if not rows:
             continue
         cl = statistics.mean(float(row["cl"]) for row in rows)

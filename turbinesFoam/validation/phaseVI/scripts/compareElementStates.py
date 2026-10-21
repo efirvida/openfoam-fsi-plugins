@@ -2,7 +2,7 @@
 """Compare the per-element aerodynamic state of several runs side by side.
 
 A pure reader of `postProcessing/actuatorLineElements/0/<owner>.blade1.element*.csv`:
-for every element it averages the columns below over the same revolution window
+including later resume segments (later rows replace overlaps). For every element it averages the columns below over the same revolution window
 in each run and prints one block per column (elements as rows, runs as columns,
 then the ratio to the first run). It defines no calibrated quantity; use it to
 locate WHERE two runs first differ (relative speed, angle of attack, lift, drag,
@@ -16,10 +16,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import csv
 import re
 import sys
 from pathlib import Path
+
+from comparePhaseVI import read_rows_resumed  # noqa: E402
 
 ELEMENT_DIR = Path("postProcessing") / "actuatorLineElements" / "0"
 DEFAULT_COLUMNS = ("rel_vel_mag", "alpha_deg", "alpha_geom_deg", "cl", "cd",
@@ -41,8 +42,7 @@ def average_elements(run_dir: Path, start: float, columns: tuple[str, ...]) -> d
     """Mean of `columns` per element over rows with time >= start (plus root_dist)."""
     result = {}
     for index, path in element_files(run_dir):
-        with path.open(newline="", encoding="utf-8") as stream:
-            rows = [r for r in csv.DictReader(stream) if float(r["time"]) >= start]
+        rows = [r for r in read_rows_resumed(Path(path)) if float(r["time"]) >= start]
         if not rows:
             continue
         entry = {"root_dist": float(rows[0]["root_dist"])}

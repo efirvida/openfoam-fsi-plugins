@@ -28,6 +28,23 @@ with a run-local library (`runs/lib-flags`) would have been continued with a dif
 **Fix:** both readers use `comparePhaseVI.read_rows_resumed`; `resume-run.slurm` accepts the
 optional `LIB_DIR` of `variant-run.slurm` and prepends it to `LD_LIBRARY_PATH`.
 
+#### Phase VI: sectional loads and remaining diagnostics honour resumed runs
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/compareSectionLoads.py`,
+`compareElementStates.py`, `inspectInboardAngle.py`, `reconcileTorqueIntegral.py`,
+`compareHubLossFormula.py`, `compareInflowAngle.py`, `quantifyPolarReScaling.py`,
+`plotPhaseVIDiagnosis.py`; `turbinesFoam/tests/test_phasevi_resumed_readers.py`,
+`turbinesFoam/tests/test_compare_element_states.py`.
+
+**Problem:** these readers still used segment 0 alone, omitting resumed samples from
+sectional loads (including the R1 mesh ladder), element states and diagnostics.
+
+**Fix:** read simulation CSVs through `comparePhaseVI.read_rows_resumed`, with later
+segments replacing overlapping rows and existing averaging windows unchanged. This
+includes the sectional-load turbine convergence check; experiment and polar readers
+remain unchanged. Tests cover resumed loads and states, unchanged single-segment
+results, and guard all Phase VI segment-0 readers against missing resume support.
+
 ### Features
 
 #### Phase VI: selectable Chaviaropoulos–Hansen rotational augmentation (I7)

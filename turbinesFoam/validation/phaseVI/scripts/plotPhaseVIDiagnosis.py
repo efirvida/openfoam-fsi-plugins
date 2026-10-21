@@ -10,11 +10,13 @@ Usage:
     python3 scripts/plotPhaseVIDiagnosis.py runs/alm-U7-coarse analysis/spanwise-diagnosis.png
 """
 from __future__ import annotations
-import csv, sys
+import sys
 from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+from comparePhaseVI import read_rows_resumed  # noqa: E402
 
 R, CUT = 5.029, 0.5083
 STATIONS = [0.30, 0.47, 0.63, 0.80, 0.95]
@@ -26,7 +28,7 @@ def read_run(run_dir: Path, discard_revs: float = 1.0):
     period = 2.0 * 3.141592653589793 * R / (5.408 * 7.0)
     out = []
     for path in sorted(run_dir.glob("postProcessing/actuatorLineElements/0/*.csv")):
-        rows = [r for r in csv.DictReader(path.open()) if float(r["time"]) >= discard_revs * period]
+        rows = [r for r in read_rows_resumed(Path(path)) if float(r["time"]) >= discard_revs * period]
         if not rows:
             continue
         mean = lambda k: sum(float(r[k]) for r in rows) / len(rows)   # noqa: E731

@@ -21,7 +21,10 @@ Usage:
     python3 scripts/compareHubLossFormula.py --alm-dir runs/alm-U7-coarse-r1
 """
 from __future__ import annotations
-import argparse, csv, glob, math, os, re
+import argparse, glob, math, os, re
+from pathlib import Path
+
+from comparePhaseVI import read_rows_resumed  # noqa: E402
 
 R, R_ROOT, R_HUB, N_BLADES = 5.029, 0.5083, 0.5083, 2
 
@@ -53,7 +56,7 @@ def main():
     print(f"{'r/R':>6} {'r [m]':>7} {'F measured':>11} {'F tip':>7} {'F root pkg':>11} "
           f"{'f pkg':>7} {'f AeroDyn':>10} {'F root AD':>10} {'F new':>7} {'lift':>8}")
     for p in files:
-        rs = [r for r in csv.DictReader(open(p)) if float(r["time"]) >= a.discard_revs * period]
+        rs = [r for r in read_rows_resumed(Path(p)) if float(r["time"]) >= a.discard_revs * period]
         if not rs:
             continue
         m = lambda k: sum(float(r[k]) for r in rs) / len(rs)   # noqa: E731

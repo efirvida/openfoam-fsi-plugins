@@ -17,8 +17,11 @@ Usage:
     python3 scripts/quantifyPolarReScaling.py --alm-dir runs/alm-U7-coarse-r1 --re-ref 1e6
 """
 from __future__ import annotations
-import argparse, csv, glob, os, re
+import argparse, glob, os, re
 import bisect
+from pathlib import Path
+
+from comparePhaseVI import read_rows_resumed  # noqa: E402
 
 
 def read_polar(path):
@@ -84,7 +87,7 @@ def main():
 
     ks, kr = [], []
     for p in files:
-        rs = [r for r in csv.DictReader(open(p)) if float(r["time"]) >= a.discard_revs * period]
+        rs = [r for r in read_rows_resumed(Path(p)) if float(r["time"]) >= a.discard_revs * period]
         if not rs:
             continue
         m = lambda k: sum(float(r[k]) for r in rs) / len(rs)   # noqa: E731
