@@ -130,6 +130,7 @@ scripts/runPhaseVI.sh -m alm|asm|asm-mesh -u <speed> [-mesh coarse|fine|ultra]
                       [--domain long|squat] [-s H|S] [--solver urans|iddes]
                       [--nchordwise N] [--ranks N] [--run-label WORD]
                       [--stage0] [--restart] [--refine-level N] [--mesh-factor F] [--blade-dz DZ]
+                      [--pitch-reference twist-zero|tip]
                       [--rotational-augmentation on|off] [--root-effects on|off]
                       [--rotational-augmentation-model DuSelig|ChaviaropoulosHansen]
                       [--run] [--submit]
@@ -163,6 +164,18 @@ commit, OpenFOAM version, config sha256, variant, solver, `n_chordwise`,
   `nElements` becomes one element per table segment and, for `asm-mesh`, the staged STL is lofted from
   the same table (`tools/make_equispaced_blade.py`). Rule: `DZ = min(0.05, h/2)`; see
   `scripts/scanEquispacedDz.py`. Recorded as `blade_dz` in `run.json`.
+- `--pitch-reference twist-zero|tip` (default `twist-zero`; any other value exits 2) selects where the
+  3° collective pitch is measured. `twist-zero` is Model Definition v1.2: the pitch is added to the
+  report twist, which is zero at 75 % span, so the tip mounts at −1.185°. `tip` follows
+  NREL/TP-500-29955 p.20, "blade pitch is defined as the angle between the blade tip chord line and
+  the plane of the turbine disk", with Table A-1 note 2, "Twist convention is positive towards
+  feather. Values listed are relative to zero twist at the 3.772-m station [75% span on a 5.029-m
+  blade]": mounting `= -(twist - twist_tip + pitch_deg)`, `twist_tip` read from the blade-table row at
+  the rotor radius (5.029 m, −1.815°), so the tip mounts at exactly −3.0° and every other station
+  moves by −1.815°. The equispaced `--blade-dz` layout uses the same original-table tip twist. One
+  helper (`tools/element_data.py`, `effective_pitch_deg`) feeds the element data and the
+  Chaviaropoulos–Hansen `pitchOffset` (`−(3 + 1.815)` under `tip`, so its theta excludes the collective
+  pitch). Recorded as `pitch_reference` in `run.json`. The default render is byte-identical to v1.2.
 - `--mesh-factor F` (positive number, exit 2 otherwise) overrides
   `turbine.gaussian_mesh_factor` (1.0) so the ALM / no-mesh-ASM projection width
   `eps = 2*cbrt(V)*meshFactor` varies per run **without changing the mesh**: the
@@ -541,6 +554,7 @@ record for v1.2; `summarizeBands.py` keeps its unchanged baseline-only gate.
 | `ring-sampling` | `--velocity-sample-radius 3.3 --n-velocity-samples 16` | v1.1 freeze: 16 equally spaced ring samples, radius **3.3 times local projection epsilon**, not 3.3 metres |
 | `du-selig-ra` | `--rotational-augmentation on` | Du & Selig (1998); existing `DuSelig`, `a=b=d=1` |
 | `ch-ra` | `--rotational-augmentation on --rotational-augmentation-model ChaviaropoulosHansen` | I7, original CH baseline `a=2.2, h=1, n=4`; Burgos Tafur et al. (2020), pp. 307–308 Eqs. (1)–(4); not yet A/B tested |
+| `tip-pitch` | `--pitch-reference tip` | NREL/TP-500-29955 p.20 ("blade pitch is defined as the angle between the blade tip chord line and the plane of the turbine disk") and Table A-1 note 2 ("Twist convention is positive towards feather. Values listed are relative to zero twist at the 3.772-m station [75% span on a 5.029-m blade]"); tip mounting −3.0° instead of −1.185°. Diagnostic arm, never of record |
 
 ### Chaviaropoulos–Hansen rotational augmentation (I7)
 
@@ -650,6 +664,11 @@ arm must still be identifiable. No checker or summary writes run data.
 python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-d1-pdrag
 python3 scripts/summarizeBands.py results/U7-H
 ```
+
+A `--variant tip-pitch` check certifies the pitch reference from the rendered tip mounting
+(last `blade1.elementData` row: −3 for `tip`, −1.185 for the v1.2 `twist-zero` reference, twist
+from the blade table), so a tip-pitch case is reported `NON-CONFORMING v1.2` and conforms only to
+its own variant.
 
 ### Numerical ladder (R1)
 

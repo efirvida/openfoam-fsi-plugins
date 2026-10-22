@@ -32,3 +32,8 @@ variants:
     note: 'Paper constants a=b=d=1, unchanged from v1.2 inactive block.'
     flags:
       --rotational-augmentation: 'on'
+  tip-pitch:
+    reference: 'NREL/TP-500-29955 p.20 "blade pitch is defined as the angle between the blade tip chord line and the plane of the turbine disk"; Table A-1 note 2 "Twist convention is positive towards feather. Values listed are relative to zero twist at the 3.772-m station [75% span on a 5.029-m blade]."'
+    note: 'Pitch measured at the tip chord: mounting = -(twist - twist_tip + pitch), twist_tip = -1.815 deg from the blade table, so the tip mounting is -3.0 deg (v1.2: -1.185). Diagnostic arm, never of record; v1.2 stays the twist-zero reference.'
+    flags:
+      --pitch-reference: tip

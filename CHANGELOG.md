@@ -4,6 +4,26 @@
 
 ### Fixes
 
+#### Phase VI: `--pitch-reference twist-zero|tip` renderer switch and `tip-pitch` variant
+
+**Files:** `turbinesFoam/validation/phaseVI/tools/element_data.py`,
+`turbinesFoam/validation/phaseVI/tools/generate_case.py`,
+`turbinesFoam/validation/phaseVI/scripts/runPhaseVI.sh`,
+`turbinesFoam/validation/phaseVI/scripts/checkModelDefinition.py`,
+`turbinesFoam/validation/phaseVI/config/model-variants.yaml`,
+`turbinesFoam/validation/phaseVI/README.md`,
+`turbinesFoam/tests/test_phasevi_pitch_reference.py`, `turbinesFoam/tests/test_model_variants.py`.
+
+**Problem:** the blade is mounted at `twist + 3°` with the table twist zero at 75 % span, but
+NREL/TP-500-29955 p.20 defines the pitch at the tip chord (twist −1.815° at the tip), so the tip
+mounts at −1.185° instead of −3.0°. There was no way to render the tip reference to measure it.
+
+**Fix:** `--pitch-reference` (default `twist-zero`, byte-identical v1.2 render) with `tip`
+mounting `-(twist - twist_tip + pitch_deg)`; one helper feeds the element data (also the
+`--blade-dz` path) and the Chaviaropoulos–Hansen `pitchOffset`. `run.json` records
+`pitch_reference`; registry variant `tip-pitch` (diagnostic, never of record) is certified by
+`checkModelDefinition.py` from the rendered tip mounting. v1.2 stays v1.2.
+
 #### Phase VI: comparison reads resumed runs
 
 **Files:** `turbinesFoam/validation/phaseVI/scripts/comparePhaseVI.py`,

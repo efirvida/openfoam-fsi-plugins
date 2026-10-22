@@ -31,7 +31,7 @@ def render(tmp_path, name):
 
 
 @pytest.mark.parametrize('name', ['v1.2', 'shen-tip', 'dag-sorensen-tip',
-                                  'ring-sampling', 'du-selig-ra', 'ch-ra'])
+                                  'ring-sampling', 'du-selig-ra', 'ch-ra', 'tip-pitch'])
 def test_variants_render_and_check(tmp_path, name):
     case = render(tmp_path, name)
     text = (case / 'system/fvOptions').read_text()
