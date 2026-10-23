@@ -24,6 +24,44 @@ mounting `-(twist - twist_tip + pitch_deg)`; one helper feeds the element data (
 `pitch_reference`; registry variant `tip-pitch` (diagnostic, never of record) is certified by
 `checkModelDefinition.py` from the rendered tip mounting. v1.2 stays v1.2.
 
+#### Phase VI: resumed diagnostic windows and force-moment torque reconciliation
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/{compareElementStates,compareSectionLoads,compareInflowAngle,reconcileTorqueIntegral}.py`,
+`turbinesFoam/tests/test_{compare_element_states,section_window,section_moments,inflow_angle_reference,reconcile_torque_integral}.py`,
+`turbinesFoam/validation/phaseVI/README.md`, `turbinesFoam/validation/tools/README.md`.
+
+**Problem:** diagnostic readers stopped at segment 0; element-state means had
+no end bound, and angle/torque diagnostics used U7 kinematics at other speeds.
+The reconciler treated per-span `f_ref_t` as integrated, guessed widths, omitted
+the blade factor and claimed agreement without establishing a physical closure.
+Force direction was incorrectly described as independent induction evidence.
+
+**Fix:** reuse the resumed reader (numeric order, later overlap replaces),
+select sequence/speed TSR and expose inclusive end bounds. Preserve the
+start-only element API and the existing sectional drift/error gates. Reconcile
+rowwise `((position-origin) cross (fx,fy,fz)) dot axis` against rotor mean ct
+on identical samples; rendered element counts prevent incomplete sums. Print
+radial torque contributions, kinematic density convention and explicit blade
+scaling/axisymmetry assumption. Retain `--alm-dir` / `--discard-revs`, adding
+speed/sequence/end/revolution overrides; torque defaults now follow the rotor
+window rather than discarding only one revolution. Label atan2(force pair) as
+a proxy, without inferring measured experimental alpha or velocity components.
+
+Observed **analytical fixture**, not real-run evidence: rotating element
+force moments give rotor-scaled Q/rho = 28, radial contributions 4 + 24 = 28,
+and ratio 1.000000 to the fixture rotor ct. `f_ref_t=999` deliberately does not
+represent that integral. Observed real-run evidence: S U5/U6 at revolutions 16..24 and U7/U8 at
+4..12 give element/rotor torque ratios 0.999986, 0.999969, 0.999937 and
+0.999898 respectively. All twelve torque/section/proxy commands exit 0 with
+empty stderr; outputs: `turbinesFoam/validation/phaseVI/runs/section-diagnosis-20261022/corrected/`.
+No simulations or aerodynamic changes were made. Focused tests: 53 passed;
+parent torque spot check: 17 passed. Full Python suite: 672 passed, 3 skipped,
+2 known yaw/pitch reference-header failures (exit 1), not a green suite.
+Independent verification was unavailable due to a provider error.
+The closure is limited to straight radial incompressible ALM; missing blade
+histories require axisymmetric averaging and rotor hub moments may leave a
+residual. No scientific cause of a performance deficit is claimed.
+
 #### Phase VI: comparison reads resumed runs
 
 **Files:** `turbinesFoam/validation/phaseVI/scripts/comparePhaseVI.py`,

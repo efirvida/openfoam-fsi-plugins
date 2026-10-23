@@ -43,6 +43,17 @@ def test_window_matches_rotor_and_steady_file_passes(tmp_path, capsys, sequence)
     assert capsys.readouterr() == ("", "")
 
 
+def test_default_window_accepts_resumed_turbine(tmp_path, capsys):
+    from test_reconcile_torque_integral import diagnostic_run, snapshot
+    period = diagnostic_run(tmp_path, speed=7, sequence="H", end_rev=12, tail=False)
+    before = snapshot(tmp_path)
+    lo, hi, info = compareSectionLoads.converged_window(tmp_path, 7, "H")
+    assert (lo, hi) == pytest.approx((4*period, 12*period))
+    assert not info["drift"]["flag"]
+    assert capsys.readouterr() == ("", "")
+    assert snapshot(tmp_path) == before
+
+
 def test_revolutions_override_matches_rotor_integer_semantics(tmp_path):
     _, _, period, _ = turbine_file(tmp_path)
     lo, hi, info = compareSectionLoads.converged_window(tmp_path, 7.0, "H", (5.9, 10.9))

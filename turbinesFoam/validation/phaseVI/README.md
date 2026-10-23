@@ -781,6 +781,64 @@ The S7 force-times-arm output is identical between reference directories; the
 frame residuals differ because archive `cn`/`ct` retain more digits than the
 workbook's four decimals (including `R_exp` 0.870 versus 0.871 at r/R 0.63).
 
+### Resumed diagnostic windows and torque closure
+
+`compareElementStates.py`, `compareSectionLoads.py`, `compareInflowAngle.py`
+and `reconcileTorqueIntegral.py` join numeric resume segments via
+`comparePhaseVI` (later segments replace overlap, not duplicate it). Bounds are
+inclusive; rows after the requested end are excluded. Select `--speed` and
+`--sequence` explicitly for non-default operating points: TSR comes from
+`config/case.yaml`, not the U7 constant.
+
+```sh
+# U5/U6 Sequence S late window: use 16..24, not just segment 0.
+python3 scripts/compareElementStates.py runs/ALM-U5 --speed 5 --sequence S \
+    --discard-revolutions 16 --end-revolutions 24 --columns cl c_ref_t
+python3 scripts/reconcileTorqueIntegral.py --alm-dir runs/ALM-U5 --speed 5 \
+    --sequence S --revolutions 16 24
+# U7/U8: --revolutions 4 12; section and force-angle tools take the same bounds.
+```
+
+Element states retain their start-only API/default (no end unless supplied),
+and accept `--tsr` to override configuration explicitly. Section, force-angle
+and torque tools default to the configured rotor window (currently 4..12);
+`--revolutions DISCARD END` overrides with integer-truncated bounds, matching
+`comparePhaseVI`. Torque also retains `--discard-revs` and adds `--end-revs`
+(fractional start/end overrides preserved; do not mix with `--revolutions`).
+The torque default now uses the configured discard, not the former 1 revolution.
+Short windows / cp-cd drift refuse with exit 2; TSR mismatch exits 3;
+`--allow-drift` warns and continues for drift only.
+
+Torque closure uses the **written integrated element forces** `fx/fy/fz`:
+`mean(((position-origin) cross force) dot axis)`, then sums elements. This
+preserves position-force covariance. `actuatorLineElement::tangentialRefForce`
+writes `f_ref_t = 0.5 * chord * c_ref_t * |Urel|^2`, a **per-span kinematic
+force**, not an integrated force. Neither guessed neighbour widths nor a
+mean-coefficient times mean-speed-squared integral is used. Origin/axis and
+expected element counts are read from rendered `system/fvOptions` with the
+existing dictionary parser (`--origin` / `--axis` override the vectors).
+Absent columns, empty/mismatched rotor-element samples, missing terminal
+elements or surface elements fail explicitly (exit 1).
+
+The normalization is `0.5*pi*R^3*Uinf^2`, with configured R and selected speed;
+the rotor reference is mean **ct**, not a hardcoded `cp/TSR`. Forces/torques
+are kinematic N/rho and N.m/rho for incompressible Phase VI: no physical density
+multiplier. Each printed radial contribution is in N.m/rho and the bands sum
+to the scaled element torque (up to print rounding). The output reports the
+observed element/rotor ratio without claiming agreement. Blade files found and
+configured blade count are explicit: mean over written blades times N assumes
+axisymmetric whole-revolution averaging when blade2 is not written. It is not
+an independently measured two-blade closure. The straight radial ALM blade has
+zero shaft projection of section pitching moment; rotor torque may also include
+hub moments. This diagnostic is not for swept blades, surface-node moments or
+compressible forces, and does not establish the cause of an aerodynamic deficit.
+
+The force-angle table retains `atan2(mean tangential, mean axial)` and unchanged
+U7 numerical columns, but labels it a **force-direction proxy**, not independent
+flow/induction evidence. Drag affects that direction. `phi_geom` uses the
+selected sequence/speed TSR; no experimental alpha or velocity components are
+inferred from force pairs.
+
 `diagnoseElementResiduals.py` and `compareInflowAngle.py` also accept
 `--experiment-dir`, with their previous defaults unchanged. The latter reads
 `cth`/`ctq`: it compares a **force-direction proxy, not measured probe inflow**.

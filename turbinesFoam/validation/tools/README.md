@@ -49,6 +49,9 @@ Related tools outside this directory:
 | tool | answers |
 | --- | --- |
 | `phaseVI/scripts/comparePhaseVI.py` | simulation vs measured WDH data, with metric definitions fixed against the NREL report |
+| `phaseVI/scripts/compareElementStates.py` | resumed element-column means in an explicit inclusive window; sequence/speed TSR, optional `--tsr` and `--end-revolutions`; start-only default retained |
+| `phaseVI/scripts/compareSectionLoads.py` / `compareInflowAngle.py` | resumed sectional loads / explicitly labelled force-direction proxy (not independent induction evidence); rotor window/drift gates, sequence/speed kinematics |
+| `phaseVI/scripts/reconcileTorqueIntegral.py` | rowwise written ALM force moments vs rotor ct on identical samples; radial torque sum, explicit kinematic density/blade conventions and observed ratio, not a claim of agreement; see [limitations and options](../phaseVI/README.md#resumed-diagnostic-windows-and-torque-closure) |
 | `iea15mw/scripts/compare_spanwise.py` | spanwise diagnosis of an IEA 15 MW ALM run, and a two-run per-band comparison (`--compare-with`); `--references` adds each reference model's band stations/means and its `cn`/`ct` ratios **to run A** (`--reference-source`, `analysis/spanwise-references.csv`) |
 | `iea15mw/scripts/station_ratio.py` | ratio of two `compare_spanwise.py --out` profiles pooled in r/R bands, including the root and tip bands that `--compare-with` leaves out |
 | `iea15mw/scripts/import_olaf_reference.py` | the `olaf-fvw` OLAF free-vortex-wake spanwise block in `analysis/spanwise-references.csv` (`alpha_deg`/`cn`/`ct` per node), regenerated from the gitignored OpenFAST CSV |

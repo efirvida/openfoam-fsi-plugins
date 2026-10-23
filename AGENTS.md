@@ -139,6 +139,21 @@ export FOAM_USER_LIBBIN=$WM_PROJECT_USER_DIR/platforms/$WM_OPTIONS/lib
 export LD_LIBRARY_PATH=$FOAM_USER_LIBBIN:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib/sys-openmpi:$LD_LIBRARY_PATH
 ```
 
+### Submitting Slurm jobs on SDumont
+
+- Request `--ntasks` only (no `--nodes`, no memory options).
+- The job limit is **per partition** (association `MaxJobs`, observed
+  2026-10-22): `sequana_cpu` 4, `sequana_cpu_bigmem` 4, `sequana_cpu_long` 3,
+  `sequana_cpu_bigmem_long` 3, `sequana_cpu_dev` 1 (20 min wall limit).
+  Re-check with `sacctmgr -n show assoc user=$USER format=Partition%22,MaxJobs,MaxSubmit`.
+- **Balance long jobs between `sequana_cpu` and `sequana_cpu_bigmem`** so more
+  run in parallel; never queue a batch on one partition while the other has free
+  slots (`squeue -u $USER -o '%i %P %T %R'` shows `AssocMaxJobsLimit` when a
+  partition is full). A pending job can be moved without losing its place:
+  `scontrol update JobId=<id> Partition=<partition>`.
+- Jobs shorter than 20 min (smoke tests, preflight renders, short checks) go to
+  `sequana_cpu_dev`.
+
 Without `WM_ARCH`/`WM_COMPILER`, wmake preprocesses `Make/options` without
 `-traditional-cpp` and fails with `missing separator`. The preCICE install
 (`~/venv`, built with GCC 14) requires a matching libstdc++ at
