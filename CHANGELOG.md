@@ -2,6 +2,22 @@
 
 ## [Unreleased] — 2026-10-01
 
+### Features
+
+#### Phase VI: DUT polar table for the P4 diagnostic arm
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/buildPolars.py`,
+`turbinesFoam/validation/phaseVI/data/polars/{S809_DUT_Re1M_total.dat,PROVENANCE.md}`,
+`turbinesFoam/validation/phaseVI/README.md`, `turbinesFoam/tests/test_build_polars.py`.
+
+**Problem:** arm P4 compares the polar source at Re 1e6 (OSU Table A-7 vs DUT Table A-8), but
+only the OSU table was emitted as a `profileData` polar.
+
+**Fix:** `buildPolars.py` also writes `S809_DUT_Re1M_total.dat` (`Cd = Cdw`) through the same
+`extension_rows()` path as the OSU total table (CSU A-3 extension, flat-plate closure); no new
+constants. Diagnostic only (`POLAR=S809_DUT_Re1M_total.dat`), never of record. All existing polar
+files regenerate byte-identical.
+
 ### Fixes
 
 #### Validation tools: `case_state.py` reads resumed runs

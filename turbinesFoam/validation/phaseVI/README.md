@@ -643,6 +643,15 @@ python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-seqS-var-ring-samplin
 python3 scripts/summarizeVariants.py results/cmp-baseline results/cmp-ring
 ```
 
+The DUT/Delft Re 1e6 table (TP-500-29955 Table A-8) is built as
+`data/polars/S809_DUT_Re1M_total.dat` **for the P4 diagnostic arm only**
+(`POLAR=S809_DUT_Re1M_total.dat` with `variant-run.slurm`); it is never of record.
+It has `Cd = Cdw`, the same CSU Table A-3 extension and flat-plate closure as the OSU
+total table, so only the source data differ inside the DUT range (-1.04..20.16 deg).
+Below -1.04 deg and between 20.16 deg and the first extension row it carries the
+mirrored/plain CSU rows (a single CSU row at 20.2 deg directly follows the last DUT
+sample); the OSU table steps to the extension at its own range edges, without blending.
+
 Unknown variants are refused before module loading or case preparation. The
 launcher accepts the v1-2-run environment (`MODEL`, `SPEED`, `SEQUENCE`, optional
 `REFINE_LEVEL`, `DELTA_T`, `END_REVS`, `POLAR`, `LABEL`, `LIB_DIR`), defaulting `LABEL` to
