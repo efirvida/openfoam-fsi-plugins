@@ -81,6 +81,34 @@ def _read_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
         return list(reader.fieldnames or []), list(reader)
 
 
+def _segment_key(source: Path) -> tuple[int, float, str]:
+    """Order ``turbines/<time>/turbine.csv`` by numeric start time, then by name."""
+    value = _as_float(source.parent.name)
+    return (0, value, "") if value is not None else (1, 0.0, source.parent.name)
+
+
+def _read_joined(sources: list[Path]) -> tuple[list[str], list[dict[str, str]]]:
+    """Join segment 0 with its resume segments, as ``comparePhaseVI`` does.
+
+    resume-run.slurm restarts from the last written time, so each later segment
+    repeats rows the previous one already holds; the later segment replaces them.
+    """
+    fields, rows = _read_rows(sources[0])
+    for source in sources[1:]:
+        later_fields, later = _read_rows(source)
+        start = _as_float(later[0].get(TIME_COLUMN)) if later else None
+        if start is None:
+            continue
+        rows = [row for row in rows if _before(row, start)] + later
+        fields = fields + [name for name in later_fields if name not in fields]
+    return fields, rows
+
+
+def _before(row: dict[str, str], start: float) -> bool:
+    time = _as_float(row.get(TIME_COLUMN))
+    return time is not None and time < start
+
+
 def _numeric_columns(fields: list[str], rows: list[dict[str, str]]) -> list[str]:
     """Return the columns that hold a float in every row, in header order."""
     return [
@@ -137,11 +165,12 @@ def inspect_run(
             2,
         )
 
-    candidates = sorted(post.glob(PREFERRED_GLOB))
+    candidates = sorted(post.glob(PREFERRED_GLOB), key=_segment_key)
     if not candidates:
         return {
             "run": run_dir.name,
             "source": None,
+            "segments": [],
             "rows": 0,
             "t_first": None,
             "t_last": None,
@@ -151,7 +180,7 @@ def inspect_run(
         }
 
     source = candidates[0]
-    fields, rows = _read_rows(source)
+    fields, rows = _read_joined(candidates)
     if not rows:
         raise CaseStateError(f"{source} has a header but no data rows", 2)
 
@@ -174,6 +203,7 @@ def inspect_run(
     return {
         "run": run_dir.name,
         "source": source.relative_to(post).as_posix(),
+        "segments": [candidate.relative_to(post).as_posix() for candidate in candidates],
         "rows": len(rows),
         "t_first": first,
         "t_last": last,
@@ -203,8 +233,10 @@ def render_text(states: list[dict], mean_last: int) -> str:
                 out.append(f"  {name}: {counted} rows")
             continue
 
+        resumes = [Path(name).parent.name for name in state["segments"][1:]]
+        resumed = f" + resume {', '.join(resumes)}" if resumes else ""
         head = (
-            f"\n{state['run']}  {state['source']}\n"
+            f"\n{state['run']}  {state['source']}{resumed}\n"
             f"  rows={state['rows']}  t=[{_format_number(state['t_first'])}, "
             f"{_format_number(state['t_last'])}]"
         )
