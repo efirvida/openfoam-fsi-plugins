@@ -555,6 +555,10 @@ record for v1.2; `summarizeBands.py` keeps its unchanged baseline-only gate.
 | `du-selig-ra` | `--rotational-augmentation on` | Du & Selig (1998); existing `DuSelig`, `a=b=d=1` |
 | `ch-ra` | `--rotational-augmentation on --rotational-augmentation-model ChaviaropoulosHansen` | I7, original CH baseline `a=2.2, h=1, n=4`; Burgos Tafur et al. (2020), pp. 307–308 Eqs. (1)–(4); not yet A/B tested |
 | `tip-pitch` | `--pitch-reference tip` | NREL/TP-500-29955 p.20 ("blade pitch is defined as the angle between the blade tip chord line and the plane of the turbine disk") and Table A-1 note 2 ("Twist convention is positive towards feather. Values listed are relative to zero twist at the 3.772-m station [75% span on a 5.029-m blade]"); tip mounting −3.0° instead of −1.185°. Diagnostic arm, never of record |
+| `tip-pitch-dag-sorensen` | `--pitch-reference tip --tip-correction on --tip-effects off` | Dağ & Sørensen (2020), Meyer Forsting et al. (2019, 2020): the velocity-side correction replaces the cl-side Glauert tip factor (root/hub loss kept), where `dag-sorensen-tip` stacks both. Diagnostic arm, never of record |
+| `tip-pitch-no-tip` | `--pitch-reference tip --tip-effects off` | Jha et al., *J. Sol. Energy Eng.* 136:031003 (2014) p.6: "there should be no need for using the Prandtl correction within the ALM framework"; no tip correction at all, root kept. Diagnostic arm, never of record |
+| `tip-pitch-du-selig-ra` | `--pitch-reference tip --rotational-augmentation on` | `tip-pitch` plus `du-selig-ra` (`a=b=d=1`). Diagnostic arm, never of record |
+| `tip-pitch-ch-ra` | `--pitch-reference tip --rotational-augmentation on --rotational-augmentation-model ChaviaropoulosHansen` | `tip-pitch` plus `ch-ra` (`a=2.2, h=1, n=4`; `pitchOffset` −4.815 from the tip reference). Diagnostic arm, never of record |
 
 ### Chaviaropoulos–Hansen rotational augmentation (I7)
 
@@ -668,7 +672,9 @@ python3 scripts/summarizeBands.py results/U7-H
 A `--variant tip-pitch` check certifies the pitch reference from the rendered tip mounting
 (last `blade1.elementData` row: −3 for `tip`, −1.185 for the v1.2 `twist-zero` reference, twist
 from the blade table), so a tip-pitch case is reported `NON-CONFORMING v1.2` and conforms only to
-its own variant.
+its own variant. The four `tip-pitch-*` arms are certified from the rendered case the same
+way: tip mounting, `GlauertCoeffs.tipEffects`, `tipCorrection.active` and the augmentation
+switch/model/constants must all match the arm (`--tip-effects` is a registry flag).
 
 ### Numerical ladder (R1)
 

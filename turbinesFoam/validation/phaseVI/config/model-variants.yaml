@@ -37,3 +37,29 @@ variants:
     note: 'Pitch measured at the tip chord: mounting = -(twist - twist_tip + pitch), twist_tip = -1.815 deg from the blade table, so the tip mounting is -3.0 deg (v1.2: -1.185). Diagnostic arm, never of record; v1.2 stays the twist-zero reference.'
     flags:
       --pitch-reference: tip
+  tip-pitch-dag-sorensen:
+    reference: 'Dag & Sorensen, Wind Energy 23:148-160 (2020); Meyer Forsting et al., Wind Energy Science (2019, 2020); pitch reference as tip-pitch'
+    note: 'Diagnostic, never of record. Tip pitch reference with the velocity-side Dag & Sorensen correction and the cl-side Glauert tip factor off (root/hub loss kept): those papers correct the induced velocity instead of a tip-loss factor, whereas dag-sorensen-tip stacks both (diagnosis E3). Existing flags only; no fitted constant.'
+    flags:
+      --pitch-reference: tip
+      --tip-correction: 'on'
+      --tip-effects: 'off'
+  tip-pitch-no-tip:
+    reference: 'Jha, Churchfield, Moriarty & Schmitz, J. Sol. Energy Eng. 136:031003 (2014) p.6: "there should be no need for using the Prandtl correction within the ALM framework"; pitch reference as tip-pitch'
+    note: 'Diagnostic, never of record. Tip pitch reference with no tip correction at all (Glauert tip factor off, Dag & Sorensen off); root/hub loss kept. Measures the size of the tip over-load on this mesh. Existing flags only; no fitted constant.'
+    flags:
+      --pitch-reference: tip
+      --tip-effects: 'off'
+  tip-pitch-du-selig-ra:
+    reference: 'tip-pitch (NREL/TP-500-29955 p.20) combined with du-selig-ra (Du & Selig, AIAA-98-0021, 1998)'
+    note: 'Diagnostic, never of record. Rotational augmentation on the tip-pitch-corrected geometry; DuSelig paper constants a=b=d=1, Glauert tip and root unchanged.'
+    flags:
+      --pitch-reference: tip
+      --rotational-augmentation: 'on'
+  tip-pitch-ch-ra:
+    reference: 'tip-pitch (NREL/TP-500-29955 p.20) combined with ch-ra (I7, Burgos Tafur et al., Acta Mech. Sin. 36:306-319, 2020, pp.307-308 Eqs.(1)-(4))'
+    note: 'Diagnostic, never of record. Chaviaropoulos-Hansen baseline a=2.2, h=1, n=4 on the tip-pitch-corrected geometry; its pitchOffset follows the tip pitch reference (-4.815), not the twist-zero -3.'
+    flags:
+      --pitch-reference: tip
+      --rotational-augmentation: 'on'
+      --rotational-augmentation-model: ChaviaropoulosHansen

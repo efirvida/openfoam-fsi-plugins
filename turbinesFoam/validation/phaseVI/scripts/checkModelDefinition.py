@@ -60,6 +60,7 @@ def load_definition(path=DEFAULT_DEFINITION):
 
 FLAG_RULES = {
     '--end-effects-model': 'endEffectsModel',
+    '--tip-effects': 'tipEffects',
     '--tip-correction': 'tipCorrection.active',
     '--rotational-augmentation': 'rotationalAugmentation.active',
     '--rotational-augmentation-model': 'rotationalAugmentation.model',
@@ -84,7 +85,7 @@ def load_variants():
                 valid = value in ('DuSelig', 'ChaviaropoulosHansen')
             elif flag == '--pitch-reference':
                 valid = value in PITCH_REFERENCES
-            elif flag in ('--tip-correction', '--rotational-augmentation'):
+            elif flag in ('--tip-effects', '--tip-correction', '--rotational-augmentation'):
                 valid = value in ('on', 'off')
             else:
                 valid = (isinstance(value, (int, float)) and not isinstance(value, bool)

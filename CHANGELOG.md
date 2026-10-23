@@ -42,6 +42,24 @@ applied per row; `phi` and `phi - alpha_deg` are averaged over the window. R, dR
 table and exit codes are unchanged (byte-identical on five real runs); v12 and v11polar `tw_sim`
 now agree at every station.
 
+#### Phase VI: four diagnostic `tip-pitch-*` arms and the `--tip-effects` registry flag
+
+**Files:** `turbinesFoam/validation/phaseVI/config/model-variants.yaml`,
+`turbinesFoam/validation/phaseVI/scripts/checkModelDefinition.py`,
+`turbinesFoam/validation/phaseVI/README.md`, `turbinesFoam/tests/test_model_variants.py`,
+`turbinesFoam/tests/test_check_model_definition.py`.
+
+**Problem:** the diagnosis (`odd/tasks/phasevi-physics-diagnosis.md`, E3/P2/P3) needs the tip
+treatment and rotational augmentation tested on the corrected tip-pitch geometry, but
+`dag-sorensen-tip` stacks the velocity-side correction on the Glauert factor, and the registry could
+not express `--tip-effects off`.
+
+**Fix:** registry arms `tip-pitch-dag-sorensen` (tip pitch, D&S on, Glauert tip off, root kept),
+`tip-pitch-no-tip` (tip pitch, tip off, root kept), `tip-pitch-du-selig-ra`, `tip-pitch-ch-ra`; all
+diagnostic, never of record, existing renderer flags only, no fitted constant. `checkModelDefinition.py`
+accepts `--tip-effects on|off` and certifies each arm from the rendered case. Existing variants'
+`--renderer-flags` output is byte-identical.
+
 #### Phase VI: `--pitch-reference twist-zero|tip` renderer switch and `tip-pitch` variant
 
 **Files:** `turbinesFoam/validation/phaseVI/tools/element_data.py`,
