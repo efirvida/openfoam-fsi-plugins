@@ -79,7 +79,7 @@ def main():
     ap.add_argument("--revolutions", nargs=2, type=float, metavar=("DISCARD", "END"),
                     help="override configured revolution bounds (integer-truncated)")
     ap.add_argument("--allow-drift", action="store_true",
-                    help="warn and continue if turbine cp/cd drift exceeds 1%")
+                    help="warn and continue if turbine cp/cd drift exceeds 1%%")
     a = ap.parse_args()
 
     lo, hi, info = converged_window(

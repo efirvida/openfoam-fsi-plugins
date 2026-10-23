@@ -781,6 +781,11 @@ The S7 force-times-arm output is identical between reference directories; the
 frame residuals differ because archive `cn`/`ct` retain more digits than the
 workbook's four decimals (including `R_exp` 0.870 versus 0.871 at r/R 0.63).
 
+`tw_sim`/`dTw` come from the exact per-row inverse `phi = atan2(cl*ct + cd*cn, cl*cn - cd*ct)`
+averaged over the window with `phi - alpha_deg`, so at fixed geometry the twist does not depend on
+the polar (the old inversion of window averages did, by up to `2*atan(cd/cl)` in stall). `R`, `dR`
+and the force table are unchanged.
+
 ### Resumed diagnostic windows and torque closure
 
 `compareElementStates.py`, `compareSectionLoads.py`, `compareInflowAngle.py`

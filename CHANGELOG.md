@@ -4,6 +4,44 @@
 
 ### Fixes
 
+#### Validation tools: `case_state.py` reads resumed runs
+
+**Files:** `turbinesFoam/validation/tools/case_state.py`, `turbinesFoam/tests/test_case_state.py`.
+
+**Problem:** the reader took the first `turbines/*/turbine.csv` in lexicographic order, so a run
+continued with `resume-run.slurm` was reported at the end of segment 0 (S U5 v12: 21.85 rev
+instead of 24.1).
+
+**Fix:** segments are joined in numeric order and a later segment replaces the rows it overlaps
+(the `comparePhaseVI` rule); JSON gains `segments`, the text report prints `+ resume <time>`.
+Single-segment output is unchanged.
+
+#### Validation tools: `--help` of every CLI is pinned
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/{compareSectionLoads,compareInflowAngle}.py`,
+`turbinesFoam/tests/test_cli_help.py`.
+
+**Problem:** a literal `1%` in an argparse help string made `--help` crash with
+`ValueError: incomplete format` in two scripts (the tools themselves ran).
+
+**Fix:** escaped as `1%%`; `test_cli_help.py` runs `--help` on every argparse CLI under
+`validation/` (54) and requires exit 0, a `usage:` line and empty stderr.
+
+#### Phase VI: `compareSectionLoads.py` twist (`tw_sim`, `dTw`) no longer depends on the polar
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/compareSectionLoads.py`,
+`turbinesFoam/tests/test_section_twist.py`.
+
+**Problem:** `angle_from_pair` chose between two branches `psi ± acos(cl/R)` and was applied to
+WINDOW-AVERAGED `cl, cd, c_ref_n, c_ref_t`, where the identity no longer holds, so it silently took
+the fallback branch (the branches differ by `2*atan(cd/cl)`, large in stall). At the same geometry
+S U8 gave dTw −1.75 (pressure polar) vs +7.33 (total polar) at r/R 0.95.
+
+**Fix:** exact branch-free inverse `phi = atan2(cl*ct + cd*cn, cl*cn - cd*ct)` (nan for `cl²+cd²≈0`),
+applied per row; `phi` and `phi - alpha_deg` are averaged over the window. R, dR, the force/torque
+table and exit codes are unchanged (byte-identical on five real runs); v12 and v11polar `tw_sim`
+now agree at every station.
+
 #### Phase VI: `--pitch-reference twist-zero|tip` renderer switch and `tip-pitch` variant
 
 **Files:** `turbinesFoam/validation/phaseVI/tools/element_data.py`,
