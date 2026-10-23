@@ -44,6 +44,19 @@ def test_main_reports_the_ratio_to_the_first_run(tmp_path, capsys):
     assert "1.429" in capsys.readouterr().out  # (0.9 + 0.1) / (0.6 + 0.1)
 
 
+def test_resumed_overlap_and_end_bound(tmp_path):
+    run = write_run(tmp_path / "a", cl=0.6)
+    later = run / states.ELEMENT_DIR.parent / "2"
+    later.mkdir()
+    for index in (0, 1):
+        (later / f"turbine.blade1.element{index}.csv").write_text(
+            "time,root_dist,cl\n2,0.1,2\n3,0.1,4\n4,0.1,99\n")
+    before = {p: p.read_bytes() for p in run.rglob("*.csv")}
+    result = states.average_elements(run, 1.0, ("cl",), end=3.0)
+    assert result[0]["cl"] == 3.0  # overlap replaced, time > end excluded
+    assert before == {p: p.read_bytes() for p in run.rglob("*.csv")}
+
+
 def test_main_fails_when_a_run_has_no_element_rows(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()

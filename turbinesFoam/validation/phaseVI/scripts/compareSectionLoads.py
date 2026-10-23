@@ -43,7 +43,8 @@ Read-only; no cluster cost.
 
 Usage:  python3 scripts/compareSectionLoads.py --alm-dir runs/alm-U7-coarse-r2 [--sequence S]
 (`--sequence` picks `data/experiment/sequence_<H|S>_*.csv`; default H.)
-The window follows comparePhaseVI's configured discard/end revolutions and
+Numeric resume segments are joined with the later segment replacing overlap.
+The inclusive window follows comparePhaseVI's configured discard/end revolutions and
 sequence/speed TSR. Override with --revolutions DISCARD END (integer-truncated,
 like comparePhaseVI). Turbine cp/cd drift above 1% refuses the window (exit 2);
 --allow-drift prints a WARNING and continues.
@@ -52,7 +53,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import glob
 import math
 import os
 import re
@@ -69,18 +69,21 @@ CD_VALID_MAX = 0.5          # the root sentinel is cd = 1.1
 
 
 def converged_window(run_dir, speed, sequence, revolutions=None, allow_drift=False,
-                     allow_short_window=False):
+                     allow_short_window=False, *, truncate_revolutions=True):
     """Return rotor-metric bounds and window info, refusing non-steady cp/cd.
 
     A window shorter than comparePhaseVI's minimum is refused unless
     `allow_short_window` (diagnostic short runs only, as --allow-short-window).
+    `truncate_revolutions=False` preserves the torque reader's legacy fractional
+    --discard-revs API; existing callers retain integer-truncated overrides.
     """
     cfg = comparePhaseVI.load_config(comparePhaseVI.DEFAULT_CONFIG)
     if revolutions is not None:
-        cfg["solver"]["discard_revolutions"] = int(revolutions[0])
-        cfg["solver"]["end_revolutions"] = int(revolutions[1])
+        convert = int if truncate_revolutions else float
+        cfg["solver"]["discard_revolutions"] = convert(revolutions[0])
+        cfg["solver"]["end_revolutions"] = convert(revolutions[1])
     start, end, period = comparePhaseVI.window_bounds(cfg, speed, sequence)
-    rows = comparePhaseVI.read_rows(Path(run_dir) / comparePhaseVI.TURBINE_CSV)
+    rows = comparePhaseVI.read_rows_resumed(Path(run_dir) / comparePhaseVI.TURBINE_CSV)
     tsr = float(comparePhaseVI.select_speed(cfg, speed, sequence)["tsr"])
     try:
         comparePhaseVI.analyse_turbine(rows, start, end, period, allow_short_window, tsr)
@@ -139,21 +142,13 @@ def rotation_between(x1, y1, x2, y2):
 
 def sim_profile(alm_dir, lo, hi):
     """(r/R, cl, cd, R, frame angle, alpha_eff, twist) per valid element."""
-    element_dir = os.path.join(
-        alm_dir, "postProcessing/actuatorLineElements/0"
-    )
+    element_dir = Path(alm_dir) / "postProcessing/actuatorLineElements/0"
     out = []
     dropped = 0
-    for path in sorted(
-        glob.glob(os.path.join(element_dir, "*blade1.element*.csv")),
-        key=element_number,
-    ):
-        with open(path) as stream:
-            rows = [
-                row
-                for row in csv.DictReader(stream)
-                if lo <= float(row["time"]) <= hi
-            ]
+    for path, history in comparePhaseVI.read_elements(element_dir):
+        if not re.search(r"\.blade1\.element\d+\.csv$", path.name):
+            continue
+        rows = [row for row in history if lo <= float(row["time"]) <= hi]
         if not rows:
             continue
         cl = statistics.mean(float(row["cl"]) for row in rows)

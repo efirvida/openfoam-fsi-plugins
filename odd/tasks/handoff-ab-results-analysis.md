@@ -1,4 +1,74 @@
-# Handoff — A/B variant results analysis (written 2026-10-20)
+# Handoff — A/B variant results analysis
+
+## Resume here — 2026-10-22
+
+The S5 and H7 jobs are complete. Do not resubmit them. C2 is deferred to a
+separate session; C3 remains pending. No model changes, builds, simulations or
+commits were made during this analysis/diagnostic correction.
+
+### Final A/B and sectional evidence
+
+- A/B artifacts: `turbinesFoam/validation/phaseVI/runs/ab-results-20261022/summary.txt`.
+  All 26 comparison commands and both summaries exited 0. Late S5/S6 windows
+  16..24 are stable; previous startup DRIFT does not invalidate these averages.
+  This is not mesh/timestep-convergence proof.
+- v1.2 power errors: S5 +26.5%, S6 +13.5%, S7 -2.1%, S8 -19.9%; H7 -2.2%.
+  Existing-switch matrix H7/S5/S7/S8 is populated. No isolated switch resolves
+  the trend without root/tip or U7 tradeoffs; do not promote an arm to baseline.
+- Audited residuals: `runs/section-diagnosis-20261022/audited-residuals-U*.txt`
+  relative to `turbinesFoam/validation/phaseVI/`. At r/R=0.30, alpha rises
+  3.13/6.26/10.14/13.81 degrees while applied Cl rises 0.427/0.794/0.930/0.996.
+  The static polar flattens before its post-peak decline; do not call all U8
+  sections deep-stalled. Tip losses strengthen with speed. U7 also genuinely
+  matches midspan loads: its good total is not solely a large cancellation.
+- Low inboard Re (~0.58..0.64M) lies below the available multi-Re table range.
+  Substituting CSU 0.65M at fixed inflow worsens both U5 and U8 inboard residuals;
+  this is not a demonstrated Reynolds fix and changes facility as well.
+
+### Corrected diagnostics and observed torque closure
+
+User authorization, verbatim: "ok vamos a hacer las correcciones y reconciliacion de tests".
+Four existing readers now join resumed histories, honor end windows and use
+configured operating points. The angle output is a force-direction proxy, not
+independent flow/induction evidence. The torque reader uses rowwise integrated
+written fx/fy/fz moments, not an approximate integration of per-span f_ref_t.
+
+Corrected artifacts: `turbinesFoam/validation/phaseVI/runs/section-diagnosis-20261022/corrected/`.
+All twelve real torque/section/proxy commands exited 0 with empty stderr.
+
+| S case | Window (rev) | Q rotor/rho | Q elements/rho | Ratio |
+|---|---|---|---|---|
+| U5 | 16..24 | 296.655750 | 296.651734 | 0.999986 |
+| U6 | 16..24 | 480.787884 | 480.772750 | 0.999969 |
+| U7 | 4..12 | 626.170045 | 626.130493 | 0.999937 |
+| U8 | 4..12 | 707.333703 | 707.261869 | 0.999898 |
+
+Only blade1 is written; scaling to two blades assumes axisymmetric averaging.
+This supports internal force-to-torque consistency, not experimental validation.
+CSV lacks sampled relative-velocity components, so independent flow-direction
+attribution remains unavailable. Do not claim the polar-versus-sampling cause
+has been identified. Five experimental stations cannot supply an exact radial
+experimental torque distribution.
+
+### Verification and delivery state
+
+- Writer observed RED then GREEN: 53 focused tests passed; differential checks
+  against HEAD covered all four CLIs. Parent repeated torque tests: 17 passed.
+- Full Python suite job-2 exited 1: **672 passed, 3 skipped, 2 failed** in
+  723.89 s. Both failures are
+  `test_phasevi_yaw_pitch_reference.py::test_schema_prefix_matches_committed_sequence_tables[H|S]`
+  at line 107: pitch_spanwise header lacks the three expected plane-reference
+  columns (first mismatch: yaw_nominal_deg versus cth). These are the same
+  known base failures recorded in `phasevi-paper-yaw-pilot.md` L8; their source
+  and reference data were not changed here. Suite is not green; do not claim it.
+- Independent verifier failed with provider error; unavailable, not approved,
+  and not automatically retried. Native ASSESS was unassessable due to
+  intended-untracked declaration; no review authority or approval was created.
+- Changes remain uncommitted on `feat/phasevi-paper-yaw-pilot` (pre-existing
+  branch). Preserve unrelated untracked `tools/__pycache__/` and
+  `tools/tests/__pycache__/`. No push/PR/commit is authorized by this handoff.
+
+## Historical handoff — 2026-10-20 (superseded above)
 
 Fresh session, effort `medium`. Feature document: `odd/tasks/alm-correction-flags.md` (read until `## Log`, entries L7-L9).
 Rules: AGENTS.md; Slurm `--ntasks` only (no nodes, no memory); do not rebuild `libturbinesFoam` while jobs run; no fitted coefficients.
