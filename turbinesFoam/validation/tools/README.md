@@ -44,6 +44,23 @@ modified (there is a test that verifies this byte for byte).
 
 Exit codes: `1` run directory missing, `2` no `postProcessing` output yet.
 
+### `run_diff.py` — does a candidate run reproduce a reference run?
+
+```sh
+python3 turbinesFoam/validation/tools/run_diff.py runs/reference runs/candidate
+python3 turbinesFoam/validation/tools/run_diff.py --until 2.5 --tolerance 1e-6 REF CAND
+python3 turbinesFoam/validation/tools/run_diff.py --json REF CAND
+```
+
+Joins the resume segments of every `postProcessing/<family>/<segment>/<name>.csv`
+(as `case_state.py` does), aligns the two runs on `time` and reports `max_abs` and
+`max_rel` (relative to `max|reference|`) per shared column, the worst column, and
+the files/columns present in only one run. Text output lists only the `--top` worst
+files. Pure reader: no calibrated quantities, neither run is modified.
+
+Exit codes: `1` run directory missing, `2` no `postProcessing` output yet, `3`
+`--tolerance` exceeded.
+
 Related tools outside this directory:
 
 | tool | answers |

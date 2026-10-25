@@ -4,6 +4,20 @@
 
 ### Features
 
+#### Validation tools: `run_diff.py`, a two-run regression differ
+
+**Files:** `turbinesFoam/validation/tools/run_diff.py`, `turbinesFoam/validation/tools/README.md`,
+`turbinesFoam/tests/test_run_diff.py`, `tools/analysis_gap.py`.
+
+**Problem:** checking that a rebuilt library or a changed renderer reproduces a reference run
+(the IEA 15 MW control replayed with the current library) had no reader; it would have been an
+inline snippet over ~150 element CSVs.
+
+**Fix:** a pure reader that joins resumed segments like `case_state.py`, aligns both runs' own CSV
+rows on `time` and reports per shared column the largest absolute and relative difference;
+columns and files present in one run only are listed, never compared; `--until` bounds the
+window; `--tolerance` sets exit 3. Self-diff of `iea15mw-l2-ctrl`: 149 files, worst 0, 23 s.
+
 #### Phase VI: DUT polar table for the P4 diagnostic arm
 
 **Files:** `turbinesFoam/validation/phaseVI/scripts/buildPolars.py`,

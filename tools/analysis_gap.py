@@ -101,6 +101,7 @@ SCRATCH_SCRIPT_PATTERN = r"(?:^|\s)/tmp/[\w./-]+\.(?:py|sh|R)"
 #: Repository analysis entry points. A command that calls one of these is covered.
 KNOWN_TOOLS: tuple[str, ...] = (
     "case_state.py",
+    "run_diff.py",
     "comparePhaseVI.py",
     "compare_spanwise.py",
     "compareNacelle.py",
@@ -122,6 +123,7 @@ KNOWN_TOOLS: tuple[str, ...] = (
 #: find. Adding a tool means adding one line here.
 TOOL_COVERAGE: dict[str, frozenset[str]] = {
     "case_state.py": frozenset({"case-output", "turbine-csv"}),
+    "run_diff.py": frozenset({"case-output", "turbine-csv"}),
     "compare_spanwise.py": frozenset({"case-output", "turbine-csv", "blade-surface"}),
     "comparePhaseVI.py": frozenset({"experiment-ref", "turbine-csv"}),
     "compareNacelle.py": frozenset({"experiment-ref", "case-output"}),
