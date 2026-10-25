@@ -137,6 +137,14 @@ predicted: dR 0.30 -13.8 -> +4.4, 0.47 -21.4 -> -12.7, 0.63 -7.9 -> -5.1, 0.80 a
 pp); power -21.7 -> -16.5. The Chaviaropoulos-Hansen arm landed on a slow node (11623030, 250 steps in 10 h,
 no written time) and was relaunched from scratch (11623807, `LIB_DIR=runs/lib-v13`, confirmed in its .out).
 
+**Cross-check on the IEA 15 MW rotor (existing runs, `phasevi-physics-review.md` L21).** The IEA D&S arm
+(`iea15mw-l2-ds`) is P2 (Glauert root kept, tip off, D&S on); `iea15mw-l2-ctrl` is P1. At r/R 0.95-1.0 the
+Glauert control sees alpha 7.67 deg against OLAF 6.21 and D&S 6.59; OLAF c_n over the arm is 1.72 (P1) and
+0.96 (P2), at 0.9-0.95 1.13 and 0.96. The tip signature of Phase VI repeats, and P2 corrects it on both
+rotors. The integral moves the other way on the IEA (cp 0.546 -> 0.567, OLAF 0.531): the Glauert tip
+under-load was cancelling the outboard tangential excess over the BEM (c_t +10-13 %), so adopting P2
+exposes that excess as the next item; it is not a reason to keep P1.
+
 **Pending:** CH RA S U8 (11623807); P4 = P2 with the DUT polar at S U5 / U8 (11623816 / 11623817,
 label `var-tip-pitch-dag-sorensen-dut`; confound: mirrored CSU rows below -1.04 deg and the DUT->CSU step
 at 20.2 deg, review lineage review-77ffa9548bfe3646). P2 has no U6/U7/H7 cell yet: if P2 (or P4) becomes the
