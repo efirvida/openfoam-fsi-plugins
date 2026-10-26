@@ -134,8 +134,38 @@ The U8 inboard deficit is untouched by every tip arm (dR 0.47 -20.5..-21.4 %, BE
 
 **Rotational augmentation (tip + total, Glauert tip, S U8).** Du-Selig moves the inboard stations only, as
 predicted: dR 0.30 -13.8 -> +4.4, 0.47 -21.4 -> -12.7, 0.63 -7.9 -> -5.1, 0.80 and 0.95 unchanged (< 0.4
-pp); power -21.7 -> -16.5. The Chaviaropoulos-Hansen arm landed on a slow node (11623030, 250 steps in 10 h,
-no written time) and was relaunched from scratch (11623807, `LIB_DIR=runs/lib-v13`, confirmed in its .out).
+pp); power -21.7 -> -16.5. The Chaviaropoulos-Hansen arm (11623807, relaunched after the slow-node 11623030,
+`LIB_DIR=runs/lib-v13` confirmed in its .out, `ChaviaropoulosHansen` in its fvOptions) moves more, and
+further out. In `summary.log` c_n % P1 -> CH (Du-Selig shift in brackets): 0.30 -13.9 -> +10.7 (+24.6 pp;
+DS +18.1), 0.47 -21.6 -> -6.2 (+15.4; DS +8.7), 0.63 -7.6 -> -0.5 (+7.1; DS +2.8), 0.80 -13.4 -> -11.2 (+2.2;
+DS +0.4), 0.95 -33.1 -> -31.9 (+1.2; DS -0.1). Power -21.7 -> -17.5 (DS -16.5) and thrust -15.7 -> -6.9
+(DS -11.0). The prediction ("only r/R 0.30/0.47 at U8 move") holds in shape, as a shift that decays
+outboard, but not strictly: CH also moves 0.63 by 7.1 pp. CH lifts the normal load more than DS and the power
+less. Under R2, CH at S U8 passes T, c_n 0.30, 0.47 and 0.63 and fails P (-17.5) and c_n 0.80 (-11.2). Both
+RA arms sit on the P1 tip (Glauert on cl), so the outboard deficit they leave is the P1 tip defect, not
+an RA property; no RA arm on the P2 tip exists.
+
+**P4 = P2 with the DUT polar (S U5 / U8; 11623816 / 11623817, label `var-tip-pitch-dag-sorensen-dut`).**
+c_n % P2 -> P4 from `summary.log`; dR and alpha from `sections-*.log`:
+
+| cell | P | T | c_n 0.30 | c_n 0.47 / 0.63 / 0.80 | c_n 0.95 | alpha 0.47 / 0.63 / 0.80 |
+| --- | --- | --- | --- | --- | --- | --- |
+| P2 S U5 | -1.7 | -5.9 | -10.4 | -7.0 / -10.8 / -7.5 | +8.4 | 3.71 / 3.62 / 3.24 |
+| P4 S U5 | +4.7 | +3.8 | +3.8 | +0.6 / -2.8 / +2.6 | +22.5 | 3.46 / 3.38 / 3.02 |
+| P2 S U8 | -7.8 | -1.0 | -13.3 | -20.9 / -3.4 / +3.3 | +25.4 | 11.37 / 9.64 / 7.96 |
+| P4 S U8 | -5.6 | +3.5 | -9.9 | -18.6 / +0.1 / +9.0 | +31.8 | 11.33 / 9.53 / 7.80 |
+
+The prediction (diagnosis E5) holds at U8 and only in direction at U5. At U8 the inboard stations barely move:
+r/R 0.30 / 0.47 rise +3.4 / +2.3 pp (relative R +3.9 / +2.9 %, predicted +2..+3 %), and the stall-delay
+deficit stays (0.47 -18.6). At U5 midspan rises by a relative +8.2 / +9.0 / +10.9 % at 0.47 / 0.63 / 0.80,
+against a predicted +13..+16 %. That is about 60-70 % of the open-loop estimate. The local alpha fell by
+0.22-0.26 deg, which is consistent with the higher load raising the induction, a feedback the fixed-alpha
+polar delta ignores. Not predicted: U5 r/R 0.30 rises +14.2 pp, and the tip over-load grows (0.95 +22.5 /
++31.8). Under R2, P4 passes every band at S U5 (P +4.7, T +3.8, 0.30 +3.8, 0.47-0.80 within 2.8). At S U8
+it passes P (-5.6), T, 0.30 and 0.63, passes 0.80 only just (+9.0), and fails 0.47 (-18.6). The U5-U8 power
+spread is 10.3 pp against 6.1 pp for P2: the DUT lifts U5 more than U8. Confound L6: the evaluated stations
+stay within -1.04..20.2 deg (max 12.3 deg at U8 r/R 0.30), so the mirrored rows and the step only touch
+root elements inboard of 0.30. P4, like P2, has no U6/U7/H7 cell.
 
 **Cross-check on the IEA 15 MW rotor (existing runs, `phasevi-physics-review.md` L21).** The IEA D&S arm
 (`iea15mw-l2-ds`) is P2 (Glauert root kept, tip off, D&S on); `iea15mw-l2-ctrl` is P1. At r/R 0.95-1.0 the
@@ -145,11 +175,33 @@ rotors. The integral moves the other way on the IEA (cp 0.546 -> 0.567, OLAF 0.5
 under-load was cancelling the outboard tangential excess over the BEM (c_t +10-13 %), so adopting P2
 exposes that excess as the next item; it is not a reason to keep P1.
 
-**Pending:** CH RA S U8 (11623807); P4 = P2 with the DUT polar at S U5 / U8 (11623816 / 11623817,
-label `var-tip-pitch-dag-sorensen-dut`; confound: mirrored CSU rows below -1.04 deg and the DUT->CSU step
-at 20.2 deg, review lineage review-77ffa9548bfe3646). P2 has no U6/U7/H7 cell yet: if P2 (or P4) becomes the
-definition, the R2 gate needs those three cells under it, and the D&S tip treatment adds the cost of the
-prescribed wake.
+**IEA regression replay with lib-v13 (2026-10-26, job 11623830, `iea15mw/runs/iea15mw-l2-ctrl-replay-v13`,
+`.compare.txt` beside it).** The control (Glauert tip+root) replayed from its frozen state t = 159.6232 with
+the v1.3 library is identical to the control up to t = 163.6063: 149 files, tolerance 0, max_rel 0
+(`run_diff.py --until 163.6063 --tolerance 0`, exit 0). The Glauert path of lib-v13 is therefore unchanged.
+Plateau (revs 22-23) cp 0.5451 against 0.5461 for the control (-0.17 %), ct 0.0612 against 0.0613; against
+OLAF 0.5312 the error is +2.6 % against +2.8 %. Rev 21 differs by more (0.5473 against 0.5375), and the reason
+is not the library. The control was resumed at 163.6063 and the replay was not. At that resume the
+blade geometry jumped by 179.67 deg against the azimuth counter: element 6 sits at 84.33 deg in the control
+and at 264.00 deg in the replay at t = 163.625, while `angle_deg` agrees to 1e-6. `createBlades()` builds the
+blades at `azimuthalOffset`, and `createAngleRadField()` (ad15f96) restores the counter `angle0_` without
+rotating the geometry to it. Every resume therefore resets the blades by `angle0_` mod 360. With 3 blades the
+control's jump is 59.95 deg modulo symmetry, the worst case, so its rev 21 (0.5375) and, to a lesser
+degree, its plateau carry a blade/wake mismatch transient. The other IEA resumes that still have a log sit
+at 0.28 deg (screen-m3, replay), 120.06 deg (ds) and about 360 deg (nac, screens m1/m2): all of these are
+symmetric. The Phase VI resumes with a log (2 blades, no tower) sit near 0 or 180 deg, which is symmetric
+under uniform inflow. The L21 tip reading stands on the clean replay: bands 0.95-1 delta alpha ds - replay
+-1.076 deg (control -1.078) and c_n ratio 1.785 (control 1.785), with every band within 0.01 deg / 0.1 %
+(`tip-treatment-ctrl-vs-ds-20261025/bands-replay.log`). The replay covers the Glauert path only, not D&S.
+
+**Pending:** no run of the matrix is pending (all 23 cells in `run_compare-20261026.log`, compare and
+sections exit 0). Open before adoption, each of them new runs: neither P2 nor P4 has a U6/U7/H7 cell, so if
+one becomes the definition the R2 gate needs those three cells under it, plus one mesh step, and the D&S tip
+treatment adds the cost of the prescribed wake. No RA arm on the P2/P4 tip exists either. The resume
+defect (blades not rotated to the restored azimuth, IEA replay paragraph) is a code item. Among the resumes whose log
+survives, only the IEA ctrl (the P0.4 record) is affected: its rev 21, and its plateau by -0.17 %. Each
+`log.pimpleFoam` keeps only the last segment, so earlier resumes of multi-segment runs are not checked. Status answered to the owner (L16): closer to
+validated, not validated.
 
 ## Options for the owner
 
