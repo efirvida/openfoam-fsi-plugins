@@ -203,6 +203,32 @@ survives, only the IEA ctrl (the P0.4 record) is affected: its rev 21, and its p
 `log.pimpleFoam` keeps only the last segment, so earlier resumes of multi-segment runs are not checked. Status answered to the owner (L16): closer to
 validated, not validated.
 
+## Decision (owner, 2026-10-26: "vamos con tus recomendaciones") and pre-registered gate
+
+**Frozen v1.3 (candidate of record, pending the gate):** tip pitch reference; P2 tip treatment (Dag-Sorensen
+on, Glauert tip off, Glauert root kept); polar `S809_OSU_Re1M_total.dat`; rotational augmentation off; coarse
+mesh (refine level 0), dt 0.001; installed library (2026-10-12, the binary of P2 S U5/U8). Each choice rests
+on evidence other than the score against the experiment. The tip pitch is a geometry correction. P2 tracks the
+BEM on Phase VI and OLAF on the IEA rotor. The OSU total polar is the original definition's polar and has no
+L6 confound. RA off, because no RA arm exists on the P2 tip, and adding one now would be chosen post hoc. P4
+(DUT) is kept as a measured polar-uncertainty band, not as an option: midspan U5 +8..+11 %, U8 inboard
++3..+4 %, tip +6..+14 pp.
+
+**Gate cells (new, submitted 2026-10-26 by `runs/physics-review-scripts/submit_v13_gate.sh`):** S U6 (24 rev,
+window 16..24), S U7 and H U7 (12 rev, window 4..12), and H U7 at refine level 1 (12 rev). The existing P2
+S U5 and S U8 complete the set.
+
+**Reading rule, written before any gate result:**
+- R2 bands as above (P 10 %, T 15 %, c_n 0.30 15 %, c_n 0.47 / 0.63 / 0.80 10 %; 0.95 has no band),
+  reported band by band at S U5, U6, U7, U8 and H U7. Two failures are known already from the existing
+  cells: S U5 c_n 0.63 -10.8 and S U8 c_n 0.47 -20.9. The gate therefore cannot pass every band, and it is not
+  expected to.
+- Mesh step: H U7 level 0 -> 1, criterion as R1: P, T and c_n 0.47-0.95 change < 2 %.
+- Outcome: the band count and the mesh step are the v1.3 result as they are. A failure confined to
+  inboard U8 (r/R 0.30-0.47) is recorded as a model limitation (3D stall delay, shared by the BEM). Any other
+  failure is recorded as a failure. No new arm, polar or coefficient follows from the gate inside v1.3;
+  changes go to v1.4 (structural items).
+
 ## Options for the owner
 
 - **A (proposed): adopt v1.3 = tip pitch + total polar**, then run gaps 1-2 as the new R2 baseline.
