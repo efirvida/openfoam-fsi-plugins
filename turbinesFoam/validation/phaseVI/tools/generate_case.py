@@ -47,7 +47,9 @@ from case_config import (
 )
 from element_data import (
     blade_element_count,
+    PITCH_REFERENCES,
     blade_element_profiles,
+    effective_pitch_deg,
     hub_element_rows,
     render_blade_element_data,
 )
@@ -758,7 +760,7 @@ def render_fv_options(
             constants = (f"            a {float(augmentation['a']):.8g};\n"
                          f"            h {float(augmentation['h']):.8g};\n"
                          f"            n {float(augmentation['n']):.8g};\n"
-                         f"            pitchOffset {-float(turbine['pitch_deg']):.8g};\n")
+                         f"            pitchOffset {-effective_pitch_deg(cfg):.8g};\n")
         else:
             constants = (f"            a {float(augmentation['a']):.8g};\n"
                          f"            b {float(augmentation['b']):.8g};\n"
@@ -1354,6 +1356,17 @@ def main(argv: list[str] | None = None) -> int:
              "the committed 26-station table governs and the render is unchanged",
     )
     parser.add_argument(
+        "--pitch-reference",
+        choices=PITCH_REFERENCES,
+        default="twist-zero",
+        help="where the collective pitch is measured. twist-zero (default) adds it "
+             "to the report twist, zero at the 75%% span station (Model Definition "
+             "v1.2). tip measures it at the tip chord as NREL/TP-500-29955 p.20 "
+             "defines it: mounting = -(twist - twist_tip + pitch), tip mounting "
+             "-pitch; the Chaviaropoulos-Hansen pitchOffset follows. Diagnostic "
+             "arm, never of record",
+    )
+    parser.add_argument(
         "--nacelle",
         choices=("on", "off"),
         default="off",
@@ -1404,6 +1417,7 @@ def main(argv: list[str] | None = None) -> int:
             cfg["turbine"]["gaussian_mesh_factor"] = float(args.mesh_factor)
         if args.blade_dz is not None:
             cfg["turbine"]["blade_dz"] = float(args.blade_dz)
+        cfg["turbine"]["pitch_reference"] = args.pitch_reference
         if args.refine_level:
             cfg["turbine"]["gaussian_mesh_factor"] = float(
                 cfg["turbine"]["gaussian_mesh_factor"]

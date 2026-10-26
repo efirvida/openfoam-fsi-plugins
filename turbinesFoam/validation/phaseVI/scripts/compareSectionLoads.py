@@ -11,9 +11,13 @@ reference frame:
   the lift level right" without an angle at all. This is the comparison of
   record.
 
-* The frame angle, recovered with the ALGEBRAIC INVERSE of the decomposition,
-  never `atan2` of the coefficient pair (which ignores cl/cd and carries a
-  measured ~2.5 deg bias, see memory obs. 446).
+* The frame angle (inflow angle phi), recovered PER ROW with the exact,
+  branch-free inverse of the decomposition
+  `phi = atan2(cl*ct + cd*cn, cl*cn - cd*ct)`, never `atan2` of the coefficient
+  pair (which ignores cl/cd and carries a measured ~2.5 deg bias, see memory
+  obs. 446). The twist `phi - alpha_eff` is averaged over the same rows, so it
+  does not depend on the polar at fixed geometry (inverting window averages did,
+  by up to 2*atan(cd/cl) in stall).
 
 The experiment's `cl`/`cd` are NOT tabulated and are NOT recoverable from its
 published coefficients without an external angle, so this tool does not claim
@@ -43,7 +47,8 @@ Read-only; no cluster cost.
 
 Usage:  python3 scripts/compareSectionLoads.py --alm-dir runs/alm-U7-coarse-r2 [--sequence S]
 (`--sequence` picks `data/experiment/sequence_<H|S>_*.csv`; default H.)
-The window follows comparePhaseVI's configured discard/end revolutions and
+Numeric resume segments are joined with the later segment replacing overlap.
+The inclusive window follows comparePhaseVI's configured discard/end revolutions and
 sequence/speed TSR. Override with --revolutions DISCARD END (integer-truncated,
 like comparePhaseVI). Turbine cp/cd drift above 1% refuses the window (exit 2);
 --allow-drift prints a WARNING and continues.
@@ -52,7 +57,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import glob
 import math
 import os
 import re
@@ -61,7 +65,6 @@ import sys
 from pathlib import Path
 
 import comparePhaseVI
-from comparePhaseVI import read_rows_resumed  # noqa: E402
 from closeExperimentIntegral import case_chord
 
 R, CUT, TSR, U_REF = 5.029, 0.5083, 5.408, 7.0
@@ -70,18 +73,21 @@ CD_VALID_MAX = 0.5          # the root sentinel is cd = 1.1
 
 
 def converged_window(run_dir, speed, sequence, revolutions=None, allow_drift=False,
-                     allow_short_window=False):
+                     allow_short_window=False, *, truncate_revolutions=True):
     """Return rotor-metric bounds and window info, refusing non-steady cp/cd.
 
     A window shorter than comparePhaseVI's minimum is refused unless
     `allow_short_window` (diagnostic short runs only, as --allow-short-window).
+    `truncate_revolutions=False` preserves the torque reader's legacy fractional
+    --discard-revs API; existing callers retain integer-truncated overrides.
     """
     cfg = comparePhaseVI.load_config(comparePhaseVI.DEFAULT_CONFIG)
     if revolutions is not None:
-        cfg["solver"]["discard_revolutions"] = int(revolutions[0])
-        cfg["solver"]["end_revolutions"] = int(revolutions[1])
+        convert = int if truncate_revolutions else float
+        cfg["solver"]["discard_revolutions"] = convert(revolutions[0])
+        cfg["solver"]["end_revolutions"] = convert(revolutions[1])
     start, end, period = comparePhaseVI.window_bounds(cfg, speed, sequence)
-    rows = read_rows_resumed(Path(run_dir) / comparePhaseVI.TURBINE_CSV)
+    rows = comparePhaseVI.read_rows_resumed(Path(run_dir) / comparePhaseVI.TURBINE_CSV)
     tsr = float(comparePhaseVI.select_speed(cfg, speed, sequence)["tsr"])
     try:
         comparePhaseVI.analyse_turbine(rows, start, end, period, allow_short_window, tsr)
@@ -118,16 +124,16 @@ def element_number(path: str) -> int:
 
 
 def angle_from_pair(n, t, cl, cd):
-    """Angle `g` with (n, t) == M(g)(cl, cd); algebraic inverse, not atan2."""
-    res = math.hypot(n, t)
-    if res < 1e-12 or abs(cl) > res:
+    """Inflow angle `phi` of one row, the exact inverse of the plane-of-rotation frame.
+
+    `n = cl cos(phi) + cd sin(phi)` and `t = cl sin(phi) - cd cos(phi)`, so
+    `cl t + cd n = (cl^2 + cd^2) sin(phi)` and `cl n - cd t = (cl^2 + cd^2) cos(phi)`.
+    No branch to choose; valid only for a single row (the identity does not hold
+    for window averages).
+    """
+    if cl * cl + cd * cd < 1e-24:
         return float("nan")
-    psi = math.atan2(t, n)
-    offset = math.acos(max(-1.0, min(1.0, cl / res)))
-    for g in (psi + offset, psi - offset):
-        if abs(cl * math.sin(g) - cd * math.cos(g) - t) < 1e-6:
-            return g
-    return psi - offset
+    return math.atan2(cl * t + cd * n, cl * n - cd * t)
 
 
 def rotation_between(x1, y1, x2, y2):
@@ -140,19 +146,13 @@ def rotation_between(x1, y1, x2, y2):
 
 def sim_profile(alm_dir, lo, hi):
     """(r/R, cl, cd, R, frame angle, alpha_eff, twist) per valid element."""
-    element_dir = os.path.join(
-        alm_dir, "postProcessing/actuatorLineElements/0"
-    )
+    element_dir = Path(alm_dir) / "postProcessing/actuatorLineElements/0"
     out = []
     dropped = 0
-    for path in sorted(
-        glob.glob(os.path.join(element_dir, "*blade1.element*.csv")),
-        key=element_number,
-    ):
-        rows = [
-            row for row in read_rows_resumed(Path(path))
-            if lo <= float(row["time"]) <= hi
-        ]
+    for path, history in comparePhaseVI.read_elements(element_dir):
+        if not re.search(r"\.blade1\.element\d+\.csv$", path.name):
+            continue
+        rows = [row for row in history if lo <= float(row["time"]) <= hi]
         if not rows:
             continue
         cl = statistics.mean(float(row["cl"]) for row in rows)
@@ -160,17 +160,24 @@ def sim_profile(alm_dir, lo, hi):
         if cd > CD_VALID_MAX or cl == 0.0:
             dropped += 1
             continue
-        cn = statistics.mean(float(row["c_ref_n"]) for row in rows)
-        ct = statistics.mean(float(row["c_ref_t"]) for row in rows)
         alpha_eff = statistics.mean(float(row["alpha_deg"]) for row in rows)
-        angle = math.degrees(angle_from_pair(cn, ct, cl, cd))
+        # Invert PER ROW and average the angles: the inverse is exact only row by row.
+        phis = [
+            math.degrees(angle_from_pair(
+                float(row["c_ref_n"]), float(row["c_ref_t"]),
+                float(row["cl"]), float(row["cd"])))
+            for row in rows
+        ]
+        twists = [phi - float(row["alpha_deg"]) for phi, row in zip(phis, rows)]
+        angle = statistics.mean(phis)
+        twist = statistics.mean(twists)
         root_dist = float(rows[0]["root_dist"])
         r_over_r = CUT / R + root_dist * (1.0 - CUT / R)
         f_n = statistics.mean(float(row["f_ref_n"]) for row in rows)
         f_t = statistics.mean(float(row["f_ref_t"]) for row in rows)
         out.append(
             (r_over_r, cl, cd, math.hypot(cl, cd), angle, alpha_eff,
-             angle - alpha_eff, f_n, f_t)
+             twist, f_n, f_t)
         )
     out.sort()
     return out, dropped
@@ -312,7 +319,7 @@ def main():
     parser.add_argument("--revolutions", nargs=2, type=float, metavar=("DISCARD", "END"),
                         help="override configured revolution bounds (integer-truncated)")
     parser.add_argument("--allow-drift", action="store_true",
-                        help="warn and continue if turbine cp/cd drift exceeds 1%")
+                        help="warn and continue if turbine cp/cd drift exceeds 1%%")
     args = parser.parse_args()
 
     start, end, info = converged_window(
@@ -373,7 +380,7 @@ def main():
     print(
         "\n  R_exp is the experiment's own resultant, so the two frames agreeing\n"
         "  in magnitude is a property of its data, not of this tool. dR is the\n"
-        "  comparison of record. The simulation's twist (phi_sim - alpha_eff)\n"
+        "  comparison of record. The simulation's twist (mean over rows of phi - alpha_eff)\n"
         "  and the experiment's differ by a sign convention only; compare size."
     )
 

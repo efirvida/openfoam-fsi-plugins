@@ -35,7 +35,9 @@ export FOAM_USER_LIBBIN=$WM_PROJECT_USER_DIR/platforms/$WM_OPTIONS/lib
 export LD_LIBRARY_PATH=$FOAM_USER_LIBBIN:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib/sys-openmpi:$LD_LIBRARY_PATH
 if [ -n "${LIB_DIR:-}" ]; then
     test -f "$LIB_DIR/libturbinesFoam.so" || { echo "missing $LIB_DIR/libturbinesFoam.so" >&2; exit 3; }
+    LIB_DIR=$(cd "$LIB_DIR" && pwd)
     export LD_LIBRARY_PATH=$LIB_DIR:$LD_LIBRARY_PATH
+    echo "Using run-local library $LIB_DIR"
 fi
 # Registry validation admits only known flags and scalar enum/numeric values.
 # Deliberately split token-per-line output, with pathname expansion disabled.

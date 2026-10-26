@@ -43,6 +43,16 @@ def test_arm_contributions_weight_flap_edge_by_root_arm_and_torque_by_radius() -
     assert torque == pytest.approx(20.0 * 3.0 * 0.5)
 
 
+def test_resumed_profile_replaces_overlap_and_excludes_after_end(tmp_path):
+    from test_reconcile_torque_integral import diagnostic_run
+    period = diagnostic_run(tmp_path)
+    profile, dropped = compareSectionLoads.sim_profile(tmp_path, period, 3*period)
+    assert dropped == 0
+    assert len(profile) == 2
+    assert [row[1] for row in profile] == [1, 1]
+    assert [row[8] for row in profile] == [999, 999]
+
+
 EXPERIMENT = SCRIPTS.parent / "data" / "experiment"
 
 

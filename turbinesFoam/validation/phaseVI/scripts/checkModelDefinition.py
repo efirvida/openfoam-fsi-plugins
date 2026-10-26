@@ -19,6 +19,11 @@ meshFactor must equal 2**refine_level: run.json takes precedence, otherwise the
 runner's -r<N> name token is used (also before a run label), defaulting to 0.
 blade_dz is checked only when non-null metadata is recorded; geometry is not
 inferred from the committed non-equispaced render.
+
+The pitch reference (variant flag --pitch-reference) is certified from the
+rendered tip mounting of blade1.elementData (-3.0 deg for `tip`, -1.185 deg for
+the v1.2 `twist-zero` reference, twist_tip read from the blade table), so a
+case is judged by what it contains, not by metadata.
 """
 import argparse
 import copy
@@ -33,6 +38,19 @@ import yaml
 DEFAULT_DEFINITION = Path(__file__).resolve().parents[1] / "config/model-definition.yaml"
 
 
+# Mirrors element_data.PITCH_REFERENCES (a test pins the equality); no import
+# here, so registry validation works without the renderer modules.
+PITCH_REFERENCES = ('twist-zero', 'tip')
+
+
+def tools():
+    """The renderer modules, imported on demand so the checker stays usable on its own."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    import case_config
+    import element_data
+    return case_config, element_data
+
+
 def load_definition(path=DEFAULT_DEFINITION):
     definition = yaml.safe_load(Path(path).read_text())
     if not isinstance(definition, dict) or not isinstance(definition.get("knobs"), dict):
@@ -42,11 +60,13 @@ def load_definition(path=DEFAULT_DEFINITION):
 
 FLAG_RULES = {
     '--end-effects-model': 'endEffectsModel',
+    '--tip-effects': 'tipEffects',
     '--tip-correction': 'tipCorrection.active',
     '--rotational-augmentation': 'rotationalAugmentation.active',
     '--rotational-augmentation-model': 'rotationalAugmentation.model',
     '--velocity-sample-radius': 'velocitySampleRadius',
     '--n-velocity-samples': 'nVelocitySamples',
+    '--pitch-reference': 'pitchReference',
 }
 
 
@@ -63,7 +83,9 @@ def load_variants():
                 valid = value in ('Glauert', 'Shen', 'liftingLine')
             elif flag == '--rotational-augmentation-model':
                 valid = value in ('DuSelig', 'ChaviaropoulosHansen')
-            elif flag in ('--tip-correction', '--rotational-augmentation'):
+            elif flag == '--pitch-reference':
+                valid = value in PITCH_REFERENCES
+            elif flag in ('--tip-effects', '--tip-correction', '--rotational-augmentation'):
                 valid = value in ('on', 'off')
             else:
                 valid = (isinstance(value, (int, float)) and not isinstance(value, bool)
@@ -83,6 +105,10 @@ def variant_definition(definition, name):
     result['version'] = name
     knobs = result['knobs']
     for flag, value in variants[name]['flags'].items():
+        if flag == '--pitch-reference':
+            # Not a solver key: certified through the rendered tip mounting.
+            result['pitch_reference'] = value
+            continue
         path = FLAG_RULES[flag]
         if flag == '--rotational-augmentation-model' and path not in knobs:
             knobs[path] = dict(path=path, solver_default='DuSelig')
@@ -100,7 +126,13 @@ def variant_definition(definition, name):
     if knobs['rotationalAugmentation.active']['expected'] == 'on':
         model = variants[name]['flags'].get('--rotational-augmentation-model', 'DuSelig')
         add('rotationalAugmentation.model', model, 'DuSelig')
-        constants = ({'a': 2.2, 'h': 1, 'n': 4, 'pitchOffset': -3}
+        offset = -3
+        if result.get('pitch_reference', 'twist-zero') != 'twist-zero':
+            case_config, element_data = tools()
+            offset = -element_data.effective_pitch_deg(
+                {'turbine': {**case_config.load_config()['turbine'],
+                             'pitch_reference': result['pitch_reference']}})
+        constants = ({'a': 2.2, 'h': 1, 'n': 4, 'pitchOffset': offset}
                      if model == 'ChaviaropoulosHansen' else {'a': 1, 'b': 1, 'd': 1})
         for key, value in constants.items():
             default = 0 if key == 'pitchOffset' else value
@@ -205,6 +237,29 @@ def equal(found, expected):
     return found == expected
 
 
+def check_tip_mounting(coeffs, definition):
+    """Certify the pitch reference through the last blade1 elementData row (the tip station).
+
+    The mounting is -(twist_tip - reference + pitch_deg): -pitch_deg for `tip`,
+    -(twist_tip + pitch_deg) for `twist-zero`. Cases without blade elementData
+    (no blade1 list) are not judged.
+    """
+    values = lookup(coeffs, "blades.blade1.elementData")
+    if not isinstance(values, list) or "(" not in values:
+        return []
+    row = values[len(values) - values[::-1].index("("):-2]
+    if len(row) != 6:
+        return [f"tipMounting=unreadable elementData tip row {' '.join(row)}"]
+    reference = definition.get("pitch_reference", "twist-zero")
+    case_config, element_data = tools()
+    turbine = case_config.load_config()["turbine"]
+    table_tip = element_data.twist_reference({"turbine": {**turbine, "pitch_reference": "tip"}})
+    expected = -(table_tip - (table_tip if reference == "tip" else 0.0) + float(turbine["pitch_deg"]))
+    if equal(row[5], expected):
+        return []
+    return [f"tipMounting={row[5]} (expected {display(expected)}, pitch reference {reference})"]
+
+
 def check_run(run_dir, definition):
     """Return mismatches; raise OSError/ValueError for unusable input."""
     run_dir = Path(run_dir)
@@ -256,6 +311,7 @@ def check_run(run_dir, definition):
                 message = f"{name}={display(found)} (expected {display(expected)})"
             if message not in mismatches:
                 mismatches.append(message)
+    mismatches.extend(check_tip_mounting(coeffs, definition))
     for name, rule in definition.get("metadata", {}).items():
         found = metadata.get(name)
         if found is not None and not equal(found, rule["expected"]):

@@ -7,7 +7,8 @@ NREL/TP-500-29955 Tables A-3..A-8 and NREL/TP-442-7817 Tables B1..B4) and
 emits:
 
 - `S809_OSU_Re1M_total.dat`  single-Re baseline (OSU Re 1e6, total drag),
-- `S809_multiRe.dat`         multi-Re sensitivity set (OSU clean series).
+- `S809_multiRe.dat`         multi-Re sensitivity set (OSU clean series),
+- `S809_DUT_Re1M_total.dat`  DUT/Delft Re 1e6 source (Table A-8), diagnostic only.
 
 The baseline uses the total drag coefficient `Cdw` from the wake traverse
 where the table reports it and falls back to the pressure drag `Cdp` where the
@@ -47,6 +48,7 @@ CSU_LOW_RE = POLARS_DIR / "S809_CSU_Re0.65M_total.dat"
 # are byte-identical to the `*_total.dat` files above and only the
 # beyond-measurement rows are replaced by an empirical post-stall branch. The
 # running Phase VI jobs read the committed `*_total.dat` files, never these.
+DUT_TOTAL = POLARS_DIR / "S809_DUT_Re1M_total.dat"
 BASELINE_PRESSURE = POLARS_DIR / "S809_OSU_Re1M_pressure.dat"
 BASELINE_VITERNA = POLARS_DIR / "S809_OSU_Re1M_viterna.dat"
 CSU_LOW_RE_VITERNA = POLARS_DIR / "S809_CSU_Re0.65M_viterna.dat"
@@ -95,6 +97,15 @@ def baseline_rows() -> list[tuple[float, float, float, float]]:
         for row in table
     ]
     return rows
+
+
+def dut_rows() -> list[tuple[float, float, float, float]]:
+    """DUT Re = 1e6 (Table A-8): Cd is the wake-traverse total drag `Cdw`."""
+    table = read_raw(RAW_DIR / "table_A8.csv")
+    return [
+        (float(row["alpha_deg"]), float(row["cl"]), drag(row), float(row["cm"]))
+        for row in table
+    ]
 
 
 def extension_alphas(core: list[tuple[float, float, float, float]]) -> list[float]:
@@ -272,6 +283,19 @@ CSU_VITERNA_HEADER = [
 ]
 
 
+DUT_HEADER = [
+    "// S809 polar, DUT/Delft Re = 1e6, TOTAL drag (NREL/TP-500-29955 Table A-8;",
+    "// `Cd` = `Cdw`, wake traverse), transcribed in data/polars/raw/table_A8.csv",
+    "// and emitted by scripts/buildPolars.py. DIAGNOSTIC SOURCE ARM (P4), never of",
+    "// record: it changes only the polar source relative to S809_OSU_Re1M_total.dat.",
+    "// Measured range alpha in [-1.04, +20.16] deg. Outside it the rows are the",
+    "// SAME static extension as the OSU total table (CSU Table A-3, Re = 0.3e6,",
+    "// mirrored for negative alpha, plus the flat-plate closure at +-120/150/180),",
+    "// so profileData never reads outside the table; no blending or smoothing.",
+    "// (alpha_deg Cl Cd Cm)",
+]
+
+
 PRESSURE_HEADER = [
     "// S809 polar, OSU Re = 1e6, PRESSURE drag (`Cdp`, NREL/TP-500-29955 Table A-7).",
     "// Diagnostic variant of S809_OSU_Re1M_total.dat: inside the measured range the",
@@ -408,6 +432,9 @@ def main(argv: list[str] | None = None) -> int:
     core = baseline_rows()
     rows = core + extension_rows(core)
     rows.sort(key=lambda row: row[0])
+    dut_core = dut_rows()
+    dut_all_rows = dut_core + extension_rows(dut_core)
+    dut_all_rows.sort(key=lambda row: row[0])
     csu_core = csu_low_re_rows()
     csu_rows = csu_core + extension_rows(csu_core)
     csu_rows.sort(key=lambda row: row[0])
@@ -419,6 +446,7 @@ def main(argv: list[str] | None = None) -> int:
         BASELINE: render_single_re(rows),
         BASELINE_PRESSURE: render_single_re(pressure_drag_rows(rows), PRESSURE_HEADER),
         MULTI_RE: render_multi_re(),
+        DUT_TOTAL: render_single_re(dut_all_rows, DUT_HEADER),
         CSU_LOW_RE: render_single_re(csu_rows, CSU_HEADER),
         BASELINE_VITERNA: render_single_re(osu_viterna_rows, BASELINE_VITERNA_HEADER),
         CSU_LOW_RE_VITERNA: render_single_re(

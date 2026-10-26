@@ -484,6 +484,12 @@ $PY scripts/compare_spanwise.py --from-csv analysis/spanwise-profiles.csv \
     --model alm
 ```
 
+`compare_spanwise.py --compare-with RUN_B [--references]` prints the two-run band
+table (default bands r/R 0.3-0.5, 0.5-0.7, 0.7-0.9 and the pooled 0.3-0.9);
+`--bands 0.7-0.8,0.8-0.9,0.9-0.95,0.95-1.0` replaces them with caller-chosen
+bands (`LO <= r/R < HI`, `0 <= LO < HI <= 1`, pooled row = min..max) so the tip
+region can be compared, reference columns included.
+
 The committed CSVs are frozen while the runs are live, so a redraw now differs
 from the committed PNG wherever the runs have advanced past the snapshot
 window; the reference curves are byte-for-byte the same conversion.

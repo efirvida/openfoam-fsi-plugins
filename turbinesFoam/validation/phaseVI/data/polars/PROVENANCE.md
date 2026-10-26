@@ -42,6 +42,7 @@ are non-dimensional and `alpha_deg` is in degrees. Extraction date:
 | File | Built from | Rule |
 |---|---|---|
 | `S809_OSU_Re1M_total.dat` | `raw/table_A7.csv` (+ `raw/table_A3.csv` extension) | `Cd = Cdw` (total drag) where reported, else `Cdp` (documented fallback); `|alpha|` beyond the measured OSU range carries a clearly commented static extension from CSU Table A-3 (mirrored for negative alpha) plus a flat-plate closure at ±120/150/180° so the lookup never leaves the table. Format `(alpha Cl Cd Cm)` for the single-Re `profileData` table. |
+| `S809_DUT_Re1M_total.dat` | `raw/table_A8.csv` (+ `raw/table_A3.csv` extension) | DIAGNOSTIC (P4 polar-source arm), never of record. `Cd = Cdw` (total drag) for every A-8 row (alpha -1.04..20.16). Outside it the same `extension_rows()` as the OSU total table: CSU A-3 rows beyond the measured range (so mirrored CSU rows fill alpha < -1.04 and a CSU row at 20.2, 22.1, ... fills above 20.16) plus the flat-plate closure at ±120/150/180°. No blending, smoothing or fitting. |
 | `S809_multiRe.dat` | `raw/table_TP442-7817.csv` | Same `Cdw`→`Cdp` fallback; linearly interpolated onto the shared Re = 1e6 angle grid restricted to the range every Reynolds level measures (no extrapolation). Emitted as `tableType multiRe; ReList (7.5e5 1e6 1.25e6 1.5e6); clData/cdData/cmData`. |
 
 The CSU Tables A-3..A-5 and the DUT Table A-8 are committed raw data for

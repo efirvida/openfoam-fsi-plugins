@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "speeds_m_s": [7, 13],
+  "arms": ["control", "paper-like"],
+  "rpm": 71.63,
+  "delta_t_s": 0.001,
+  "kinematic_viscosity_m2_s": 1.46e-5,
+  "reference_density_kg_m3": 1.23,
+  "sequence": "S",
+  "cross_section_y_z_m": [24.4, 36.6],
+  "x_extents_D": [-2, 8],
+  "base_max_width_m": 0.8,
+  "nested_boxes_hub_relative_m": [
+    [[-10, -10, -10], [40, 10, 10]],
+    [[-5, -8, -8], [20, 8, 8]],
+    [[-3, -7, -7], [12, 7, 7]]
+  ],
+  "topology": "Conformal blockMesh + nested box castellation with transition cells: reconstruction of reported resolution criteria, NOT identical topology to the paper's nonconformal cubic mesh.",
+  "assumptions": [
+    "Unpublished zone bounds and exact spacings: nested boxes are ASSUMPTIONS, not fitted to approximately 400k cells.",
+    "Section orientation assigned y=24.4m, z=36.6m, centred at hub; symmetry follows figure despite contradictory no-slip prose.",
+    "CrankNicolson blend 0.9 and corrected nonorthogonal operators are explicit reconstruction choices; published PBiCG uses compatible DILU.",
+    "Inflow intensity 0.005 and mixing length 0.07D inherited; article epsilon conditions unspecified. Published nu=1.46e-5 m2/s and rho=1.23 kg/m3 retained; density is reference metadata, not a multiplier in the incompressible ALM force path.",
+    "Single-Re OSU pressure-drag S809 polar retained; not article multi-Re interpolation. liftReCorrExp=0 does NOT remove drag Reynolds correction.",
+    "Projection epsilon=max(0.25*chord, Cd*chord/2, 2*cbrt(V)*meshFactor) in metres, meshFactor=1. Sampling radius 1 is in epsilon units, equals 2dx only if mesh floor dominates on cubic cells.",
+    "Sampling envelope assumes abs(Cd)<=2; runtime epsilon and sampling containment must be verified if exceeded.",
+    "SGC constants use repository defaults, not identified article coefficients; calcAlphaEquiv=true enables equivalent incidence for article eq5 alpha-X-Y-Z. The 3G implementation is a Sheng-family counterpart, not equation-for-equation proof. Static-fit parameters still come from each profile; cylinder compatibility unverified.",
+    "Control retains v1.2 aerodynamic switches, but matched paper numerics make it a NUMERICALLY MATCHED CONTROL, not baseline-certified."
+  ],
+  "sgc_coefficients": {
+    "A1": 0.165, "A2": 0.335, "A3": 0.5, "T1": 20.0, "T2": 4.5,
+    "b1": 0.14, "b2": 0.53,
+    "speedOfSound": 1000000000000.0, "Tp": 1.7, "Tf": 3.0,
+    "Tv": 11.0, "Tvl": 9.0, "eta": 0.975, "cmFitExponent": 2,
+    "TAlpha": 6.3, "r0": 0.01, "B1": 0.5, "B2": 0.2,
+    "E0": 0.15, "alphaDS0DiffDeg": 3.6, "calcAlphaEquiv": true
+  }
+}

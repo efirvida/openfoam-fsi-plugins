@@ -130,6 +130,7 @@ scripts/runPhaseVI.sh -m alm|asm|asm-mesh -u <speed> [-mesh coarse|fine|ultra]
                       [--domain long|squat] [-s H|S] [--solver urans|iddes]
                       [--nchordwise N] [--ranks N] [--run-label WORD]
                       [--stage0] [--restart] [--refine-level N] [--mesh-factor F] [--blade-dz DZ]
+                      [--pitch-reference twist-zero|tip]
                       [--rotational-augmentation on|off] [--root-effects on|off]
                       [--rotational-augmentation-model DuSelig|ChaviaropoulosHansen]
                       [--run] [--submit]
@@ -163,6 +164,18 @@ commit, OpenFOAM version, config sha256, variant, solver, `n_chordwise`,
   `nElements` becomes one element per table segment and, for `asm-mesh`, the staged STL is lofted from
   the same table (`tools/make_equispaced_blade.py`). Rule: `DZ = min(0.05, h/2)`; see
   `scripts/scanEquispacedDz.py`. Recorded as `blade_dz` in `run.json`.
+- `--pitch-reference twist-zero|tip` (default `twist-zero`; any other value exits 2) selects where the
+  3° collective pitch is measured. `twist-zero` is Model Definition v1.2: the pitch is added to the
+  report twist, which is zero at 75 % span, so the tip mounts at −1.185°. `tip` follows
+  NREL/TP-500-29955 p.20, "blade pitch is defined as the angle between the blade tip chord line and
+  the plane of the turbine disk", with Table A-1 note 2, "Twist convention is positive towards
+  feather. Values listed are relative to zero twist at the 3.772-m station [75% span on a 5.029-m
+  blade]": mounting `= -(twist - twist_tip + pitch_deg)`, `twist_tip` read from the blade-table row at
+  the rotor radius (5.029 m, −1.815°), so the tip mounts at exactly −3.0° and every other station
+  moves by −1.815°. The equispaced `--blade-dz` layout uses the same original-table tip twist. One
+  helper (`tools/element_data.py`, `effective_pitch_deg`) feeds the element data and the
+  Chaviaropoulos–Hansen `pitchOffset` (`−(3 + 1.815)` under `tip`, so its theta excludes the collective
+  pitch). Recorded as `pitch_reference` in `run.json`. The default render is byte-identical to v1.2.
 - `--mesh-factor F` (positive number, exit 2 otherwise) overrides
   `turbine.gaussian_mesh_factor` (1.0) so the ALM / no-mesh-ASM projection width
   `eps = 2*cbrt(V)*meshFactor` varies per run **without changing the mesh**: the
@@ -541,6 +554,11 @@ record for v1.2; `summarizeBands.py` keeps its unchanged baseline-only gate.
 | `ring-sampling` | `--velocity-sample-radius 3.3 --n-velocity-samples 16` | v1.1 freeze: 16 equally spaced ring samples, radius **3.3 times local projection epsilon**, not 3.3 metres |
 | `du-selig-ra` | `--rotational-augmentation on` | Du & Selig (1998); existing `DuSelig`, `a=b=d=1` |
 | `ch-ra` | `--rotational-augmentation on --rotational-augmentation-model ChaviaropoulosHansen` | I7, original CH baseline `a=2.2, h=1, n=4`; Burgos Tafur et al. (2020), pp. 307–308 Eqs. (1)–(4); not yet A/B tested |
+| `tip-pitch` | `--pitch-reference tip` | NREL/TP-500-29955 p.20 ("blade pitch is defined as the angle between the blade tip chord line and the plane of the turbine disk") and Table A-1 note 2 ("Twist convention is positive towards feather. Values listed are relative to zero twist at the 3.772-m station [75% span on a 5.029-m blade]"); tip mounting −3.0° instead of −1.185°. Diagnostic arm, never of record |
+| `tip-pitch-dag-sorensen` | `--pitch-reference tip --tip-correction on --tip-effects off` | Dağ & Sørensen (2020), Meyer Forsting et al. (2019, 2020): the velocity-side correction replaces the cl-side Glauert tip factor (root/hub loss kept), where `dag-sorensen-tip` stacks both. Diagnostic arm, never of record |
+| `tip-pitch-no-tip` | `--pitch-reference tip --tip-effects off` | Jha et al., *J. Sol. Energy Eng.* 136:031003 (2014) p.6: "there should be no need for using the Prandtl correction within the ALM framework"; no tip correction at all, root kept. Diagnostic arm, never of record |
+| `tip-pitch-du-selig-ra` | `--pitch-reference tip --rotational-augmentation on` | `tip-pitch` plus `du-selig-ra` (`a=b=d=1`). Diagnostic arm, never of record |
+| `tip-pitch-ch-ra` | `--pitch-reference tip --rotational-augmentation on --rotational-augmentation-model ChaviaropoulosHansen` | `tip-pitch` plus `ch-ra` (`a=2.2, h=1, n=4`; `pitchOffset` −4.815 from the tip reference). Diagnostic arm, never of record |
 
 ### Chaviaropoulos–Hansen rotational augmentation (I7)
 
@@ -625,6 +643,15 @@ python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-seqS-var-ring-samplin
 python3 scripts/summarizeVariants.py results/cmp-baseline results/cmp-ring
 ```
 
+The DUT/Delft Re 1e6 table (TP-500-29955 Table A-8) is built as
+`data/polars/S809_DUT_Re1M_total.dat` **for the P4 diagnostic arm only**
+(`POLAR=S809_DUT_Re1M_total.dat` with `variant-run.slurm`); it is never of record.
+It has `Cd = Cdw`, the same CSU Table A-3 extension and flat-plate closure as the OSU
+total table, so only the source data differ inside the DUT range (-1.04..20.16 deg).
+Below -1.04 deg and between 20.16 deg and the first extension row it carries the
+mirrored/plain CSU rows (a single CSU row at 20.2 deg directly follows the last DUT
+sample); the OSU table steps to the extension at its own range edges, without blending.
+
 Unknown variants are refused before module loading or case preparation. The
 launcher accepts the v1-2-run environment (`MODEL`, `SPEED`, `SEQUENCE`, optional
 `REFINE_LEVEL`, `DELTA_T`, `END_REVS`, `POLAR`, `LABEL`, `LIB_DIR`), defaulting `LABEL` to
@@ -650,6 +677,13 @@ arm must still be identifiable. No checker or summary writes run data.
 python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-d1-pdrag
 python3 scripts/summarizeBands.py results/U7-H
 ```
+
+A `--variant tip-pitch` check certifies the pitch reference from the rendered tip mounting
+(last `blade1.elementData` row: −3 for `tip`, −1.185 for the v1.2 `twist-zero` reference, twist
+from the blade table), so a tip-pitch case is reported `NON-CONFORMING v1.2` and conforms only to
+its own variant. The four `tip-pitch-*` arms are certified from the rendered case the same
+way: tip mounting, `GlauertCoeffs.tipEffects`, `tipCorrection.active` and the augmentation
+switch/model/constants must all match the arm (`--tip-effects` is a registry flag).
 
 ### Numerical ladder (R1)
 
@@ -761,6 +795,69 @@ relative differences for `cth`/`ctq`/`qnorm_pa` at S7 and H7 (all six are zero).
 The S7 force-times-arm output is identical between reference directories; the
 frame residuals differ because archive `cn`/`ct` retain more digits than the
 workbook's four decimals (including `R_exp` 0.870 versus 0.871 at r/R 0.63).
+
+`tw_sim`/`dTw` come from the exact per-row inverse `phi = atan2(cl*ct + cd*cn, cl*cn - cd*ct)`
+averaged over the window with `phi - alpha_deg`, so at fixed geometry the twist does not depend on
+the polar (the old inversion of window averages did, by up to `2*atan(cd/cl)` in stall). `R`, `dR`
+and the force table are unchanged.
+
+### Resumed diagnostic windows and torque closure
+
+`compareElementStates.py`, `compareSectionLoads.py`, `compareInflowAngle.py`
+and `reconcileTorqueIntegral.py` join numeric resume segments via
+`comparePhaseVI` (later segments replace overlap, not duplicate it). Bounds are
+inclusive; rows after the requested end are excluded. Select `--speed` and
+`--sequence` explicitly for non-default operating points: TSR comes from
+`config/case.yaml`, not the U7 constant.
+
+```sh
+# U5/U6 Sequence S late window: use 16..24, not just segment 0.
+python3 scripts/compareElementStates.py runs/ALM-U5 --speed 5 --sequence S \
+    --discard-revolutions 16 --end-revolutions 24 --columns cl c_ref_t
+python3 scripts/reconcileTorqueIntegral.py --alm-dir runs/ALM-U5 --speed 5 \
+    --sequence S --revolutions 16 24
+# U7/U8: --revolutions 4 12; section and force-angle tools take the same bounds.
+```
+
+Element states retain their start-only API/default (no end unless supplied),
+and accept `--tsr` to override configuration explicitly. Section, force-angle
+and torque tools default to the configured rotor window (currently 4..12);
+`--revolutions DISCARD END` overrides with integer-truncated bounds, matching
+`comparePhaseVI`. Torque also retains `--discard-revs` and adds `--end-revs`
+(fractional start/end overrides preserved; do not mix with `--revolutions`).
+The torque default now uses the configured discard, not the former 1 revolution.
+Short windows / cp-cd drift refuse with exit 2; TSR mismatch exits 3;
+`--allow-drift` warns and continues for drift only.
+
+Torque closure uses the **written integrated element forces** `fx/fy/fz`:
+`mean(((position-origin) cross force) dot axis)`, then sums elements. This
+preserves position-force covariance. `actuatorLineElement::tangentialRefForce`
+writes `f_ref_t = 0.5 * chord * c_ref_t * |Urel|^2`, a **per-span kinematic
+force**, not an integrated force. Neither guessed neighbour widths nor a
+mean-coefficient times mean-speed-squared integral is used. Origin/axis and
+expected element counts are read from rendered `system/fvOptions` with the
+existing dictionary parser (`--origin` / `--axis` override the vectors).
+Absent columns, empty/mismatched rotor-element samples, missing terminal
+elements or surface elements fail explicitly (exit 1).
+
+The normalization is `0.5*pi*R^3*Uinf^2`, with configured R and selected speed;
+the rotor reference is mean **ct**, not a hardcoded `cp/TSR`. Forces/torques
+are kinematic N/rho and N.m/rho for incompressible Phase VI: no physical density
+multiplier. Each printed radial contribution is in N.m/rho and the bands sum
+to the scaled element torque (up to print rounding). The output reports the
+observed element/rotor ratio without claiming agreement. Blade files found and
+configured blade count are explicit: mean over written blades times N assumes
+axisymmetric whole-revolution averaging when blade2 is not written. It is not
+an independently measured two-blade closure. The straight radial ALM blade has
+zero shaft projection of section pitching moment; rotor torque may also include
+hub moments. This diagnostic is not for swept blades, surface-node moments or
+compressible forces, and does not establish the cause of an aerodynamic deficit.
+
+The force-angle table retains `atan2(mean tangential, mean axial)` and unchanged
+U7 numerical columns, but labels it a **force-direction proxy**, not independent
+flow/induction evidence. Drag affects that direction. `phi_geom` uses the
+selected sequence/speed TSR; no experimental alpha or velocity components are
+inferred from force pairs.
 
 `diagnoseElementResiduals.py` and `compareInflowAngle.py` also accept
 `--experiment-dir`, with their previous defaults unchanged. The latter reads

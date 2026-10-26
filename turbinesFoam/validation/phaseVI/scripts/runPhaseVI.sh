@@ -11,7 +11,7 @@
 #                 [--restart] [--rotational-augmentation on|off]
 #                 [--rotational-augmentation-model DuSelig|ChaviaropoulosHansen]
 #                 [--root-effects on|off] [--refine-level N] [--mesh-factor F]
-#                 [--nacelle on|off]
+#                 [--nacelle on|off] [--pitch-reference twist-zero|tip]
 #                 [--blade-dz DZ] [--end-effects-model Glauert|Shen|liftingLine]
 #                 [--velocity-sample-radius R] [--n-velocity-samples N]
 #                 [--run] [--submit]
@@ -54,6 +54,11 @@
 # --n-elements). Elements, and for asm-mesh the lofted STL staged into the run
 # directory, follow the resampled table; run.json records `blade_dz`. Rule:
 # DZ = min(0.05, h/2). Absent, the committed layout is used unchanged.
+# --pitch-reference twist-zero|tip (default twist-zero) selects where the collective
+# pitch is measured. twist-zero is Model Definition v1.2 (pitch added to the report
+# twist, zero at 75 % span); tip follows NREL/TP-500-29955 p.20 (pitch at the tip
+# chord, tip mounting -pitch). Any other value exits 2. run.json records
+# `pitch_reference`. A diagnostic arm (registry variant tip-pitch), never of record.
 # --run-label WORD appends -WORD to the run id (`runs/<id>-WORD`) and records it
 # in run.json, so two render variants of the same (model, speed, mesh) live in
 # separate, independently restartable directories (the two-arm campaign uses it
@@ -111,6 +116,7 @@ polar=""
 refine_level=0
 mesh_factor=""
 blade_dz=""
+pitch_reference=twist-zero
 nacelle=off
 delta_t=""
 end_revs=""
@@ -143,6 +149,7 @@ while [ $# -gt 0 ]; do
         --refine-level) refine_level="$2"; shift ;;
         --mesh-factor) mesh_factor="$2"; shift ;;
         --blade-dz) blade_dz="$2"; shift ;;
+        --pitch-reference) pitch_reference="$2"; shift ;;
         --nacelle) nacelle="$2"; shift ;;
         --delta-t) delta_t="$2"; shift ;;
         --end-revs) end_revs="$2"; shift ;;
@@ -287,6 +294,10 @@ case "$nacelle" in
     on|off) ;;
     *) echo "ERROR: --nacelle takes on or off" >&2; exit 2 ;;
 esac
+case "$pitch_reference" in
+    twist-zero|tip) ;;
+    *) echo "ERROR: --pitch-reference takes twist-zero or tip (got: $pitch_reference)" >&2; exit 2 ;;
+esac
 if [ -n "$blade_dz" ]; then
     if ! python3 -c 'import math, sys; v = float(sys.argv[1]); sys.exit(0 if v > 0 and math.isfinite(v) else 1)' "$blade_dz" 2>/dev/null; then
         echo "ERROR: --blade-dz must be a positive number" >&2; exit 2
@@ -422,6 +433,9 @@ if [ -n "$mesh_factor" ]; then
 fi
 if [ -n "$blade_dz" ]; then
     render_args+=(--blade-dz "$blade_dz")
+fi
+if [ "$pitch_reference" != twist-zero ]; then
+    render_args+=(--pitch-reference "$pitch_reference")
 fi
 if [ -n "$end_effects_model" ]; then
     render_args+=(--end-effects-model "$end_effects_model")
@@ -560,7 +574,7 @@ echo "Linked shared $mesh mesh (refinement level $refine_level) from $mesh_dir"
 
 python3 - "$run_dir" "$root" "$model" "$speed_token" "$mesh" "$domain" "$sequence" \
     "$stage0" "$solver" "$nchordwise" "$ranks" "$staged_stl_sha256" "$run_label" \
-    "$mesh_factor" "$refine_level" "$blade_dz" "$nacelle" <<'PY'
+    "$mesh_factor" "$refine_level" "$blade_dz" "$nacelle" "$pitch_reference" <<'PY'
 import datetime
 import hashlib
 import json
@@ -586,7 +600,8 @@ from pathlib import Path
     refine_level,
     blade_dz,
     nacelle,
-) = sys.argv[1:18]
+    pitch_reference,
+) = sys.argv[1:19]
 run_dir = Path(run_dir)
 root = Path(root)
 
@@ -625,6 +640,7 @@ payload = {
     "mesh_factor": effective_mesh_factor,
     "blade_dz": float(blade_dz) if blade_dz else None,
     "nacelle": nacelle,
+    "pitch_reference": pitch_reference,
     "ranks": int(ranks),
     "run_label": run_label or None,
     "stage0": stage0 == "1",
@@ -741,6 +757,9 @@ else
     fi
     if [ -n "$div_phi_u" ]; then
         suggestion="$suggestion --div-phi-u \"$div_phi_u\""
+    fi
+    if [ "$pitch_reference" != twist-zero ]; then
+        suggestion="$suggestion --pitch-reference $pitch_reference"
     fi
     if [ -n "$polar" ]; then
         suggestion="$suggestion --polar $polar"

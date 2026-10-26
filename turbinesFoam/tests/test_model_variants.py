@@ -31,7 +31,9 @@ def render(tmp_path, name):
 
 
 @pytest.mark.parametrize('name', ['v1.2', 'shen-tip', 'dag-sorensen-tip',
-                                  'ring-sampling', 'du-selig-ra', 'ch-ra'])
+                                  'ring-sampling', 'du-selig-ra', 'ch-ra', 'tip-pitch',
+                                  'tip-pitch-dag-sorensen', 'tip-pitch-no-tip',
+                                  'tip-pitch-du-selig-ra', 'tip-pitch-ch-ra'])
 def test_variants_render_and_check(tmp_path, name):
     case = render(tmp_path, name)
     text = (case / 'system/fvOptions').read_text()
@@ -47,6 +49,32 @@ def test_variants_render_and_check(tmp_path, name):
         assert baseline.stdout == f'{case}: CONFORMS v1.2\n'
     else:
         assert 'NON-CONFORMING v1.2:' in baseline.stdout
+
+
+# (tipEffects, rootEffects, tipCorrection.active, rotationalAugmentation.active/model)
+TIP_PITCH_ARMS = {
+    'tip-pitch-dag-sorensen': ('off', 'on', 'on', 'off', None),
+    'tip-pitch-no-tip': ('off', 'on', 'off', 'off', None),
+    'tip-pitch-du-selig-ra': ('on', 'on', 'off', 'on', 'DuSelig'),
+    'tip-pitch-ch-ra': ('on', 'on', 'off', 'on', 'ChaviaropoulosHansen'),
+}
+
+
+@pytest.mark.parametrize('name', sorted(TIP_PITCH_ARMS))
+def test_tip_pitch_arms_certified_from_rendered_case(tmp_path, name):
+    tip, root, correction, ra, model = TIP_PITCH_ARMS[name]
+    case = render(tmp_path, name)
+    text = (case / 'system/fvOptions').read_text()
+    assert f'tipEffects {tip};' in text and f'rootEffects {root};' in text
+    assert f'active {correction};\n            model DagSorensen;' in text
+    assert (f'model {model};' in text) == (model is not None)
+    # CONFORMS also certifies the tip mounting (-3.0, last blade1 elementData row).
+    assert call('scripts/checkModelDefinition.py', case, '--variant', name).stdout == \
+        f'{case}: CONFORMS {name}\n'
+    # A neighbouring arm that differs in the certified knob must reject the case.
+    other = 'tip-pitch' if name != 'tip-pitch' else 'tip-pitch-no-tip'
+    wrong = call('scripts/checkModelDefinition.py', case, '--variant', other)
+    assert wrong.returncode == 1 and 'NON-CONFORMING' in wrong.stdout
 
 
 def test_unknown_variant_refused_before_input(tmp_path):
