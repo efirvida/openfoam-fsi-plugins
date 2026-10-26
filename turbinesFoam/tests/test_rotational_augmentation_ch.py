@@ -74,7 +74,15 @@ def test_variant_launcher_library_and_forwarding(tmp_path, local_lib):
     result = subprocess.run(['bash', str(package / 'scripts/slurm/variant-run.slurm')],
                             env=env, capture_output=True, text=True)
     assert (result.returncode, result.stderr) == (0, '')
-    ld, args = json.loads(result.stdout)
+    # The launcher reports the prepended run-local library on the job's .out
+    # before the runner starts; without LIB_DIR it reports nothing.
+    lines = result.stdout.splitlines()
+    if local_lib:
+        assert lines[0] == f'Using run-local library {lib}'
+        lines = lines[1:]
+    else:
+        assert not any(x.startswith('Using run-local library') for x in lines)
+    ld, args = json.loads('\n'.join(lines))
     expected = f'{tmp_path}/user/platforms/linux64GccDPInt64Opt/lib:{foam}/platforms/linux64GccDPInt64Opt/lib:{foam}/platforms/linux64GccDPInt64Opt/lib/sys-openmpi:{inherited_ld}'
     assert ld == (str(lib) + ':' if local_lib else '') + expected
     i = args.index('--rotational-augmentation-model')
