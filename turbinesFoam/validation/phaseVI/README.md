@@ -736,7 +736,7 @@ python3 scripts/quantifyUncertainty.py --run-dir runs/alm-U5-coarse-seqS-v12 --s
 The run uses the nominal wind speed while the tunnel's measured speed (`VTUN`,
 e.g. 7.049 m/s in `h0700000`) differs slightly; rpm and rho are already the measured
 values. The report adds a `VTUN correction` block: the simulated value scaled by the
-BEM response at fixed rpm to U x VTUN/U_nominal, beside the raw difference and judged
+AeroDyn BEM response at fixed rpm to U x VTUN/U_nominal, beside the raw difference and judged
 against the same combined uncertainty. The raw verdict stays the comparison of record.
 
 `summarizeBands.py` marks a comparison whose window `comparePhaseVI.py` recorded as
@@ -751,8 +751,12 @@ searched path when absent; a single file falls back to the in-file
 autocorrelation standard error of the per-revolution means), simulation
 averaging window (definition window against the windows starting 2 and 4
 revolutions later), and BEM-estimated blockage sensitivity for inflow +1 %/+2 %
-(`bemPhaseVI.py` at the measured rpm; one-sided bound; U^3/U^2 bound if the BEM
-is unusable). The verdict says "agrees within the combined numerical and
+(the OpenFAST AeroDyn BEM, `buildAeroDynCase.py --wake bem --inflow-scale` and
+`aerodyn_driver`, at fixed rpm; one-sided bound; U^3/U^2 bound if OpenFAST is
+unavailable). The OpenFAST env is `--openfast-env`, else `$OPENFAST_ENV`, else
+`/scratch/leahk/eduardo.donestevez/conda-envs/openfast`; rotor speed and density are those of
+the measured point (`tsr U / R`, experiment row), the case is built in a scratch directory
+and removed. The repository has no other BEM (the in-house one was removed 2026-10-27). The verdict says "agrees within the combined numerical and
 experimental uncertainty" only inside the quadrature sum (`--coverage k`,
 default 1). Exit **1** for a non-conforming run unless `--allow-nonconforming`
 (output then tagged `[not of record]`), **2** for missing input.
@@ -954,7 +958,9 @@ blade table (tip pitch reference), OSU total polar, rotor speed and density per 
 in two wake models: AeroDyn BEMT and OLAF (free vortex wake). Pipeline, v5 option choices with
 reasons, template provenance and the 10-case run: [`openfast/README.md`](openfast/README.md);
 `scripts/buildAeroDynCase.py`, `scripts/compareAeroDyn.py`, `scripts/slurm/aerodyn.slurm`;
-tests in `tests/test_aerodyn_case.py`.
+tests in `tests/test_aerodyn_case.py`. This is the repository's only BEM: whenever a BEM is needed
+(code-to-code checks, blockage and VTUN sensitivities in `quantifyUncertainty.py`) it is the AeroDyn
+BEM; `buildAeroDynCase.py --inflow-scale F` runs it at inflow x F with rpm and density fixed.
 
 ## Modelling limitations
 

@@ -4,6 +4,26 @@
 
 ### Features
 
+#### Phase VI: in-house BEM removed, blockage/VTUN sensitivity moved to the AeroDyn BEM (v1.4 T11)
+
+**Files:** removed the in-house BEM script (`phaseVI/scripts`) and `turbinesFoam/tests/test_phasevi_bem.py`;
+`turbinesFoam/validation/phaseVI/scripts/{quantifyUncertainty.py,buildAeroDynCase.py}`,
+`turbinesFoam/validation/phaseVI/{README.md,openfast/README.md}`,
+`turbinesFoam/tests/{test_uncertainty.py,test_aerodyn_case.py}`,
+`odd/tasks/{validation-model-definition-v1-3-record.md,phasevi-physics-diagnosis.md}` (dated notes).
+
+**Problem:** the in-house BEM applied the S809 polar on the cylindrical root (r < 1.0675 m), where the
+ALM and AeroDyn use the cylinder profile (Cl 0, Cd 1.1): its power carried a root-polar defect
+(`odd/tasks/v13-adoption-asm.md` L11) and the owner asked for OpenFAST's BEM to be the only BEM.
+
+**Fix:** the script and its tests are deleted. `quantifyUncertainty.py` estimates the R6 blockage and
+VTUN sensitivities with `buildAeroDynCase.py --wake bem --inflow-scale` (new option, default 1, changes
+only the driver wind speed at fixed rpm and density) and `aerodyn_driver`, read with `compareAeroDyn.py`;
+the env is `--openfast-env` / `$OPENFAST_ENV` / the default conda env, and the U^3/U^2 bound (labelled as
+such) is the fallback when OpenFAST is unavailable. H 7 m/s `alm-U7-coarse-d1-pdrag` (v1.2 evidence, not
+of record), blockage +1 %/+2 %: power 1.83/3.67 -> 2.12/4.19 %, thrust 0.73/1.39 -> 1.23/2.43 %,
+c_n 0.95 1.32/2.64 -> 1.52/3.03 %. Historical records are not rewritten; they carry a dated note.
+
 #### Phase VI: OpenFAST AeroDyn (BEM and OLAF) code-to-code arbiter of the v1.3 ALM (v1.4 T9)
 
 **Files:** `turbinesFoam/validation/phaseVI/scripts/{buildAeroDynCase.py,compareAeroDyn.py,slurm/aerodyn.slurm}`,

@@ -30,12 +30,16 @@ Sources, all quoted as standard-size terms of the quantity:
    definition window (case.yaml, revolutions 4-12) and the windows that start 2
    and 4 revolutions later (6-12, 8-12); the term is the largest departure from
    the definition window.
-3. Blockage: BEM-estimated (bemPhaseVI.py at the measured rpm and density)
-   relative change of each quantity for an inflow +1 % and +2 % (NREL: tunnel
+3. Blockage: BEM-estimated with the OpenFAST AeroDyn BEM (the repository's only
+   BEM: buildAeroDynCase.py `--wake bem --inflow-scale`, `aerodyn_driver` from the
+   conda env `--openfast-env` / $OPENFAST_ENV, read with compareAeroDyn.py; rotor
+   speed and density of the measured point) relative change of each quantity for
+   an inflow +1 % and +2 % at fixed rpm (NREL: tunnel
    blockage below 2 % in velocity). The larger of the two magnitudes (the +2 %
    value wherever the response is monotone) enters the combination as a
    ONE-SIDED bound: blockage raises the effective inflow, it never lowers it,
-   so it is not a symmetric random term. If the BEM cannot be used the U^3 (power) and U^2 (thrust)
+   so it is not a symmetric random term. If the AeroDyn BEM cannot be used (no OpenFAST env,
+   driver failure) the U^3 (power) and U^2 (thrust)
    bound is stated instead, and c_n is reported as not covered.
 
 Combined = quadrature sum of (1) and (3, one-sided bound) for the experiment side and (2)
@@ -53,7 +57,10 @@ from __future__ import annotations
 import argparse
 import copy
 import math
+import os
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -61,6 +68,8 @@ import numpy as np
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
 
+import buildAeroDynCase  # noqa: E402
+import compareAeroDyn  # noqa: E402
 import comparePhaseVI  # noqa: E402
 from checkModelDefinition import check_run, load_definition  # noqa: E402
 
@@ -69,6 +78,14 @@ QUANTITIES = ("power", "thrust") + tuple(f"cn{station:.2f}" for station in STATI
 WINDOW_SHIFTS = (0, 2, 4)
 BLOCKAGE_INCREMENTS = (0.01, 0.02)
 BLOCKAGE_LABEL = "BEM-estimated blockage sensitivity"
+#: OpenFAST v5.0.0 conda env of the AeroDyn BEM (override: --openfast-env or $OPENFAST_ENV).
+OPENFAST_ENV_DEFAULT = Path("/scratch/leahk/eduardo.donestevez/conda-envs/openfast")
+DRIVER_TIMEOUT_S = 600
+#: Test hook: a callable(case_dir) that replaces the real `aerodyn_driver` run.
+AERODYN_RUNNER = None
+#: Everything that makes the AeroDyn BEM unusable; the caller falls back to the bound.
+BLOCKAGE_ERRORS = (ImportError, OSError, ValueError, KeyError, subprocess.SubprocessError,
+                   compareAeroDyn.MissingInput, compareAeroDyn.ShortWindow)
 BLOCKAGE_BOUND_LABEL = "U^3 / U^2 bound (not a BEM estimate)"
 FRAME_DT_S = 1.92e-3
 PARTIAL_REVOLUTION_FRACTION = 0.9
@@ -293,33 +310,48 @@ def window_sensitivity(run_dir, cfg, speed, sequence, rho, thrust_scope):
             "deviation": deviation, "unavailable": unavailable}
 
 
-def bem_quantities(args, bem):
-    stations, thrust, _, power, radius = bem.run(args)
-    radii = np.array([s["r"] for s in stations]) / radius
-    chord_cn = np.array([
-        s["cl"] * math.cos(math.radians(s["alpha"])) + s["cd"] * math.sin(math.radians(s["alpha"]))
-        for s in stations
-    ])
-    values = {"power": power, "thrust": thrust}
+def aerodyn_driver(openfast_env=None):
+    """Path of `aerodyn_driver`: `openfast_env`, else $OPENFAST_ENV, else the default env."""
+    env = Path(openfast_env or os.environ.get("OPENFAST_ENV") or OPENFAST_ENV_DEFAULT)
+    driver = env / "bin" / "aerodyn_driver"
+    if not (driver.is_file() and os.access(driver, os.X_OK)):
+        raise OSError(f"aerodyn_driver not found at {driver} (set --openfast-env or $OPENFAST_ENV)")
+    return driver
+
+
+def run_aerodyn_driver(driver, case_dir):
+    """Run the driver in `case_dir`; it must reach 'terminated normally'."""
+    result = subprocess.run([str(driver), "ad_driver.dvr"], cwd=case_dir, capture_output=True,
+                            text=True, timeout=DRIVER_TIMEOUT_S, check=False)
+    if "terminated normally" not in result.stdout.replace("\r", "\n"):
+        raise OSError(f"aerodyn_driver failed in {case_dir} (rc {result.returncode}): "
+                      f"{result.stdout[-300:]}")
+
+
+def aerodyn_quantities(sequence, speed, scale, runner):
+    """Power, thrust and station c_n of the AeroDyn BEM case at inflow x `scale` (fixed rpm)."""
+    with tempfile.TemporaryDirectory(prefix="aerodyn-blockage-") as scratch:
+        case_dir = Path(scratch) / "case"
+        buildAeroDynCase.build_case(sequence, speed, "bem", case_dir, inflow_scale=scale)
+        runner(case_dir)
+        metrics = compareAeroDyn.compare_case(case_dir)["metrics"]
+    values = {"power": metrics["power_kw"], "thrust": metrics["thrust_n"]}
     for station in STATIONS:
-        values[f"cn{station:.2f}"] = float(np.interp(station, radii, chord_cn))
+        values[f"cn{station:.2f}"] = metrics["stations"][f"{station:.2f}"]["cn"]
     return values
 
 
-def blockage_sensitivity(rpm, rho, speed, pitch, increments=BLOCKAGE_INCREMENTS,
-                         drag="pressure", tip="on"):
-    """Relative change of each quantity for inflow x (1 + increment) at fixed rpm (BEM)."""
-    import bemPhaseVI as bem
-
-    def at(factor):
-        return bem_quantities(argparse.Namespace(
-            speed=speed * factor, rpm=rpm, rho=rho, pitch=pitch, blades=2, tip=tip,
-            cd_scale=1.0, drag=drag, nstations=200), bem)
-
-    base = at(1.0)
+def blockage_sensitivity(sequence, speed, increments=BLOCKAGE_INCREMENTS, openfast_env=None,
+                         runner=None):
+    """Relative change of each quantity for inflow x (1 + increment) at fixed rpm (AeroDyn BEM)."""
+    runner = runner or AERODYN_RUNNER
+    if runner is None:
+        driver = aerodyn_driver(openfast_env)
+        runner = lambda case_dir: run_aerodyn_driver(driver, case_dir)  # noqa: E731
+    base = aerodyn_quantities(sequence, speed, 1.0, runner)
     relative = {}
     for increment in increments:
-        raised = at(1.0 + increment)
+        raised = aerodyn_quantities(sequence, speed, 1.0 + increment, runner)
         relative[increment] = {q: raised[q] / base[q] - 1.0 for q in QUANTITIES}
     return {"label": BLOCKAGE_LABEL, "relative": relative}
 
@@ -364,12 +396,12 @@ def combine(simulation, experiment_value, repeatability, blockage, window, cover
     return rows
 
 
-def vtun_correction(repeatability, experiment_name, speed, rpm, rho, pitch,
-                    simulation, measured, rows, coverage):
+def vtun_correction(repeatability, experiment_name, sequence, speed,
+                    simulation, measured, rows, coverage, openfast_env=None):
     """Deterministic correction for the measured tunnel speed (VTUN).
 
-    The run uses the nominal speed while the experiment row measured VTUN; rpm
-    and rho are already the measured ones. The simulation is scaled by the BEM
+    The run uses the nominal speed while the experiment row measured VTUN. The
+    simulation is scaled by the AeroDyn BEM
     response at fixed rpm to U x VTUN/U_nominal and judged against the same
     combined uncertainty. Reported beside the raw difference, never instead of it.
     """
@@ -378,7 +410,7 @@ def vtun_correction(repeatability, experiment_name, speed, rpm, rho, pitch,
         return {"available": False,
                 "reason": f"no measured VTUN for {experiment_name} in the UAE6 archive"}
     increment = vtun / speed - 1.0
-    relative = blockage_sensitivity(rpm, rho, speed, pitch, increments=(increment,))
+    relative = blockage_sensitivity(sequence, speed, increments=(increment,), openfast_env=openfast_env)
     relative = relative["relative"][increment]
     corrected = {}
     for quantity in QUANTITIES:
@@ -399,7 +431,7 @@ def print_vtun(correction, experiment_name, speed, rows):
     if not correction["available"]:
         print(f"VTUN correction: not available ({correction['reason']})")
         return
-    print(f"VTUN correction (deterministic, BEM at fixed rpm): {experiment_name} measured "
+    print(f"VTUN correction (deterministic, AeroDyn BEM at fixed rpm): {experiment_name} measured "
           f"{correction['vtun']:.3f} m/s vs simulated {speed:g} m/s "
           f"({100 * correction['increment']:+.2f} %)")
     for quantity, row in correction["rows"].items():
@@ -497,6 +529,9 @@ def main(argv=None):
                         help="UAE6 parquet directory (default turbinesFoam/articles/uae6/parquet)")
     parser.add_argument("--config", type=Path, default=comparePhaseVI.DEFAULT_CONFIG)
     parser.add_argument("--thrust-scope", choices=("blade", "rotor"), default="blade")
+    parser.add_argument("--openfast-env", type=Path, default=None,
+                        help="conda env prefix holding bin/aerodyn_driver (default: $OPENFAST_ENV, "
+                             f"then {OPENFAST_ENV_DEFAULT})")
     parser.add_argument("--coverage", type=float, default=1.0,
                         help="coverage factor k applied to the combined term (default 1)")
     parser.add_argument("--allow-nonconforming", action="store_true",
@@ -532,20 +567,19 @@ def main(argv=None):
     simulation = window["values"][window["reference"]]
 
     repeatability = experiment_repeatability(args.archive_dir, args.sequence, args.speed)
-    pitch = float(cfg["turbine"].get("pitch_deg", 3.0))
     blockage_note = ""
     try:
-        blockage = blockage_sensitivity(float(experiment["rpm"]), rho, args.speed, pitch)
-    except (ImportError, OSError, ValueError, KeyError) as exc:
+        blockage = blockage_sensitivity(args.sequence, args.speed, openfast_env=args.openfast_env)
+    except BLOCKAGE_ERRORS as exc:
         blockage = blockage_bound()
-        blockage_note = f" (BEM unusable: {exc})"
+        blockage_note = f" (AeroDyn BEM unusable: {exc})"
     rows = combine(simulation, measured, repeatability, blockage, window, args.coverage)
     try:
-        vtun = vtun_correction(repeatability, experiment["file_name"], args.speed,
-                               float(experiment["rpm"]), rho, pitch, simulation, measured,
-                               rows, args.coverage)
-    except (ImportError, OSError, ValueError, KeyError) as exc:
-        vtun = {"available": False, "reason": f"BEM unusable: {exc}"}
+        vtun = vtun_correction(repeatability, experiment["file_name"], args.sequence,
+                               args.speed, simulation, measured, rows, args.coverage,
+                               openfast_env=args.openfast_env)
+    except BLOCKAGE_ERRORS as exc:
+        vtun = {"available": False, "reason": f"AeroDyn BEM unusable: {exc}"}
     print_report(args, rows, repeatability, blockage, window, tag, experiment["file_name"],
                  blockage_note, vtun)
     return EXIT_OK

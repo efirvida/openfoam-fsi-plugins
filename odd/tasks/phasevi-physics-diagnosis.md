@@ -1,5 +1,9 @@
 # Phase VI ALM — physics diagnosis before more runs (2026-10-23)
 
+> **Note 2026-10-27 (T11, `odd/tasks/v13-adoption-asm.md`):** the in-house BEM (`bemPhaseVI.py`) numbers quoted
+> in this record carry the root-polar defect (S809 applied over the cylinder r < 1.0675 m; power only, normal
+> loads unaffected within ~1 pp). The AeroDyn BEM (L11 of that file) supersedes them and the script was removed.
+
 Deliverable of `odd/tasks/phasevi-physics-review.md` T6. Read-only diagnosis: no coefficient changed, no CFD run.
 Scripts and outputs (git-ignored, main-checkout `runs/`): `turbinesFoam/validation/phaseVI/runs/physics-review-scripts/`
 (`bem_matrix.py` -> `bem-matrix-20261023.txt`, `polar_osu_dut.py` -> `polar-osu-dut-20261023.txt`) and

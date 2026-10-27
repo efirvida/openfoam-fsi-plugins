@@ -9,11 +9,17 @@ implementation to arbitrate the ALM, not a tuned model: no coefficient is adjust
 towards the data. Task: `odd/tasks/v13-adoption-asm.md` T9 (builder, comparator,
 tests) and T10 (the runs).
 
+**The AeroDyn BEM is the repository's only BEM** (owner, 2026-10-27, `odd/tasks/v13-adoption-asm.md` S7).
+The former in-house BEM was removed: it applied the S809 polar on the cylindrical root
+(r < 1.0675 m), see L11 of that file. `scripts/quantifyUncertainty.py` uses `--wake bem` with
+`--inflow-scale` (inflow x (1 + increment), fixed rpm) for the blockage and VTUN sensitivities, with
+the U^3/U^2 bound as fallback when `aerodyn_driver` is not found (`--openfast-env`, `$OPENFAST_ENV`).
+
 Files (all generated from repository data; nothing here is hand-edited):
 
 | Path | Role |
 |---|---|
-| `scripts/buildAeroDynCase.py` | `--sequence S\|H --speed N --wake bem\|olaf --out DIR`: writes the complete driver case and `case.json` (every derived input with its source) |
+| `scripts/buildAeroDynCase.py` | `--sequence S\|H --speed N --wake bem\|olaf [--inflow-scale F] --out DIR`: writes the complete driver case and `case.json` (every derived input with its source) |
 | `scripts/compareAeroDyn.py` | `--case DIR`: power, thrust, torque, Cn/Ct/alpha at r/R 0.30/0.47/0.63/0.80/0.95, error % vs the experiment, convergence; prints a table, writes `metrics.json` |
 | `scripts/slurm/aerodyn.slurm` | one case: build, `aerodyn_driver`, compare (POSIX sh, `--ntasks=1`) |
 | `openfast/submit_matrix.sh` | the 10 cases (dry run by default, `--submit` to queue) |
@@ -158,8 +164,7 @@ so both partition job limits are used (`AGENTS.md`).
 - AeroDyn's tip loss is Prandtl; the ALM uses Dag and Sorensen with the Glauert tip factor
   off. The two are different models by design, which is what the arbiter measures.
 - The BEMT uses AeroDyn's own solver and induction handling, which this file does not
-  switch; differences from the repository BEM (`scripts/bemPhaseVI.py`) in hub-loss form,
-  high-induction handling or node placement are implementation differences, to be located
-  before any physical reading.
+  switch; differences from any other BEM in hub-loss form, high-induction handling or node
+  placement are implementation differences, to be located before any physical reading.
 - The binary is single precision (compile info in the driver banner).
 - The measured loads include tower shadow, nacelle and blockage; none is in the ALM or here.

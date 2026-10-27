@@ -1,5 +1,9 @@
 # Model Definition v1.3 decision record — Phase VI pitch reference and drag polar
 
+> **Note 2026-10-27 (T11, `odd/tasks/v13-adoption-asm.md`):** the in-house BEM (`bemPhaseVI.py`) numbers quoted
+> in this record carry the root-polar defect (S809 applied over the cylinder r < 1.0675 m; power only, normal
+> loads unaffected within ~1 pp). The AeroDyn BEM (L11 of that file) supersedes them and the script was removed.
+
 **Status: ADOPTED 2026-10-27.** v1.3 was FROZEN by the owner (2026-10-26), gate run 2026-10-27
 (section "v1.3 gate result"), and adopted as the definition of record on 2026-10-27 ("Sí, adoptar v1.3
 ahora"; `odd/tasks/v13-adoption-asm.md`, T1). `config/model-definition.yaml` is v1.3; v1.2 is the frozen
