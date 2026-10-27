@@ -1,0 +1,8 @@
+case,status,channels,failing_channels,samples,max_rel_err,max_rel_err_channel,max_norm_over_range,wall_s,note
+ad_B1n2_OLAF,PASS,40,0,60,0,,0,0.18454,
+ad_BAR_OLAF,PASS,543,0,60,0.00129407,RtVAvgzh,0.000917349,9.64613,
+ad_EllipticalWingInf_OLAF,PASS,314,0,10,0,,0,0.130207,
+ad_HelicalWakeInf_OLAF,PASS,180,0,100,0,,0,3.84752,
+ad_Kite_OLAF,PASS,433,0,50,0,,0,4.5654,
+ad_QuadRotor_OLAF,PASS,213,0,10,0.0024384,RtAeroFzh,0.00180056,21.4076,
+ad_VerticalAxis_OLAF,PASS,129,0,37,0.206817,AB1N014Vindx,0.00154345,0.885787,

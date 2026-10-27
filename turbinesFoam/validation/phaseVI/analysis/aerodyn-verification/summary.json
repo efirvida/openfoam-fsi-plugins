@@ -1,7 +1,7 @@
 {
   "openfast": "AeroDyn_driver-v5.0.0",
   "date": "2026-10-27",
-  "command": "verifyAeroDyn.py --out analysis/aerodyn-verification --work /tmp/t12-eduardo.donestevez/work-final2",
+  "command": "verifyAeroDyn.py --openfast-env /scratch/leahk/eduardo.donestevez/openfast-5.0.0-dp --out /scratch/leahk/eduardo.donestevez/build/verify-dp-20261027-1800/out --work /scratch/leahk/eduardo.donestevez/build/verify-dp-20261027-1800/work",
   "points": {
     "s-curve": 21,
     "pitch": 125,
@@ -31,9 +31,9 @@
     },
     "H3_T": {
       "steps": 83,
-      "agree": 68,
+      "agree": 67,
       "steps_not_flat": 61,
-      "agree_not_flat": 55
+      "agree_not_flat": 54
     }
   },
   "l12": {
@@ -48,31 +48,31 @@
     ],
     "s_curve_worst_power": {
       "wind_speed_m_s": 18.0,
-      "error_pct": -73.59995922118023
+      "error_pct": -73.5999278982681
     },
     "attached_power_max_abs_error_pct_by_pitch": {
-      "0": 8.585622452679825,
-      "2": 4.484118825270852,
-      "3": 9.926083525731132,
-      "4": 8.66785853795989,
-      "6": 21.28096911389603
+      "0": 8.588000554679844,
+      "2": 4.483797966922598,
+      "3": 9.923489504255787,
+      "4": 8.66594327802839,
+      "6": 21.267450831967526
     },
     "attached_power_within_band": 16,
     "attached_power_total": 18,
     "yaw_ratio_small_yaw": {
-      "max_abs_diff_pp": 7.12721425492433,
+      "max_abs_diff_pp": 7.123933352366696,
       "at": "H 5 m/s yaw -5",
       "within_band": 20,
       "total": 23
     },
     "yaw_ratio_20_to_90_deg": {
-      "max_abs_diff_pp": 18.822300219263212,
+      "max_abs_diff_pp": 18.820838929849625,
       "at": "H 5 m/s yaw 90",
       "within_band": 14,
       "total": 26
     }
   },
-  "wall_s": 287.565789937973,
+  "wall_s": 367.4413683414459,
   "skew": {
     "Skew_Mod": 1,
     "SkewMomCorr": true,

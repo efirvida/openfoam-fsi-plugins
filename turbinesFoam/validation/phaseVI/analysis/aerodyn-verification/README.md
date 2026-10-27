@@ -7,16 +7,20 @@ Two tests, both reproducible from this directory:
 2. **Experiments on disk** (b): the AeroDyn BEM against every measured Phase VI point of the three table
    families the repository holds (the UAE Phase VI archive is the only experiment on disk).
 
-Binary: OpenFAST `AeroDyn_driver-v5.0.0`, conda-forge `openfast-5.0.0 hd1f9c02_2` (GCC 15.3.0, **single
-precision**: the recipe sets `-DDOUBLE_PRECISION=OFF`) at
-`/scratch/leahk/eduardo.donestevez/conda-envs/openfast`. Date of the runs: 2026-10-27.
+Binary of record (owner decision S8, 2026-10-27): OpenFAST v5.0.0 built in **double precision** by
+`openfast/build_openfast_dp.sh` (tag v5.0.0 / 2895884d, GCC 14.2.0, `-O3`, static reference BLAS/LAPACK,
+CMake `DOUBLE_PRECISION:BOOL=ON`, RPATH so it runs with an empty environment) at
+`/scratch/leahk/eduardo.donestevez/openfast-5.0.0-dp` (`BUILD-INFO.txt` there). Every table at the top of this
+directory comes from it. The first runs used the conda-forge `openfast-5.0.0 hd1f9c02_2` (GCC 15.3.0, **single
+precision**, `-DDOUBLE_PRECISION=OFF`) at `/scratch/leahk/eduardo.donestevez/conda-envs/openfast`; those tables
+are kept in `single-precision-conda/`. Date of the runs: 2026-10-27.
 
-## (a) r-test v5.0.0, AeroDyn driver, `Wake_Mod = 1` — `rtest_bem.csv`, `rtest_bem_double.csv`
+## (a) r-test v5.0.0, AeroDyn driver — `rtest_bem_double.csv`, `rtest_olaf_double.csv`, `rtest_olaf_single.csv`, `single-precision-conda/rtest_bem.csv`
 
 ```sh
 python3 -I openfast/rtestAeroDyn.py --rtest <r-test checkout at v5.0.0> \
-    --openfast-env /scratch/leahk/eduardo.donestevez/conda-envs/openfast --scratch <new empty dir> \
-    --out analysis/aerodyn-verification/rtest_bem.csv
+    --openfast-env /scratch/leahk/eduardo.donestevez/openfast-5.0.0-dp --scratch <new empty dir> \
+    --wake-mods 1 --out analysis/aerodyn-verification/rtest_bem_double.csv     # --wake-mods 3: OLAF
 ```
 
 Rule (OpenFAST v5.0.0 `reg_tests/lib/pass_fail.py::passing_channels`, `executeAerodynRegressionCase.py`,
@@ -26,14 +30,14 @@ passes when every sample satisfies `|t - b| <= atol + rtol |b|` and is finite; a
 do (`ConvIter`, `ConvError`, `NumUJac` dropped). `max_rel_err` is the largest `|t - b| / |b|` over samples with
 `|b| > atol`; `max_norm_over_range` is the suite's own `calculate_max_norm_over_range`.
 
-Run: the nine BEM cases (`Wake_Mod = 1`) of `modules/aerodyn`. Skipped: `ad_B1n2_OLAF`, `ad_BAR_OLAF`,
-`ad_EllipticalWingInf_OLAF`, `ad_HelicalWakeInf_OLAF`, `ad_Kite_OLAF`, `ad_QuadRotor_OLAF`, `ad_Sphere_OLAF`,
-`ad_VerticalAxis_OLAF` (`Wake_Mod = 3`, OLAF; not BEM) and the two `py_ad_*` cases (Python driver).
+Run: the nine BEM cases (`Wake_Mod = 1`) and the seven OLAF cases (`Wake_Mod = 3`) of `modules/aerodyn` that
+have a reference; `ad_Sphere_OLAF` has no reference `.outb` and the two `py_ad_*` cases use the Python driver.
+The whole set takes about 3.5 min on a login node.
 
-| Binary | PASS | FAIL |
+| Binary | BEM (9) | OLAF (7) |
 |---|---|---|
-| conda-forge, single precision (`rtest_bem.csv`) | `ad_BAR_CombinedCases`, `ad_MultipleHAWT` | `ad_BAR_RNAMotion`, `ad_BAR_SineMotion`, `ad_BAR_SineMotion_UA4_DBEMT3`, `ad_MHK_RM1_Fixed`, `ad_MHK_RM1_Fixed_IfW`, `ad_MHK_RM1_Floating`, `ad_timeseries_shutdown` |
-| same source, **double precision** built here (GCC 14.2, OpenBLAS 0.3.29; `rtest_bem_double.csv`) | all nine (six at 0 error, largest `max_rel_err` 5.1e-3) | none |
+| **double precision**, `openfast-5.0.0-dp` (`rtest_bem_double.csv`, `rtest_olaf_double.csv`) | **9/9 PASS** (six at 0 error, largest `max_rel_err` 5.1e-3) | **7/7 PASS** (largest `max_rel_err` 0.21, `ad_VerticalAxis_OLAF`, within the per-channel atol) |
+| conda-forge, single precision (`single-precision-conda/rtest_bem.csv`, `rtest_olaf_single.csv`) | 2/9 (`ad_BAR_CombinedCases`, `ad_MultipleHAWT`) | 2/7 (`ad_BAR_OLAF`, `ad_QuadRotor_OLAF`); `ad_VerticalAxis_OLAF` fails 16 channels |
 
 The r-test references are double precision. The source of the conda package (tarball sha256
 `f84793e7...063a`, the recipe's) built with `-DDOUBLE_PRECISION=ON` reproduces every reference, so the AeroDyn
@@ -44,17 +48,22 @@ start-up transient and in channels whose reference is 0 or tiny. Does that touch
 with both binaries. At 5-8 m/s, 0 yaw and the pitch sweep: power, thrust and torque agree to 1.7e-4, c_n to
 4.2e-4. The differences grow only where the BEM is ill-conditioned: deep stall (S curve 19 m/s, c_n at r/R 0.80
 2.3e-1; power 6e-3) and yaw >= 135 deg (power 3.4e-2, where the power itself is near zero). The mean-power
-ratio of (d) differs by at most 0.004 pp (|yaw| <= 30 deg, U <= 7 m/s). **The installed single-precision binary
-is adequate for the Phase VI BEM path in the regimes judged; it is not r-test bit-compatible.**
+ratio of (d) differs by at most 0.004 pp (|yaw| <= 30 deg, U <= 7 m/s). The single-precision binary would have
+been adequate for the Phase VI BEM path in the regimes judged, but it is not r-test compatible (BEM 2/9, OLAF
+2/7), so the double-precision build is the binary of record. The `l12` verdicts of `summary.json` are the same
+with both binaries except one deep-stall thrust-slope step (`H3_T` agreement 68 -> 67 of 83). The two
+`precision_single_vs_double*.csv` tables are byte-identical whether the double-precision side is this build or
+the earlier node-local build of the same source, so the build recipe is reproducible.
 
 ## (b) Phase VI tables — `scripts/verifyAeroDyn.py`
 
 ```sh
 cd turbinesFoam/validation/phaseVI
 python3 scripts/verifyAeroDyn.py --out analysis/aerodyn-verification --work <new scratch dir>
+# default --openfast-env is the double-precision build
 ```
 
-253 cases in 288 s of wall time on one login node (serial driver runs; the 95 `SkewMomCorr=False` sensitivity
+253 cases in 367 s (double precision; 288 s single) of wall time on one login node (serial driver runs; the 95 `SkewMomCorr=False` sensitivity
 runs of the yawed points are extra), 0 failed, all converged. Each case: v1.3 inputs (tip pitch reference
 geometry, OSU total polar, cylinder root, rigid, no tower, cone 0, tilt 0), `Wake_Mod=1`.
 
@@ -92,7 +101,8 @@ Tables:
 | `yaw_power_ratio.csv` | P(yaw)/P(0) per sequence, speed, yaw: model, experiment, difference in pp (and the `SkewMomCorr=False` variant) |
 | `probes_H_vs_S.csv` | sequence H over S at pitch 3: experiment and model power/thrust ratios |
 | `summary.json` | counts, failures, sign tally, `l12` block, OpenFAST version, date, command, wall time |
-| `precision_single_vs_double*.csv`, `rtest_bem*.csv` | see (a) |
+| `precision_single_vs_double*.csv`, `rtest_*.csv` | see (a) |
+| `single-precision-conda/` | the same tables from the single-precision conda binary (first run, superseded) |
 
 ## Sequence H and S: same rotor, different probe configuration
 

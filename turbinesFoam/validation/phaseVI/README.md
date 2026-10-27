@@ -753,8 +753,8 @@ averaging window (definition window against the windows starting 2 and 4
 revolutions later), and BEM-estimated blockage sensitivity for inflow +1 %/+2 %
 (the OpenFAST AeroDyn BEM, `buildAeroDynCase.py --wake bem --inflow-scale` and
 `aerodyn_driver`, at fixed rpm; one-sided bound; U^3/U^2 bound if OpenFAST is
-unavailable). The OpenFAST env is `--openfast-env`, else `$OPENFAST_ENV`, else
-`/scratch/leahk/eduardo.donestevez/conda-envs/openfast`; rotor speed and density are those of
+unavailable). The OpenFAST install is `--openfast-env`, else `$OPENFAST_ENV`, else the
+double-precision build `/scratch/leahk/eduardo.donestevez/openfast-5.0.0-dp` (`openfast/build_openfast_dp.sh`); rotor speed and density are those of
 the measured point (`tsr U / R`, experiment row), the case is built in a scratch directory
 and removed. The repository has no other BEM (the in-house one was removed 2026-10-27). The verdict says "agrees within the combined numerical and
 experimental uncertainty" only inside the quadrature sum (`--coverage k`,

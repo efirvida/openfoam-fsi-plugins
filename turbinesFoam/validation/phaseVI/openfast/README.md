@@ -1,7 +1,9 @@
 # Phase VI in OpenFAST AeroDyn (BEM and OLAF): code-to-code arbiter of the v1.3 ALM
 
-OpenFAST v5.0.0 (conda-forge, GCC 15.3, single precision, no OpenMP) at
-`/scratch/leahk/eduardo.donestevez/conda-envs/openfast/bin/{aerodyn_driver,openfast}`
+OpenFAST v5.0.0 built in **double precision** by `openfast/build_openfast_dp.sh` (GCC 14.2,
+static reference BLAS/LAPACK, no OpenMP; owner decision 2026-10-27) at
+`/scratch/leahk/eduardo.donestevez/openfast-5.0.0-dp/bin/{aerodyn_driver,openfast}`
+(override with `$OPENFAST_ENV` / `--openfast-env`)
 runs the NREL Phase VI rotor as a rigid, tower-less, uniform-inflow rotor with the
 **same inputs as the v1.3 ALM** and two wake models: AeroDyn **BEMT** (`Wake_Mod=1`)
 and **OLAF**, the free vortex wake (`Wake_Mod=3`). It is an independent
@@ -145,7 +147,7 @@ lie after the `nNWPanels` steps that fill the wake. Report such a run as "not a 
 cd turbinesFoam/validation/phaseVI
 # one case by hand
 python3 scripts/buildAeroDynCase.py --sequence S --speed 7 --wake bem --out /tmp/ad-bem-S7
-(cd /tmp/ad-bem-S7 && /scratch/leahk/eduardo.donestevez/conda-envs/openfast/bin/aerodyn_driver ad_driver.dvr)
+(cd /tmp/ad-bem-S7 && /scratch/leahk/eduardo.donestevez/openfast-5.0.0-dp/bin/aerodyn_driver ad_driver.dvr)
 python3 scripts/compareAeroDyn.py --case /tmp/ad-bem-S7
 
 # all 10 cases (S 5, 6, 7, 8 and H 7, BEM and OLAF): review, then queue
@@ -168,5 +170,9 @@ so both partition job limits are used (`AGENTS.md`).
 - The BEMT uses AeroDyn's own solver and induction handling, which this file does not
   switch; differences from any other BEM in hub-loss form, high-induction handling or node
   placement are implementation differences, to be located before any physical reading.
-- The binary is single precision (compile info in the driver banner; the conda-forge recipe sets `-DDOUBLE_PRECISION=OFF`). It fails 7 of the 9 r-test BEM regression cases, whose baselines are double precision, while a double-precision build of the same source passes all nine; on the Phase VI points the two agree to 2e-4 at 5-8 m/s (`analysis/aerodyn-verification/README.md`).
+- Binary: the double-precision build passes the r-test v5.0.0 AeroDyn-driver cases, BEM 9/9 and OLAF 7/7
+  (`ad_Sphere_OLAF` has no reference). The conda-forge package (`/scratch/leahk/eduardo.donestevez/conda-envs/openfast`)
+  is single precision (`-DDOUBLE_PRECISION=OFF`) and passes BEM 2/9 and OLAF 2/7; on the Phase VI BEM points the
+  two agree to 2e-4 at 5-8 m/s (`analysis/aerodyn-verification/README.md`). Rebuild:
+  `sh turbinesFoam/validation/phaseVI/openfast/build_openfast_dp.sh` (about 10 min, `BUILD-INFO.txt` in the prefix).
 - The measured loads include tower shadow, nacelle and blockage; none is in the ALM or here.

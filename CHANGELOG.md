@@ -4,6 +4,23 @@
 
 ### Features
 
+#### Phase VI: double-precision OpenFAST as the binary of record
+
+**Files:** `turbinesFoam/validation/phaseVI/openfast/{build_openfast_dp.sh,README.md}`,
+`turbinesFoam/validation/phaseVI/scripts/{quantifyUncertainty.py,verifyAeroDyn.py}`,
+`turbinesFoam/validation/phaseVI/scripts/slurm/aerodyn.slurm`,
+`turbinesFoam/validation/phaseVI/analysis/aerodyn-verification/`, `turbinesFoam/validation/phaseVI/README.md`.
+
+**Problem:** the conda-forge OpenFAST v5.0.0 is built single precision and fails the r-test AeroDyn-driver
+cases (BEM 2/9, OLAF 2/7) whose baselines are double precision; the site OpenBLAS cannot be linked with GCC
+(Intel runtime symbols) and the system libgfortran is older than GCC 14's.
+
+**Fix:** `build_openfast_dp.sh` builds tag v5.0.0 with `DOUBLE_PRECISION=ON`, GCC 14.2, static reference
+BLAS/LAPACK and an RPATH, checks the binaries run with an empty environment and writes `BUILD-INFO.txt`;
+it is the default `OPENFAST_ENV`. r-test: BEM 9/9, OLAF 7/7. The verification tables were regenerated with
+it (L12 verdicts unchanged but one deep-stall thrust-slope step); the single-precision tables moved to
+`analysis/aerodyn-verification/single-precision-conda/` (`odd/tasks/v13-adoption-asm.md` T13).
+
 #### Phase VI: AeroDyn BEM verified against the r-test and every Phase VI table on disk (v1.4 T12)
 
 **Files:** `turbinesFoam/validation/phaseVI/scripts/{verifyAeroDyn.py,buildAeroDynCase.py,compareAeroDyn.py}`,
