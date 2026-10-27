@@ -10,11 +10,12 @@ NREL-to-turbinesFoam convention `pitch = -(twist + pitch_deg)`; the NREL
 report defines positive twist/pitch towards feather while the axial-flow
 element has the opposite sign.
 
-`turbine.pitch_reference` selects where the pitch is measured: `twist-zero`
-(default, Model Definition v1.2) adds it to the report twist, which is zero at
-the 75 % span station; `tip` follows NREL/TP-500-29955 p.20 (pitch is the angle
-between the blade tip chord and the rotor plane) and subtracts the table twist at
-the rotor radius first, so the tip mounting equals `-pitch_deg`.
+`turbine.pitch_reference` selects where the pitch is measured: `tip` (default,
+Model Definition v1.3) follows NREL/TP-500-29955 p.20 (pitch is the angle between
+the blade tip chord and the rotor plane) and subtracts the table twist at the
+rotor radius first, so the tip mounting equals `-pitch_deg`; `twist-zero` (Model
+Definition v1.2, pass it explicitly) adds the pitch to the report twist, which is
+zero at the 75 % span station.
 
 Adapted from `mttbrbr/single-actuator-line` (main 8284be8c..., GPL-3.0-or-later).
 """
@@ -42,7 +43,7 @@ ELEMENT_CYLINDER_END = 1.0675
 
 
 PITCH_REFERENCES = ("twist-zero", "tip")
-DEFAULT_PITCH_REFERENCE = "twist-zero"
+DEFAULT_PITCH_REFERENCE = "tip"
 
 
 def pitch_reference(cfg: dict[str, Any]) -> str:
@@ -54,7 +55,7 @@ def pitch_reference(cfg: dict[str, Any]) -> str:
 
 def twist_reference(cfg: dict[str, Any], blade: list[dict[str, float]] | None = None) -> float:
     """Report twist [deg] at which the collective pitch is measured: 0 or the table twist at the rotor radius."""
-    if pitch_reference(cfg) == DEFAULT_PITCH_REFERENCE:
+    if pitch_reference(cfg) == "twist-zero":
         return 0.0
     table = blade if blade is not None else read_blade()
     radius = float(cfg["turbine"]["radius"])

@@ -39,5 +39,5 @@ export LD_LIBRARY_PATH=$FOAM_USER_LIBBIN:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/l
 echo "$MODEL U$SPEED v12-eps1 on $(hostname), $SLURM_NTASKS tasks"
 exec scripts/runPhaseVI.sh -m "$MODEL" -u "$SPEED" -mesh coarse --sequence H --refine-level 1 --mesh-factor 0.5 \
     --delta-t 0.001 --end-revs 12 --ranks "$SLURM_NTASKS" \
-    --blade-dz 0.05 --polar S809_OSU_Re1M_pressure.dat --tip-effects on --tip-correction off \
+    --blade-dz 0.05 --polar S809_OSU_Re1M_pressure.dat --tip-effects on --tip-correction off --pitch-reference twist-zero \
     --root-effects on --rotational-augmentation off --run-label "$RUN_LABEL" --restart --run

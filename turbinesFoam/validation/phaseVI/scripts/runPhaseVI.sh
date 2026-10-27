@@ -54,11 +54,12 @@
 # --n-elements). Elements, and for asm-mesh the lofted STL staged into the run
 # directory, follow the resampled table; run.json records `blade_dz`. Rule:
 # DZ = min(0.05, h/2). Absent, the committed layout is used unchanged.
-# --pitch-reference twist-zero|tip (default twist-zero) selects where the collective
-# pitch is measured. twist-zero is Model Definition v1.2 (pitch added to the report
-# twist, zero at 75 % span); tip follows NREL/TP-500-29955 p.20 (pitch at the tip
-# chord, tip mounting -pitch). Any other value exits 2. run.json records
-# `pitch_reference`. A diagnostic arm (registry variant tip-pitch), never of record.
+# --pitch-reference twist-zero|tip (default tip) selects where the collective
+# pitch is measured. tip is Model Definition v1.3 (NREL/TP-500-29955 p.20: pitch at
+# the tip chord, tip mounting -pitch); twist-zero is v1.2 (pitch added to the report
+# twist, zero at 75 % span). Any other value exits 2. run.json records
+# `pitch_reference`. A plain render is the v1.3 record; v1.2 needs every knob passed
+# explicitly (scripts/slurm/v1-2-run.slurm).
 # --run-label WORD appends -WORD to the run id (`runs/<id>-WORD`) and records it
 # in run.json, so two render variants of the same (model, speed, mesh) live in
 # separate, independently restartable directories (the two-arm campaign uses it
@@ -116,7 +117,7 @@ polar=""
 refine_level=0
 mesh_factor=""
 blade_dz=""
-pitch_reference=twist-zero
+pitch_reference=tip
 nacelle=off
 delta_t=""
 end_revs=""
@@ -434,9 +435,7 @@ fi
 if [ -n "$blade_dz" ]; then
     render_args+=(--blade-dz "$blade_dz")
 fi
-if [ "$pitch_reference" != twist-zero ]; then
-    render_args+=(--pitch-reference "$pitch_reference")
-fi
+render_args+=(--pitch-reference "$pitch_reference")
 if [ -n "$end_effects_model" ]; then
     render_args+=(--end-effects-model "$end_effects_model")
 fi
@@ -758,7 +757,7 @@ else
     if [ -n "$div_phi_u" ]; then
         suggestion="$suggestion --div-phi-u \"$div_phi_u\""
     fi
-    if [ "$pitch_reference" != twist-zero ]; then
+    if [ "$pitch_reference" != tip ]; then
         suggestion="$suggestion --pitch-reference $pitch_reference"
     fi
     if [ -n "$polar" ]; then

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Public-interface tests for Phase VI definition conformance and judging."""
+"""Public-interface tests for Phase VI definition conformance and judging (v1.3 of record, v1.2 via --variant)."""
 import importlib.util
 import json
 import os
@@ -12,7 +12,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1] / "validation/phaseVI"
 CHECK = ROOT / "scripts/checkModelDefinition.py"
 SUMMARY = ROOT / "scripts/summarizeBands.py"
-POLAR = "data/polars/S809_OSU_Re1M_pressure.dat"
+POLAR = "data/polars/S809_OSU_Re1M_total.dat"
+# Every Model Definition v1.2 knob, explicit: the renderer defaults are v1.3.
+V12_FLAGS = ["--pitch-reference", "twist-zero", "--tip-effects", "on", "--tip-correction", "off",
+             "--polar", "S809_OSU_Re1M_pressure.dat"]
 
 
 def invoke(script, *args):
@@ -39,16 +42,16 @@ def test_committed_renders_conform(tmp_path, twin):
     run = make_run(tmp_path, twin)
     result = invoke(CHECK, run)
     assert (result.returncode, result.stdout, result.stderr) == (
-        0, f"{run}: CONFORMS v1.2\n", "")
+        0, f"{run}: CONFORMS v1.3\n", "")
 
 
 @pytest.mark.parametrize("old,new,mismatch", [
-    ("tipEffects on;", "tipEffects off;", "tipEffects=off (expected on)"),
-    ("tipCorrection\n        {\n            active off;",
-     "tipCorrection\n        {\n            active on;",
-     "tipCorrection.active=on (expected off)"),
-    ("S809_OSU_Re1M_pressure.dat", "S809_OSU_Re1M_total.dat",
-     f"polar=../../data/polars/S809_OSU_Re1M_total.dat (expected suffix {POLAR})"),
+    ("tipEffects off;", "tipEffects on;", "tipEffects=on (expected off)"),
+    ("tipCorrection\n        {\n            active on;",
+     "tipCorrection\n        {\n            active off;",
+     "tipCorrection.active=off (expected on)"),
+    ("S809_OSU_Re1M_total.dat", "S809_OSU_Re1M_pressure.dat",
+     f"polar=../../data/polars/S809_OSU_Re1M_pressure.dat (expected suffix {POLAR})"),
     ("meshFactor 1;", "meshFactor 2;", "meshFactor=2 (expected 1)"),
     ("hubRadius 0.5083;", "", "hubRadius=-VGREAT (expected 0.5083)"),
     ("endEffectsModel Glauert;", "", "endEffectsModel=ABSENT (no solver default known)"),
@@ -69,7 +72,7 @@ def test_exact_mismatch_and_no_mutation(tmp_path, old, new, mismatch):
     before = (run / "system/fvOptions").read_bytes()
     result = invoke(CHECK, run)
     assert (result.returncode, result.stdout, result.stderr) == (
-        1, f"{run}: NON-CONFORMING v1.2: {mismatch}\n", "")
+        1, f"{run}: NON-CONFORMING v1.3: {mismatch}\n", "")
     assert (run / "system/fvOptions").read_bytes() == before
 
 
@@ -80,24 +83,24 @@ def test_refinement_scaling(tmp_path, metadata, name):
                    metadata=metadata, name=name)
     result = invoke(CHECK, run)
     assert (result.returncode, result.stdout, result.stderr) == (
-        0, f"{run}: CONFORMS v1.2\n", "")
+        0, f"{run}: CONFORMS v1.3\n", "")
 
 
 def test_all_mismatches_and_public_function(tmp_path):
-    run = make_run(tmp_path, old="tipEffects on;", new="tipEffects off;",
+    run = make_run(tmp_path, old="tipEffects off;", new="tipEffects on;",
                    metadata={"blade_dz": 0.1})
     spec = importlib.util.spec_from_file_location("definition_check", CHECK)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert module.check_run(run, module.load_definition()) == [
-        "tipEffects=off (expected on)", "blade_dz=0.1 (expected 0.05)"]
+        "tipEffects=on (expected off)", "blade_dz=0.1 (expected 0.05)"]
 
 
 def test_surface_strip_count(tmp_path):
     run = make_run(tmp_path, twin="ASM", old="nChordwise 5;", new="nChordwise 7;")
     result = invoke(CHECK, run)
     assert (result.returncode, result.stdout, result.stderr) == (
-        1, f"{run}: NON-CONFORMING v1.2: nChordwise=7 (expected 5)\n", "")
+        1, f"{run}: NON-CONFORMING v1.3: nChordwise=7 (expected 5)\n", "")
 
 
 def test_explicit_defaults_comments_and_inert_sample_count(tmp_path):
@@ -106,7 +109,7 @@ def test_explicit_defaults_comments_and_inert_sample_count(tmp_path):
                        '        nVelocitySamples 999; // inert\n')
     result = invoke(CHECK, run)
     assert (result.returncode, result.stdout, result.stderr) == (
-        0, f"{run}: CONFORMS v1.2\n", "")
+        0, f"{run}: CONFORMS v1.3\n", "")
 
 
 def test_unreadable_input(tmp_path):
@@ -116,13 +119,60 @@ def test_unreadable_input(tmp_path):
     assert "error:" in result.stderr
 
 
+def render(tmp_path, name, *flags):
+    case = tmp_path / name
+    result = invoke(ROOT / "tools/generate_case.py", "--case-dir", case, *flags)
+    assert result.returncode == 0, result.stderr
+    (case / "system/fvOptions").write_text((case / "system/fvOptions.ALM").read_text())
+    return case
+
+
+def test_v12_render_conforms_only_to_the_v12_variant(tmp_path):
+    """A render as scripts/slurm/v1-2-run.slurm makes it (every v1.2 knob explicit)."""
+    case = render(tmp_path, "v12", *V12_FLAGS)
+    own = invoke(CHECK, case, "--variant", "v1.2")
+    assert (own.returncode, own.stdout, own.stderr) == (0, f"{case}: CONFORMS v1.2\n", "")
+    record = invoke(CHECK, case)
+    assert (record.returncode, record.stderr) == (1, "")
+    verdict = record.stdout.removeprefix(f"{case}: NON-CONFORMING v1.3: ").rstrip("\n").split("; ")
+    assert [m.split("=")[0] for m in verdict] == ["tipEffects", "tipCorrection.active", "polar", "tipMounting"]
+    assert verdict[0] == "tipEffects=on (expected off)"
+    assert verdict[1] == "tipCorrection.active=off (expected on)"
+    assert verdict[2].endswith(f"S809_OSU_Re1M_pressure.dat (expected suffix {POLAR})")
+    assert verdict[3] == "tipMounting=-1.185 (expected -3, pitch reference tip)"
+
+
+def test_record_render_conforms_without_a_variant_and_not_to_v12(tmp_path):
+    case = render(tmp_path, "plain")
+    assert invoke(CHECK, case).stdout == f"{case}: CONFORMS v1.3\n"
+    assert invoke(CHECK, case, "--variant", "v1.3").stdout == f"{case}: CONFORMS v1.3\n"
+    against_v12 = invoke(CHECK, case, "--variant", "v1.2")
+    assert (against_v12.returncode, against_v12.stderr) == (1, "")
+    verdict = against_v12.stdout.removeprefix(f"{case}: NON-CONFORMING v1.2: ").rstrip("\n").split("; ")
+    assert [m.split("=")[0] for m in verdict] == ["tipEffects", "tipCorrection.active", "polar", "tipMounting"]
+    assert verdict[0] == "tipEffects=off (expected on)"
+    assert verdict[1] == "tipCorrection.active=on (expected off)"
+    assert verdict[3] == "tipMounting=-3 (expected -1.185, pitch reference twist-zero)"
+
+
+def test_tip_correction_constants_are_certified_when_on(tmp_path):
+    case = render(tmp_path, "plain")
+    text = (case / "system/fvOptions").read_text()
+    assert "wakeTurns 2;" in text
+    fv = case / "system/fvOptions"
+    fv.write_text(text.replace("wakeTurns 2;", "wakeTurns 3;"))
+    result = invoke(CHECK, case)
+    assert result.returncode == 1
+    assert result.stdout.endswith("NON-CONFORMING v1.3: tipCorrection.wakeTurns=3 (expected 2)\n")
+
+
 def test_definition_override(tmp_path):
     run = make_run(tmp_path)
     definition = tmp_path / "definition.yaml"
     definition.write_text((ROOT / "config/model-definition.yaml").read_text())
     result = invoke(CHECK, run, "--definition", definition)
     assert (result.returncode, result.stdout, result.stderr) == (
-        0, f"{run}: CONFORMS v1.2\n", "")
+        0, f"{run}: CONFORMS v1.3\n", "")
 
 
 def make_comparison(tmp_path, runs):
@@ -150,12 +200,12 @@ BAND_LINES = [
 
 @pytest.mark.parametrize("bad,allow", [(False, False), (True, False), (True, True)])
 def test_summary_gate_and_preserved_output(tmp_path, bad, allow):
-    run = make_run(tmp_path, old="tipEffects on;",
-                   new="tipEffects off;" if bad else "tipEffects on;")
+    run = make_run(tmp_path, old="tipEffects off;",
+                   new="tipEffects on;" if bad else "tipEffects off;")
     cmp = make_comparison(tmp_path, [run])
     result = invoke(SUMMARY, cmp, *(["--allow-nonconforming"] if allow else []))
-    line = ("definition v1.2: NON-CONFORMING (tipEffects=off (expected on)) -> NOT OF RECORD"
-            if bad else "definition v1.2: CONFORMS")
+    line = ("definition v1.3: NON-CONFORMING (tipEffects=on (expected off)) -> NOT OF RECORD"
+            if bad else "definition v1.3: CONFORMS")
     suffix = " [not of record]" if bad else ""
     assert (result.returncode, result.stdout, result.stderr) == (
         int(bad and not allow),
@@ -169,7 +219,7 @@ def test_summary_unknown_and_multiple_models(tmp_path):
     assert "definition: UNKNOWN (run dir not recorded)" in result.stdout
     assert result.stdout.count("[not of record]") == 4
     good = make_run(tmp_path, name="good")
-    bad = make_run(tmp_path, name="bad", old="tipEffects on;", new="tipEffects off;")
+    bad = make_run(tmp_path, name="bad", old="tipEffects off;", new="tipEffects on;")
     (cmp / "metrics.json").write_text(json.dumps({"models": {
         "alm": {"run_dir": str(good)}, "asm": {"run_dir": str(bad)}}}))
     result = invoke(SUMMARY, cmp)
@@ -189,7 +239,7 @@ def test_summary_drifting_window_is_not_of_record(tmp_path, flag, allow):
         "alm": {"run_dir": str(run), "drift": drift}}}))
     before = (cmp / "metrics.json").read_bytes()
     result = invoke(SUMMARY, cmp, *(["--allow-nonconforming"] if allow else []))
-    header = ["== cmp", "  definition v1.2: CONFORMS"]
+    header = ["== cmp", "  definition v1.3: CONFORMS"]
     if flag:
         header.append("  window: DRIFT (alm: cp variation 2.90 %, cd variation 1.69 %; "
                       "tolerance 1 %) -> NOT OF RECORD")

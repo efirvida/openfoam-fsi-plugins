@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Phase VI --pitch-reference twist-zero|tip (Model Definition v1.2 vs tip chord).
+"""Phase VI --pitch-reference twist-zero|tip (Model Definition v1.2 vs v1.3 tip chord).
 
 NREL/TP-500-29955 p.20 defines the pitch at the blade tip chord, while Table A-1
 note 2 gives the twist relative to zero at 75 % span. `tip` subtracts the table
-twist at the rotor radius; `twist-zero` is the v1.2 rendering, byte-identical.
+twist at the rotor radius and is the default since v1.3 (2026-10-27); `twist-zero` is
+the v1.2 rendering, byte-identical when every v1.2 knob is explicit.
 """
 
 from __future__ import annotations
@@ -27,6 +28,8 @@ import element_data  # noqa: E402
 from element_data import blade_element_rows  # noqa: E402
 
 TWIST_TIP = read_blade()[-1]["twist"]
+# The v1.2 knobs other than the pitch reference: the renderer defaults are v1.3.
+V12_KNOBS = ["--tip-effects", "on", "--tip-correction", "off", "--polar", "S809_OSU_Re1M_pressure.dat"]
 
 
 def _cfg(reference=None, blade_dz=None):
@@ -71,7 +74,7 @@ def test_tip_twist_comes_from_the_rotor_radius_row():
 
 
 def test_tip_reference_mounts_the_tip_at_minus_pitch_and_shifts_every_row():
-    default = blade_element_rows(_cfg())
+    default = blade_element_rows(_cfg("twist-zero"))
     tip = blade_element_rows(_cfg("tip"))
     assert tip[-1][5] == -3.0
     assert default[-1][5] == pytest.approx(-1.185)
@@ -81,10 +84,16 @@ def test_tip_reference_mounts_the_tip_at_minus_pitch_and_shifts_every_row():
 
 
 def test_tip_reference_on_the_equispaced_path_uses_the_original_table_tip():
-    default = blade_element_rows(_cfg(blade_dz=0.05))
+    default = blade_element_rows(_cfg("twist-zero", blade_dz=0.05))
     tip = blade_element_rows(_cfg("tip", blade_dz=0.05))
     assert tip[-1][5] == -3.0
     assert [new[5] - old[5] for old, new in zip(default, tip)] == pytest.approx([TWIST_TIP] * len(tip))
+
+
+def test_an_absent_pitch_reference_is_the_v13_tip_reference():
+    assert element_data.DEFAULT_PITCH_REFERENCE == "tip"
+    assert blade_element_rows(_cfg())[-1][5] == -3.0
+    assert blade_element_rows(_cfg()) == blade_element_rows(_cfg("tip"))
 
 
 def test_unknown_pitch_reference_is_refused_by_the_generator(tmp_path):
@@ -95,27 +104,35 @@ def test_unknown_pitch_reference_is_refused_by_the_generator(tmp_path):
     assert "invalid choice: 'root'" in result.stderr
 
 
-@pytest.mark.parametrize("flags", [[], ["--pitch-reference", "twist-zero"]])
-def test_default_and_explicit_twist_zero_match_the_committed_v12_render(flags):
+@pytest.mark.parametrize("flags", [[], ["--pitch-reference", "tip"]])
+def test_default_and_explicit_tip_match_the_committed_v13_render(flags):
     result = subprocess.run([sys.executable, str(PACKAGE / "tools/generate_case.py"), "--check", *flags],
                             capture_output=True, text=True, env=ENV)
     assert (result.returncode, result.stdout, result.stderr) == (0, "", "")
 
 
-def test_default_render_keeps_the_v12_tip_row(tmp_path):
+def test_twist_zero_no_longer_matches_the_committed_twins():
+    result = subprocess.run([sys.executable, str(PACKAGE / "tools/generate_case.py"), "--check",
+                             "--pitch-reference", "twist-zero"], capture_output=True, text=True, env=ENV)
+    assert result.returncode == 1
+
+
+def test_default_render_is_the_tip_reference_and_v12_keeps_its_tip_row(tmp_path):
     default = _render(tmp_path, "default")
-    explicit = _render(tmp_path, "explicit", "--pitch-reference", "twist-zero")
+    explicit = _render(tmp_path, "explicit", "--pitch-reference", "tip")
     for name in ("fvOptions.ALM", "fvOptions.ASM", "fvOptions.ASM-MESH"):
         assert (default / "system" / name).read_bytes() == (explicit / "system" / name).read_bytes()
-    assert "(0 5.029 0 0.3551 0.3 -1.185)" in (default / "system/fvOptions").read_text()
+    assert "(0 5.029 0 0.3551 0.3 -3)" in (default / "system/fvOptions").read_text()
+    v12 = _render(tmp_path, "v12", "--pitch-reference", "twist-zero", *V12_KNOBS)
+    assert "(0 5.029 0 0.3551 0.3 -1.185)" in (v12 / "system/fvOptions").read_text()
 
 
 def test_tip_render_only_differs_in_the_mounting_column(tmp_path):
-    default = (_render(tmp_path, "default") / "system/fvOptions").read_text()
+    v12 = (_render(tmp_path, "v12", "--pitch-reference", "twist-zero") / "system/fvOptions").read_text()
     tip = (_render(tmp_path, "tip", "--pitch-reference", "tip") / "system/fvOptions").read_text()
     assert "(0 5.029 0 0.3551 0.3 -3)" in tip
     row = re.compile(r"^(\s+\(0 [\d.]+ 0 [\d.]+ [\d.]+) [-\d.]+\)$", re.M)
-    assert row.sub(r"\1)", default) == row.sub(r"\1)", tip)
+    assert row.sub(r"\1)", v12) == row.sub(r"\1)", tip)
 
 
 @pytest.mark.parametrize("reference,offset", [("twist-zero", -3.0), ("tip", -(3.0 + 1.815))])
@@ -140,7 +157,7 @@ def test_runner_rejects_an_unknown_pitch_reference():
 def test_runner_records_pitch_reference_and_checker_certifies_it(tmp_path, reference):
     package, env = _sandbox(tmp_path)
     result = subprocess.run(["bash", str(package / "scripts/runPhaseVI.sh"), "-m", "alm", "-u", "7",
-                             "--pitch-reference", reference], capture_output=True, text=True,
+                             "--pitch-reference", reference, *V12_KNOBS], capture_output=True, text=True,
                             env=env, cwd=package)
     assert result.returncode == 0, result.stderr
     run = package / "runs/alm-U7-coarse"
@@ -152,6 +169,23 @@ def test_runner_records_pitch_reference_and_checker_certifies_it(tmp_path, refer
     assert (verdict.returncode == 0) == (reference == "tip")
     if reference == "tip":
         assert verdict.stdout == f"{run}: CONFORMS tip-pitch\n"
+
+
+def test_runner_default_is_the_record_and_forwards_the_reference(tmp_path):
+    package, env = _sandbox(tmp_path)
+    result = subprocess.run(["bash", str(package / "scripts/runPhaseVI.sh"), "-m", "alm", "-u", "7"],
+                            capture_output=True, text=True, env=env, cwd=package)
+    assert result.returncode == 0, result.stderr
+    run = package / "runs/alm-U7-coarse"
+    assert '"pitch_reference": "tip"' in (run / "run.json").read_text()
+    verdict = _check(run)
+    assert (verdict.returncode, verdict.stdout, verdict.stderr) == (0, f"{run}: CONFORMS v1.3\n", "")
+    again = subprocess.run(["bash", str(package / "scripts/runPhaseVI.sh"), "-m", "alm", "-u", "7",
+                            "--pitch-reference", "twist-zero", *V12_KNOBS, "--run-label", "v12"],
+                           capture_output=True, text=True, env=env, cwd=package)
+    assert again.returncode == 0, again.stderr
+    v12 = package / "runs/alm-U7-coarse-v12"
+    assert _check(v12, "--variant", "v1.2").stdout == f"{v12}: CONFORMS v1.2\n"
 
 
 def test_checker_enum_mirrors_the_renderer_enum():
@@ -192,14 +226,14 @@ def test_tip_pitch_variant_preflight_exits_zero():
 
 
 def test_checker_certifies_tip_pitch_and_flags_it_against_v12(tmp_path):
-    case = _render(tmp_path, "tip", "--pitch-reference", "tip")
+    case = _render(tmp_path, "tip", "--pitch-reference", "tip", *V12_KNOBS)
     own = _check(case, "--variant", "tip-pitch")
     assert (own.returncode, own.stdout, own.stderr) == (0, f"{case}: CONFORMS tip-pitch\n", "")
-    base = _check(case)
+    base = _check(case, "--variant", "v1.2")
     assert base.returncode == 1 and base.stderr == ""
     assert "tipMounting=-3 (expected -1.185, pitch reference twist-zero)" in base.stdout
-    default = _render(tmp_path, "default")
-    assert _check(default).stdout == f"{default}: CONFORMS v1.2\n"
-    wrong = _check(default, "--variant", "tip-pitch")
+    v12 = _render(tmp_path, "v12", "--pitch-reference", "twist-zero", *V12_KNOBS)
+    assert _check(v12, "--variant", "v1.2").stdout == f"{v12}: CONFORMS v1.2\n"
+    wrong = _check(v12, "--variant", "tip-pitch")
     assert wrong.returncode == 1
     assert "tipMounting=-1.185 (expected -3, pitch reference tip)" in wrong.stdout

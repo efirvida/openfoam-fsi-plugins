@@ -47,5 +47,5 @@ export LD_LIBRARY_PATH=$LIB_P23:$FOAM_USER_LIBBIN:$WM_PROJECT_DIR/platforms/$WM_
 echo "$MODEL $SEQUENCE U$SPEED level $REFINE_LEVEL dt $DELTA_T label $LABEL on $(hostname), $SLURM_NTASKS tasks"
 exec scripts/runPhaseVI.sh -m "$MODEL" -u "$SPEED" -mesh coarse --sequence "$SEQUENCE" \
     --refine-level "$REFINE_LEVEL" --delta-t "$DELTA_T" --end-revs 4 --ranks "$SLURM_NTASKS" \
-    --blade-dz 0.05 --polar S809_OSU_Re1M_pressure.dat --tip-effects on --tip-correction off \
+    --blade-dz 0.05 --polar S809_OSU_Re1M_pressure.dat --tip-effects on --tip-correction off --pitch-reference twist-zero \
     --root-effects on --rotational-augmentation off --run-label "$LABEL" --restart --run

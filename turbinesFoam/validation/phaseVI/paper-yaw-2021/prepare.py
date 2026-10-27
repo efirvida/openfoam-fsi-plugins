@@ -133,10 +133,12 @@ def render_arm(cfg, spec, speed, arm, directory):
     # The helper's legacy uniform-grading cell-size check has no grading=1
     # branch. Use its original mesh solely for its internal timestep guard;
     # the retained report independently checks the reconstructed rotor spacing.
-    helper_cfg = copy.deepcopy(cfg)
+    # The pitch reference is a render input only: case-config.json keeps its bytes.
+    helper_cfg = v12_definition(cfg, pitch_reference=True)
     helper_cfg['mesh'] = copy.deepcopy(cc.load_config()['mesh'])
     helper_cfg['mesh']['resolutions']['coarse']['delta_t'] = spec['delta_t_s']
-    foam = gen.render_fv_options(helper_cfg, str(speed), 'coarse', directory, gen.ALM_ELEMENT, sequence='S')
+    foam = gen.render_fv_options(helper_cfg, str(speed), 'coarse', directory, gen.ALM_ELEMENT, sequence='S',
+                                 polar='S809_OSU_Re1M_pressure.dat')
     if arm == 'paper-like':
         lines = []
         for key, value in spec['sgc_coefficients'].items():
@@ -160,8 +162,24 @@ def render_arm(cfg, spec, speed, arm, directory):
     return files, cfg, value
 
 
+def v12_definition(cfg, pitch_reference=False):
+    """Pin the Model Definition v1.2 knobs this frozen package was prepared with.
+
+    The shared case.yaml and renderer defaults are v1.3 since 2026-10-27; the
+    paper comparison keeps its v1.2 output byte-identical (Glauert tip factor on,
+    tip correction off, OSU pressure polar; with `pitch_reference` also the
+    twist-zero pitch, which is a render input only and never stored).
+    """
+    cfg = copy.deepcopy(cfg)
+    cfg['actuator']['end_effects']['tip'] = True
+    cfg['actuator']['tip_correction']['active'] = False
+    if pitch_reference:
+        cfg['turbine']['pitch_reference'] = 'twist-zero'
+    return cfg
+
+
 def plan(spec, output, config):
-    base = cc.load_config()
+    base = v12_definition(cc.load_config())
     cfg, widths, counts = mesh_config(base, spec)
     cfg['solver']['turbulence_model'] = 'realizableKE'
     cfg['inflow']['kinematic_viscosity'] = spec['kinematic_viscosity_m2_s']

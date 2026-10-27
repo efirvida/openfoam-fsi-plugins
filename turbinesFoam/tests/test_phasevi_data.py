@@ -111,7 +111,9 @@ def test_geometry_file_hash_and_shape():
 
 
 def test_geometry_mounting_convention():
+    """The report-twist convention, -(twist + pitch): Model Definition v1.2 (twist-zero)."""
     cfg = load_config(CONFIG)
+    cfg["turbine"]["pitch_reference"] = "twist-zero"
     pitch = float(cfg["turbine"]["pitch_deg"])
     geometry = read_blade()
     elements = blade_element_rows(cfg)
