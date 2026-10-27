@@ -1,6 +1,7 @@
 # Model Definition v1.3 decision record — Phase VI pitch reference and drag polar
 
-**Status: PROPOSED, owner decision pending.** Nothing here changes the definition of record:
+**Status: v1.3 FROZEN by the owner (2026-10-26), gate run 2026-10-27 (section "v1.3 gate result");
+adoption as the definition of record pending the owner.** Nothing here changes the definition of record:
 `validation-model-definition.md` and `config/model-definition.yaml` stay v1.2 until the owner
 adopts, amends or rejects this record. Evidence: `odd/tasks/phasevi-tip-pitch-reference.md`
 (T3, Log L9), outputs `turbinesFoam/validation/phaseVI/runs/tip-pitch-2x2-20261023/`. Date: 2026-10-23.
@@ -228,6 +229,40 @@ S U5 and S U8 complete the set.
   inboard U8 (r/R 0.30-0.47) is recorded as a model limitation (3D stall delay, shared by the BEM). Any other
   failure is recorded as a failure. No new arm, polar or coefficient follows from the gate inside v1.3;
   changes go to v1.4 (structural items).
+
+## v1.3 gate result (2026-10-27, read by the rule above, unmoved)
+
+Jobs 11624460-11624463 COMPLETED on `sequana_cpu` (S U6 12.1 h, S U7 6.8 h, H U7 8.6 h, H U7 r1 6.9 h), installed
+library, every run to its end time (U6 t = 20.07 s, 24 rev; U7 t = 10.02 s, 12 rev; `case_state.py`). Checker: only
+the polar override (OSU total) is NON-CONFORMING in the four dirs. `run_compare.sh`: 27 cells compare=0 sections=0
+(`run_compare-20261027.log`); c_n from `summary.log`, dR from `sections-*.log` agree within 0.3 pp.
+
+R2 bands, P2 under frozen v1.3 (error % vs experiment):
+
+| cell | P (10 %) | T (15 %) | c_n 0.30 (15 %) | c_n 0.47 / 0.63 / 0.80 (10 %) | c_n 0.95 (no band) |
+| --- | --- | --- | --- | --- | --- |
+| S U5 | pass (-1.7) | pass (-5.9) | pass (-10.4) | pass (-7.0) / **fail (-10.8)** / pass (-7.5) | +8.4 |
+| S U6 | pass (+1.1) | pass (+3.1) | **fail (+15.8)** | pass (-0.2) / pass (-1.7) / pass (+1.6) | +18.9 |
+| S U7 | pass (+0.7) | pass (+3.7) | pass (+11.3) | pass (-1.5) / pass (-1.6) / pass (+2.9) | +26.2 |
+| S U8 | pass (-7.8) | pass (-1.0) | pass (-13.3) | **fail (-20.9)** / pass (-3.4) / pass (+3.3) | +25.4 |
+| H U7 | pass (+0.6) | pass (+3.8) | pass (+9.9) | pass (-2.5) / pass (-1.8) / pass (+3.4) | +23.5 |
+
+Mesh step H U7 level 0 -> 1 (`compareLadder.py --tolerance 2.0`, exit 0, `ladder-H-U7-r0-r1.log`): P +1.73 %,
+T +0.95 %, F'n 0.47 / 0.63 / 0.80 / 0.95 +1.08 / +1.35 / +0.87 / +0.98 %: **PASS** (criterion < 2 %).
+
+Verdict:
+- 27 of 30 bands pass. P and T pass at all five cells (P -7.8..+1.1 %; spread over 5-8 m/s 8.9 pp,
+  U5-U8 6.1 pp against 46.4 pp under v1.2).
+- S U8 c_n 0.47 (-20.9): inboard U8, recorded as a **model limitation** (3D stall delay; the BEM on the same
+  inputs gives -20.3 %).
+- S U5 c_n 0.63 (-10.8, known before the gate) and S U6 c_n 0.30 (+15.8, new, 0.8 pp outside its band): recorded
+  as **failures**. No arm, polar or coefficient follows from them inside v1.3.
+- Sequence S and H agree at 7 m/s (P +0.7 / +0.6). The refined mesh moves every quantity by < 2 %, so the coarse
+  mesh is adequate for this definition at H U7.
+- Not banded, reported: r/R 0.95 is over-loaded by +8 to +26 % at every speed (v1.2 and P1: -14 to -33 %), and
+  the refined mesh does not reduce it (+23.5 -> +24.6). This is the D&S tip as configured, not mesh error; it is a
+  v1.4 item together with the U8 inboard stall delay.
+- Not covered by the gate: H 10 m/s (R2 covers 5-8 m/s) and no RA arm on the P2 tip (RA stays off).
 
 ## Options for the owner
 
