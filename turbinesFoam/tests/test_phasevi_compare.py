@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import csv
 import json
+import shutil
 import math
 import re
 import sys
@@ -542,3 +543,44 @@ def test_unresumed_run_reads_segment_zero_unchanged(tmp_path):
     run = write_run(tmp_path)
     path = run / compare.TURBINE_CSV
     assert compare.read_rows_resumed(path) == compare.read_rows(path)
+
+
+def _compare_metrics(tmp_path, **runs):
+    args = []
+    for name, run in runs.items():
+        args += [f"--{name.replace('_', '-')}-dir", str(run)]
+    out = tmp_path / "out"
+    rc = compare.main(args + ["--out", str(out), "--allow-short-window", "--revolutions", "0", "1"])
+    assert rc == compare.EXIT_OK
+    return json.loads((out / "metrics.json").read_text(encoding="utf-8")), (out / "report.txt").read_text(encoding="utf-8")
+
+
+def test_asm_mesh_frame_is_stated_chord_when_element_csvs_exist(tmp_path):
+    """T4/B3: the ASM-mesh report no longer claims its rows are off the experiment's frame."""
+    metrics, report = _compare_metrics(tmp_path, asm_mesh=write_run(tmp_path / "m", surface_stations=5))
+    assert metrics["models"]["asm-mesh"]["metrics"]["spanwise_frame"] == "chord"
+    text = "\n".join(metrics["limitations"])
+    assert "NOT on the experiment's frame" not in text
+    assert compare.ASM_MESH_CHORD_LIMITATION in metrics["limitations"]
+    assert compare.ASM_MESH_CHORD_LIMITATION in report
+    assert "rebuilt from the element CSVs" in metrics["definitions"]["surface_conversion"]
+
+
+def test_asm_mesh_without_element_csvs_declares_the_plane_fallback(tmp_path):
+    run = write_run(tmp_path / "m", surface_stations=5)
+    shutil.rmtree(run / compare.ELEMENT_DIR)
+    metrics, report = _compare_metrics(tmp_path, asm_mesh=run)
+    assert metrics["models"]["asm-mesh"]["metrics"]["spanwise_frame"] == "plane-fallback"
+    assert compare.ASM_MESH_PLANE_FALLBACK_LIMITATION in metrics["limitations"]
+    assert compare.ASM_MESH_PLANE_FALLBACK_LIMITATION in report
+    values = metrics["models"]["asm-mesh"]["spanwise"]["0.30"]
+    assert values[0] == pytest.approx(values[2]) and values[1] == pytest.approx(values[3])
+
+
+def test_alm_asm_only_report_keeps_the_delivered_limitations(tmp_path):
+    metrics, report = _compare_metrics(
+        tmp_path, alm=write_run(tmp_path / "a"), asm=write_run(tmp_path / "s")
+    )
+    assert metrics["limitations"] == compare.LIMITATIONS
+    assert "spanwise_frame" not in metrics["models"]["alm"]["metrics"]
+    assert "surface_conversion" not in metrics["definitions"]

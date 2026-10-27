@@ -893,8 +893,12 @@ not part of this extraction. Details: [archive provenance](data/experiment/uae6-
 
 
 For the mesh-backed `asm-mesh` model the surface station table carries only the
-plane decomposition, so its chord columns are a declared open defect while its
-plane columns are exact.
+plane decomposition, so its chord columns are rebuilt per row from the
+`cl,cd,alpha_deg` of the element CSVs the run also writes (the station force is
+the element force by construction), exactly as for ALM/ASM; its plane columns come
+from the station table. `metrics.json` records `spanwise_frame` (`chord`, or
+`plane-fallback` for a run without element CSVs, whose chord slots then repeat the
+plane pair and are declared off the experiment's frame in the limitations).
 
 With `--asm-mesh-dir` the comparison is **three-way**: it additionally reads the
 window-filtered `postProcessing/bladeSurface/*.csv` station table (the

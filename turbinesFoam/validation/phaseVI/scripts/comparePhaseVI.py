@@ -119,6 +119,39 @@ LIMITATIONS = [
 ]
 
 
+#: Replaces the final LIMITATIONS item when an ASM-mesh run is compared: its spanwise
+#: CN/CT slots are chord-referenced like ALM/ASM when the run wrote element CSVs.
+ASM_MESH_CHORD_LIMITATION = (
+    "Spanwise CN/CT are CHORD-REFERENCED for every model, as the experiment reports them "
+    "(NREL/TP-500-29955 Figure 25). The ASM-mesh surface station CSV carries only the "
+    "PLANE-OF-ROTATION pair (`c_ref_n`/`c_ref_t`), so the ASM-mesh chord pair is rebuilt "
+    "per row from the `cl,cd,alpha_deg` of the element CSVs the run also writes (the "
+    "station force is the element force by construction); the plane pair stays in the "
+    "`*_plane` columns."
+)
+ASM_MESH_PLANE_FALLBACK_LIMITATION = (
+    "ASM-mesh run WITHOUT element CSVs (`writeElementPerf`): the surface station table has "
+    "no angle of attack, so the chord pair cannot be rebuilt and the chord slots repeat the "
+    "PLANE-OF-ROTATION pair. Those ASM-mesh spanwise rows are NOT on the experiment's frame "
+    "(`spanwise_frame` is `plane-fallback` in metrics.json)."
+)
+
+
+def limitations_for(results) -> list[str]:
+    """LIMITATIONS, with the ASM-mesh frame statement made true for the runs compared.
+
+    Reports without an ASM-mesh run keep the delivered list verbatim.
+    """
+    if "asm-mesh" not in results:
+        return list(LIMITATIONS)
+    frame = results["asm-mesh"]["metrics"].get("spanwise_frame")
+    last = (
+        ASM_MESH_PLANE_FALLBACK_LIMITATION
+        if frame == "plane-fallback" else ASM_MESH_CHORD_LIMITATION
+    )
+    return LIMITATIONS[:-1] + [last]
+
+
 def _exit(message: str, code: int) -> int:
     print(f"error: {message}", file=sys.stderr)
     return code
@@ -625,6 +658,7 @@ def analyse_model(run_dir: Path, cfg, speed, sequence, rho, allow_short,
             spanwise_profile(elements, start, end, allow_short, radius)
             if elements else []
         )
+        metrics_frame = "chord" if chord else "plane-fallback"
         if chord:
             # The plane pair is interpolated onto the element r/R grid; in a
             # real run both tables have one row per element at the same r/R,
@@ -646,6 +680,7 @@ def analyse_model(run_dir: Path, cfg, speed, sequence, rho, allow_short,
     metrics["run_dir"] = str(run_dir)
     metrics["element_profiles"] = len(elements)
     if surface:
+        metrics["spanwise_frame"] = metrics_frame
         metrics["surface_stations"] = len(stations)
         metrics.update(read_surface_audit(run_dir))
     if match_span:
@@ -941,8 +976,9 @@ def main(argv: list[str] | None = None) -> int:
         definitions["surface_conversion"] = (
             "asm-mesh spanwise rows come from "
             "postProcessing/bladeSurface/*.csv and keep the element "
-            "c_ref_n/c_ref_t definitions with the element root_dist -> r/R "
-            "mapping"
+            "c_ref_n/c_ref_t definitions (plane of rotation) with the element "
+            "root_dist -> r/R mapping, in the *_plane columns; the chord-line "
+            "columns are rebuilt from the element CSVs"
         )
 
     metrics = {
@@ -1005,7 +1041,7 @@ def main(argv: list[str] | None = None) -> int:
                 for station in STATIONS
             },
         },
-        "limitations": LIMITATIONS,
+        "limitations": limitations_for(results),
     }
 
     (out_dir / "metrics.json").write_text(
@@ -1055,7 +1091,7 @@ def main(argv: list[str] | None = None) -> int:
         "",
         "Limitations:",
     ]
-    lines += [f"  - {item}" for item in LIMITATIONS]
+    lines += [f"  - {item}" for item in limitations_for(results)]
     report = "\n".join(lines) + "\n"
     (out_dir / "report.txt").write_text(report, encoding="utf-8")
 

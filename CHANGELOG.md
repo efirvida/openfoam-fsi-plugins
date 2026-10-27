@@ -25,6 +25,20 @@ them. `test_blade_pitch_reference.py` measures the section chord angle of the lo
 `elementData` pitch column under both references, on both paths (0.25 deg tolerance; the thick
 root-most section carries a 0.158 deg measurement bias, identical under both references).
 
+#### Phase VI: ASM+mesh spanwise frame stated and recorded (v1.4 T4, B3)
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/comparePhaseVI.py`, `turbinesFoam/validation/phaseVI/README.md`,
+`turbinesFoam/tests/test_phasevi_compare.py`.
+
+**Problem:** the comparison's Limitations (and the README) still said the ASM+mesh spanwise rows are
+plane-of-rotation referenced. The cause is that the surface station CSV carries only the plane pair
+(`c_ref_n`/`c_ref_t` from `inflowRefAngle()`), but since e5d2710 `analyse_model` already rebuilds the chord
+pair from the `cl,cd,alpha_deg` of the element CSVs the run also writes; only the text was stale, and a
+run without element CSVs repeated the plane pair in the chord slots silently.
+
+**Fix:** the ASM-mesh report states the true frame, `metrics.json` records `spanwise_frame` (`chord`, or
+`plane-fallback` with its own limitation). Numbers are unchanged; ALM/ASM-only reports are byte-identical.
+
 #### Phase VI: Model Definition v1.3 adopted as the definition of record
 
 **Files:** `turbinesFoam/validation/phaseVI/config/{model-definition.yaml,model-definition-v1.2.yaml,model-variants.yaml,case.yaml}`,
