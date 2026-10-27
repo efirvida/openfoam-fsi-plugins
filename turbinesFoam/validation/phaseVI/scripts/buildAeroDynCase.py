@@ -62,6 +62,17 @@ OLAF_WAKE_MIN_REVOLUTIONS = 10
 OLAF_FREE_WAKE_DIAMETERS = 2.0  # guideline asks for >= 1 D of free near wake
 OLAF_REG_FACTOR = 0.6
 
+#: Yaw sign. The Phase VI report (Hand et al. 2001) has the rotor turning counterclockwise seen from upwind and
+#: positive yaw clockwise seen from above ("in positive yaw the blade advances into the wind at 180 deg azimuth",
+#: Fig. B-25). The AeroDyn driver turns clockwise seen from upwind (`RotSpeed`) and `NacYaw` is positive
+#: counterclockwise seen from above. The two set-ups are mirror images about the wind-vertical plane, so the table
+#: yaw is the AeroDyn `NacYaw` with the same sign.
+NAC_YAW_SIGN = 1
+#: Skewed-wake model for yawed points (v5.0.0 names): Glauert's skew model with both of its components, the
+#: momentum correction and the Pitt/Peters velocity redistribution (docs: `Skew_Mod=1` is the recommended setting).
+SKEW_MOM_CORR = True
+SKEW_REDISTR_MOD = 1
+
 KINVISC = 1.5e-5  # inert: single airfoil table, AFTabMod 1; only the output Re uses it
 SPDSOUND = 340.3  # inert: no unsteady airfoil model
 
@@ -190,35 +201,76 @@ def point_inputs(sequence: str, speed: float) -> dict:
     radius = float(cfg["turbine"]["radius"])
     omega = float(entry["tsr"]) * float(speed) / radius
     experiment, _ = comparePhaseVI.load_experiment(EXPERIMENT, sequence, speed)
+    case_yaml = "config/case.yaml"
+    sources = {
+        "wind_speed_m_s": f"--speed (measured point, {entry['row']})",
+        "tsr": f"{case_yaml} kinematics ({entry['row']}), the ALM tipSpeedRatio",
+        "rotor_speed_rpm": f"tsr * U / R from {case_yaml} (the ALM rotor speed; table rpm {entry['rotor_speed_rpm']})",
+        "rho_kg_m3": f"data/experiment/uae6-archive/sequence_{sequence}_performance.csv rho_kg_m3, row {experiment['file_name']} (comparePhaseVI --rho auto)",
+        "pitch_deg": f"{case_yaml} turbine.pitch_deg, v1.3 tip pitch reference",
+        "yaw_deg": "uniform axial inflow, 0 deg yaw",
+    }
+    return _point_inputs(
+        cfg, float(speed), float(entry["tsr"]), omega, float(experiment["rho_kg_m3"]), float(cfg["turbine"]["pitch_deg"]), 0.0,
+        sources, experiment["file_name"],
+    )
+
+
+def table_point_inputs(point: dict) -> dict:
+    """Inputs of one measured table point: its own rpm, density, wind speed, tip pitch and yaw.
+
+    `point` is a `verifyAeroDyn` point: `rpm` (the table's measured rotor speed, not `tsr * U / R` of
+    `config/case.yaml`), `rho_kg_m3`, `wind_speed_m_s`, `pitch_deg` (the sequence's tip pitch, positive toward
+    feather, the v1.3 `tip` reference) and `yaw_deg` (the file-name nominal yaw, `NAC_YAW_SIGN` applied).
+    """
+    cfg = load_config(CASE_YAML)
+    radius = float(cfg["turbine"]["radius"])
+    speed = float(point["wind_speed_m_s"])
+    rpm = float(point["rpm"])
+    omega = rpm * math.pi / 30.0
+    name = point["id"]
+    table = f"{point['family']} table row {name}"
+    sources = {
+        "wind_speed_m_s": f"{table} wind_speed_m_s (nominal)",
+        "tsr": f"{table}: omega R / U from the measured rpm",
+        "rotor_speed_rpm": f"{table} rpm (measured), not tsr * U / R of config/case.yaml",
+        "rho_kg_m3": f"{table} rho_kg_m3 (measured)",
+        "pitch_deg": f"{table} pitch_nominal_deg (nominal tip pitch, positive toward feather = AeroDyn BldPitch; measured B1PITCH/B3PITCH agree within 0.06 deg)",
+        "yaw_deg": f"{table} yaw_nominal_deg (file-name yaw), AeroDyn NacYaw sign {NAC_YAW_SIGN:+d}",
+    }
+    return _point_inputs(
+        cfg, speed, omega * radius / speed, omega, float(point["rho_kg_m3"]), float(point["pitch_deg"]),
+        NAC_YAW_SIGN * float(point["yaw_deg"]), sources, name,
+    )
+
+
+def _point_inputs(cfg: dict, speed: float, tsr: float, omega: float, rho: float, pitch: float, yaw: float,
+                  sources: dict, experiment_row: str) -> dict:
+    radius = float(cfg["turbine"]["radius"])
     cfg["turbine"]["blade_dz"] = BLADE_DZ
     cfg["turbine"]["pitch_reference"] = element_data.DEFAULT_PITCH_REFERENCE
+    cfg["turbine"]["pitch_deg"] = pitch
     blade = element_data.blade_stations(cfg)
     hub_radius = blade[0]["radius"]
     case_yaml = "config/case.yaml"
     return {
         "cfg": cfg,
         "inputs": {
-            "wind_speed_m_s": {"value": float(speed), "source": f"--speed (measured point, {entry['row']})"},
-            "tsr": {"value": float(entry["tsr"]), "source": f"{case_yaml} kinematics ({entry['row']}), the ALM tipSpeedRatio"},
-            "rotor_speed_rpm": {
-                "value": omega * 30.0 / math.pi,
-                "source": f"tsr * U / R from {case_yaml} (the ALM rotor speed; table rpm {entry['rotor_speed_rpm']})",
-            },
-            "rho_kg_m3": {
-                "value": float(experiment["rho_kg_m3"]),
-                "source": f"data/experiment/uae6-archive/sequence_{sequence}_performance.csv rho_kg_m3, row {experiment['file_name']} (comparePhaseVI --rho auto)",
-            },
+            "wind_speed_m_s": {"value": speed, "source": sources["wind_speed_m_s"]},
+            "tsr": {"value": tsr, "source": sources["tsr"]},
+            "rotor_speed_rpm": {"value": omega * 30.0 / math.pi, "source": sources["rotor_speed_rpm"]},
+            "rho_kg_m3": {"value": rho, "source": sources["rho_kg_m3"]},
             "rotor_radius_m": {"value": radius, "source": f"{case_yaml} turbine.radius"},
             "hub_radius_m": {"value": hub_radius, "source": "first row of data/geometry/phaseVI_blade.csv = ALM hubRadius (config/model-definition.yaml)"},
-            "pitch_deg": {"value": float(cfg["turbine"]["pitch_deg"]), "source": f"{case_yaml} turbine.pitch_deg, v1.3 tip pitch reference"},
+            "pitch_deg": {"value": pitch, "source": sources["pitch_deg"]},
             "n_blades": {"value": int(cfg["turbine"].get("n_blades", 2)), "source": f"{case_yaml} turbine.n_blades"},
             "cone_deg": {"value": 0.0, "source": "ALM has no cone (rigid rotor)"},
             "tilt_deg": {"value": 0.0, "source": "ALM has no tilt"},
-            "yaw_deg": {"value": 0.0, "source": "uniform axial inflow, 0 deg yaw"},
+            "yaw_deg": {"value": yaw, "source": sources["yaw_deg"]},
             "overhang_m": {"value": 0.0, "source": "no tower or nacelle in the ALM (phaseVI/README.md)"},
         },
         "omega": omega,
-        "experiment_row": experiment["file_name"],
+        "experiment_row": experiment_row,
     }
 
 
@@ -316,8 +368,9 @@ HWndSpeed     PLExp       RotSpd       Pitch        Yaw     dT      Tmax  DOF  A
 """
 
 
-def render_aerodyn(wake: str, n_nodes: int) -> str:
+def render_aerodyn(wake: str, n_nodes: int, skew: dict | None = None) -> str:
     wake_mod = {"bem": 1, "olaf": 3}[wake]
+    skew_mod, skew_mom, skew_redistr = (1, skew["mom_corr"], skew["redistr_mod"]) if skew else (0, False, 0)
     return f"""------- AERODYN INPUT FILE --------------------------------------------------------------------------
 NREL Phase VI rigid rotor, rigid blades, no tower; written by buildAeroDynCase.py (wake: {wake})
 ======  General Options  ============================================================================
@@ -340,9 +393,9 @@ False         CompAA             - Flag to compute AeroAcoustics calculation
 ======  Blade-Element/Momentum Theory Options  ====================================================== [unused when Wake_Mod=0 or 3, except for BEM_Mod]
           2   BEM_Mod            - BEM model {{1=legacy NoSweepPitchTwist, 2=polar}} (switch) [used for all Wake_Mod to determine output coordinate system]
 --- Skew correction
-          0   Skew_Mod           - Skew model {{0=No skew model, -1=Remove non-normal component for linearization, 1=skew model active}}
-False         SkewMomCorr        - Turn the skew momentum correction on or off [used only when Skew_Mod=1]
-          0   SkewRedistr_Mod    - Type of skewed-wake correction model (switch) [used only when Skew_Mod=1]
+{skew_mod:>11d}   Skew_Mod           - Skew model {{0=No skew model, -1=Remove non-normal component for linearization, 1=skew model active}}
+{str(bool(skew_mom)):<13s} SkewMomCorr        - Turn the skew momentum correction on or off [used only when Skew_Mod=1]
+{skew_redistr:>11d}   SkewRedistr_Mod    - Type of skewed-wake correction model (switch) [used only when Skew_Mod=1]
 "default"     SkewRedistrFactor  - Constant used in Pitt/Peters skewed wake model [used only when Skew_Mod=1 and SkewRedistr_Mod=1]
 --- BEM algorithm
 True          TipLoss            - Use the Prandtl tip-loss model? (flag) [unused when Wake_Mod=0 or 3]
@@ -494,12 +547,35 @@ def build_case(sequence: str, speed: float, wake: str, out: Path, inflow_scale: 
     measured point), density, geometry and polars stay those of the point, so the case is the
     same rotor at fixed rpm in a faster stream (blockage and VTUN sensitivities, R6).
     """
+    return _write_case(point_inputs(sequence, speed), sequence, float(speed), wake, Path(out), inflow_scale)
+
+
+def build_point_case(point: dict, wake: str, out: Path, skew_mom_corr: bool = SKEW_MOM_CORR) -> Path:
+    """Write the case of one measured table point (`verifyAeroDyn` point): own rpm, density, wind speed, pitch, yaw.
+
+    The skew model is on only for a yawed point (`Skew_Mod=1`, momentum correction `skew_mom_corr`, Pitt/Peters
+    redistribution); the table's experiment row and spanwise coefficients are embedded in `case.json` so that
+    `compareAeroDyn.compare_case` needs no table lookup.
+    """
+    inputs = table_point_inputs(point)
+    skew = None
+    if point["yaw_deg"] != 0.0:
+        skew = {"model": "Glauert skew (Skew_Mod=1)", "mom_corr": bool(skew_mom_corr), "redistr_mod": SKEW_REDISTR_MOD}
+    experiment = {
+        "performance": dict(point["performance"]),
+        "spanwise": {f"{station:.2f}": dict(values) for station, values in sorted(point["spanwise"].items())},
+    }
+    extra = {"point": {key: point[key] for key in ("family", "id", "sequence", "wind_speed_m_s", "rpm", "rho_kg_m3", "pitch_deg", "yaw_deg", "repetition")},
+             "experiment": experiment, "skew": skew}
+    return _write_case(inputs, point["sequence"], float(point["wind_speed_m_s"]), wake, Path(out), 1.0, skew, extra)
+
+
+def _write_case(point: dict, sequence: str, speed: float, wake: str, out: Path, inflow_scale: float,
+                skew: dict | None = None, extra: dict | None = None) -> Path:
     if not inflow_scale > 0.0:
         raise ValueError(f"inflow scale must be positive, got {inflow_scale}")
-    out = Path(out)
     if out.exists() and any(out.iterdir()):
         raise FileExistsError(f"{out} exists and is not empty")
-    point = point_inputs(sequence, speed)
     cfg = point["cfg"]
     inputs = point["inputs"]
     if inflow_scale != 1.0:
@@ -524,7 +600,7 @@ def build_case(sequence: str, speed: float, wake: str, out: Path, inflow_scale: 
 
     out.mkdir(parents=True, exist_ok=True)
     (out / "ad_driver.dvr").write_text(render_driver(inputs, wake, dt, t_max))
-    (out / "aerodyn.dat").write_text(render_aerodyn(wake, len(nodes)))
+    (out / "aerodyn.dat").write_text(render_aerodyn(wake, len(nodes), skew))
     (out / "blade.dat").write_text(render_blade_file(nodes, hub_radius, AIRFOIL_IDS))
     (out / "S809.dat").write_text(render_airfoil_file(read_foam_polar(POLAR), f"S809 {POLAR.name}"))
     (out / "cylinder.dat").write_text(render_airfoil_file(cylinder_polar(), "ALM cylinder profile (Cl 0, Cd 1.1)"))
@@ -547,6 +623,7 @@ def build_case(sequence: str, speed: float, wake: str, out: Path, inflow_scale: 
         "olaf": olaf,
         "output": "ad_driver.out",
     }
+    case.update(extra or {})
     (out / "case.json").write_text(json.dumps(case, indent=2) + "\n")
     return out
 

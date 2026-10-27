@@ -139,9 +139,15 @@ def compare_case(case_dir: Path, revolutions: int | None = None, experiment_dir:
     mean = window_stats(0, revolutions)
     omega = rpm * math.pi / 30.0
     sequence, speed = case["sequence"], case["speed_m_s"]
-    experiment, spanwise = comparePhaseVI.load_experiment(
-        experiment_dir or DEFAULT_EXPERIMENT, sequence, speed
-    )
+    if "experiment" in case:
+        # A table-point case (`buildAeroDynCase.build_point_case`) carries its own experiment row.
+        experiment = case["experiment"]["performance"]
+        spanwise = {float(station): values for station, values in case["experiment"]["spanwise"].items()}
+        experiment = {**experiment, "file_name": experiment.get("file_name", case["point"]["id"])}
+    else:
+        experiment, spanwise = comparePhaseVI.load_experiment(
+            experiment_dir or DEFAULT_EXPERIMENT, sequence, speed
+        )
 
     def error_pct(value: float, measured: float) -> float:
         return 100.0 * (value - measured) / measured
@@ -155,6 +161,8 @@ def compare_case(case_dir: Path, revolutions: int | None = None, experiment_dir:
         "experiment_row": experiment["file_name"],
         "rotor_speed_rpm": rpm,
         "rho_kg_m3": inputs["rho_kg_m3"]["value"],
+        "pitch_deg": inputs["pitch_deg"]["value"],
+        "yaw_deg": inputs["yaw_deg"]["value"],
         "power_kw": power_kw,
         "power_exp_kw": float(experiment["rotpow_kw"]),
         "power_error_pct": error_pct(power_kw, float(experiment["rotpow_kw"])),

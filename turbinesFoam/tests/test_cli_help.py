@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 VALIDATION = Path(__file__).resolve().parents[1] / "validation"
-SCRIPT_DIRS = ("phaseVI/scripts", "phaseVI/tools", "tools", "iea15mw/scripts")
+SCRIPT_DIRS = ("phaseVI/scripts", "phaseVI/tools", "phaseVI/openfast", "tools", "iea15mw/scripts")
 
 CLIS = sorted(
     path
@@ -31,7 +31,7 @@ def test_cli_inventory_is_not_empty() -> None:
 
 def test_aerodyn_pipeline_clis_are_inventoried() -> None:
     names = {path.name for path in CLIS}
-    assert {"buildAeroDynCase.py", "compareAeroDyn.py"} <= names
+    assert {"buildAeroDynCase.py", "compareAeroDyn.py", "verifyAeroDyn.py", "rtestAeroDyn.py", "comparePrecision.py"} <= names
 
 
 @pytest.mark.parametrize("script", CLIS, ids=lambda path: path.relative_to(VALIDATION).as_posix())
