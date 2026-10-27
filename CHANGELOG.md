@@ -4,6 +4,25 @@
 
 ### Features
 
+#### Phase VI: OpenFAST AeroDyn (BEM and OLAF) code-to-code arbiter of the v1.3 ALM (v1.4 T9)
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/{buildAeroDynCase.py,compareAeroDyn.py,slurm/aerodyn.slurm}`,
+`turbinesFoam/validation/phaseVI/openfast/{README.md,submit_matrix.sh}`, `turbinesFoam/validation/phaseVI/README.md`,
+`turbinesFoam/tests/{test_aerodyn_case.py,test_cli_help.py}`.
+
+**Problem:** the ALM/ASM results had no independent implementation to arbitrate them, and the repository
+BEM is our own code; a reviewer finds the OpenFAST AeroDyn BEMT and its free vortex wake (OLAF) more defensible.
+
+**Fix:** `buildAeroDynCase.py` writes a self-contained OpenFAST v5.0.0 AeroDyn-driver case (templates:
+r-test v5.0.0 `ad_BAR_OLAF`/`BAR_Baseline`) from repository data with `case.json` recording every input and
+its source: rigid tower-less two-blade rotor, cone/tilt/yaw 0, hub radius 0.5083 m, blade stations of the
+v1.3 `tip` pitch reference (`BlTwist + BldPitch = -mounting` of `element_data`, pinned by test), OSU total
+polar as one table, ALM `cylinder` root profile, rotor speed `tsr U / R` and experiment density per point.
+`compareAeroDyn.py` reads the output with the `comparePhaseVI` definitions (power, blade thrust, chord-line
+Cn/Ct at r/R 0.30-0.95, error % with the same experiment tables and bands) over whole revolutions with a
+last-two-revolutions convergence figure (OLAF also needs a full wake). Options and reasons:
+`openfast/README.md`. Smoke only; the 10-case matrix (S 5-8, H 7; BEM, OLAF) is run separately.
+
 #### Phase VI: ASM+mesh blade surface follows the pitch reference (v1.4 T4, B1)
 
 **Files:** `turbinesFoam/geometry/src/blade_phasevi.py`,

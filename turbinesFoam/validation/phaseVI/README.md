@@ -947,6 +947,15 @@ the run TSR to match the configured value, `cp`/`cd` > 0, and positive
 `c_ref_n`/`c_ref_t` at all five stations. Production submission refuses without
 a passing `results/U7-H/sign_gate.json`.
 
+### Code-to-code arbiter: OpenFAST AeroDyn (BEM and OLAF)
+
+The v1.3 ALM is arbitrated by OpenFAST v5.0.0 on the same rigid, tower-less rotor with the same
+blade table (tip pitch reference), OSU total polar, rotor speed and density per measured point,
+in two wake models: AeroDyn BEMT and OLAF (free vortex wake). Pipeline, v5 option choices with
+reasons, template provenance and the 10-case run: [`openfast/README.md`](openfast/README.md);
+`scripts/buildAeroDynCase.py`, `scripts/compareAeroDyn.py`, `scripts/slurm/aerodyn.slurm`;
+tests in `tests/test_aerodyn_case.py`.
+
 ## Modelling limitations
 
 - Sub-cell ASM chord strips: at every affordable mesh (D/32–D/64) the
