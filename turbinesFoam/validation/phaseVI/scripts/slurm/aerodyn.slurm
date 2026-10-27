@@ -10,7 +10,7 @@
 #   SEQUENCE=S SPEED=7 WAKE=bem sbatch scripts/slurm/aerodyn.slurm
 #   SEQUENCE=S SPEED=7 WAKE=olaf sbatch -p sequana_cpu -t 03:00:00 scripts/slurm/aerodyn.slurm
 # Environment: SEQUENCE (S|H), SPEED (m/s), WAKE (bem|olaf), CASE_DIR (default
-# runs/aerodyn-<wake>-<sequence>U<speed>; must not exist), OPENFAST_ENV (conda env prefix),
+# runs/aerodyn-<wake>-<sequence>U<speed>; must not exist), OPENFAST_ENV (OpenFAST install prefix),
 # TURBINE_PKG_DIR (package dir; defaults to $SLURM_SUBMIT_DIR).
 #SBATCH --job-name=phaseVI-aerodyn
 #SBATCH --partition=sequana_cpu_dev
@@ -24,7 +24,7 @@ set -eu
 : "${SEQUENCE:?set SEQUENCE=S|H}"
 : "${SPEED:?set SPEED=<m/s>}"
 : "${WAKE:?set WAKE=bem|olaf}"
-OPENFAST_ENV="${OPENFAST_ENV:-/scratch/leahk/eduardo.donestevez/conda-envs/openfast}"
+OPENFAST_ENV="${OPENFAST_ENV:-/scratch/leahk/eduardo.donestevez/openfast-5.0.0-dp}"
 pkg_dir="${TURBINE_PKG_DIR:-${SLURM_SUBMIT_DIR:-$PWD}}"
 case_dir="${CASE_DIR:-$pkg_dir/runs/aerodyn-${WAKE}-${SEQUENCE}U${SPEED}}"
 

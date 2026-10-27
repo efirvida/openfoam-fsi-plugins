@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Code verification of the installed OpenFAST AeroDyn driver against the r-test references.
 
-Runs every r-test `modules/aerodyn/<case>` whose AeroDyn primary file has `Wake_Mod = 1` (BEMT)
+Runs every r-test `modules/aerodyn/<case>` whose AeroDyn primary file has a selected `Wake_Mod` (default 1, BEMT; 3 is OLAF)
 with the installed `aerodyn_driver` (in a scratch copy, never in the r-test checkout) and compares
 `ad_driver*.outb` with the committed reference using the OpenFAST regression rule of
 `reg_tests/lib/pass_fail.py::passing_channels` and `reg_tests/executeAerodynRegressionCase.py`
@@ -17,7 +17,7 @@ It also reports the regression suite's own norms and the largest relative error
 `|t - b| / |b|` over the samples with `|b| > atol` (below atol the relative error is not meaningful).
 
 Usage:
-    rtestAeroDyn.py --rtest DIR/r-test --openfast-env ENV --scratch EMPTY_DIR --out TABLE.csv
+    rtestAeroDyn.py --rtest DIR/r-test --openfast-env PREFIX --scratch EMPTY_DIR --out TABLE.csv [--wake-mods 1,3]
 """
 
 from __future__ import annotations
@@ -160,8 +160,8 @@ def reference_output(case: Path) -> Path | None:
     return None
 
 
-def select_cases(module_dir: Path) -> tuple[list[dict], list[dict]]:
-    """(BEM cases, skipped cases with reason) among `ad_*` directories."""
+def select_cases(module_dir: Path, wake_mods: tuple[int, ...] = (1,)) -> tuple[list[dict], list[dict]]:
+    """(cases to run, skipped cases with reason) among `ad_*` directories; `wake_mods` 1 = BEMT (default), 3 = OLAF."""
     run, skipped = [], []
     for case in sorted(module_dir.glob("ad_*")):
         driver = case / "ad_driver.dvr"
@@ -170,8 +170,8 @@ def select_cases(module_dir: Path) -> tuple[list[dict], list[dict]]:
             continue
         aero = aero_file(driver)
         mod = wake_mod(aero) if aero is not None and aero.is_file() else None
-        if mod != 1:
-            skipped.append({"case": case.name, "reason": f"Wake_Mod {mod} (not BEMT)"})
+        if mod not in wake_mods:
+            skipped.append({"case": case.name, "reason": f"Wake_Mod {mod} (not selected)"})
         elif reference_output(case) is None:
             skipped.append({"case": case.name, "reason": "no reference .outb"})
         else:
@@ -220,9 +220,11 @@ def run_case(entry: dict, module_dir: Path, driver_exe: Path, timeout: float) ->
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--rtest", type=Path, required=True, help="r-test checkout at tag v5.0.0")
-    parser.add_argument("--openfast-env", type=Path, required=True, help="conda env prefix holding bin/aerodyn_driver")
+    parser.add_argument("--openfast-env", type=Path, required=True, help="OpenFAST install prefix holding bin/aerodyn_driver")
     parser.add_argument("--scratch", type=Path, required=True, help="new empty scratch directory outside the repository (receives a copy of the r-test tree)")
     parser.add_argument("--out", type=Path, required=True, help="result CSV")
+    parser.add_argument("--wake-mods", default="1", help="comma-separated Wake_Mod values to run: 1 BEMT (default), 3 OLAF, 1,3 both")
+    parser.add_argument("--cases", default="", help="comma-separated case names to run (default: every selected case)")
     parser.add_argument("--timeout", type=float, default=900.0, help="per-case wall limit in s (default 900)")
     args = parser.parse_args(argv)
     if args.scratch.exists() and any(args.scratch.iterdir()):
@@ -230,7 +232,11 @@ def main(argv: list[str] | None = None) -> int:
     args.scratch.mkdir(parents=True, exist_ok=True)
     shutil.copytree(args.rtest, args.scratch / "r-test", ignore=shutil.ignore_patterns(".git"))
     module_dir = args.scratch / "r-test" / "modules" / "aerodyn"
-    cases, skipped = select_cases(module_dir)
+    cases, skipped = select_cases(module_dir, tuple(int(item) for item in args.wake_mods.split(",")))
+    if args.cases:
+        wanted = set(args.cases.split(","))
+        skipped += [{"case": entry["case"], "reason": "not in --cases"} for entry in cases if entry["case"] not in wanted]
+        cases = [entry for entry in cases if entry["case"] in wanted]
     rows = []
     for entry in cases:
         row = run_case(entry, module_dir, args.openfast_env / "bin" / "aerodyn_driver", args.timeout)

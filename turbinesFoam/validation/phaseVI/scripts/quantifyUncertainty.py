@@ -32,7 +32,7 @@ Sources, all quoted as standard-size terms of the quantity:
    the definition window.
 3. Blockage: BEM-estimated with the OpenFAST AeroDyn BEM (the repository's only
    BEM: buildAeroDynCase.py `--wake bem --inflow-scale`, `aerodyn_driver` from the
-   conda env `--openfast-env` / $OPENFAST_ENV, read with compareAeroDyn.py; rotor
+   double-precision OpenFAST `--openfast-env` / $OPENFAST_ENV, read with compareAeroDyn.py; rotor
    speed and density of the measured point) relative change of each quantity for
    an inflow +1 % and +2 % at fixed rpm (NREL: tunnel
    blockage below 2 % in velocity). The larger of the two magnitudes (the +2 %
@@ -78,8 +78,8 @@ QUANTITIES = ("power", "thrust") + tuple(f"cn{station:.2f}" for station in STATI
 WINDOW_SHIFTS = (0, 2, 4)
 BLOCKAGE_INCREMENTS = (0.01, 0.02)
 BLOCKAGE_LABEL = "BEM-estimated blockage sensitivity"
-#: OpenFAST v5.0.0 conda env of the AeroDyn BEM (override: --openfast-env or $OPENFAST_ENV).
-OPENFAST_ENV_DEFAULT = Path("/scratch/leahk/eduardo.donestevez/conda-envs/openfast")
+#: OpenFAST v5.0.0 double-precision build of the AeroDyn BEM, `openfast/build_openfast_dp.sh` (override: --openfast-env or $OPENFAST_ENV).
+OPENFAST_ENV_DEFAULT = Path("/scratch/leahk/eduardo.donestevez/openfast-5.0.0-dp")
 DRIVER_TIMEOUT_S = 600
 #: Test hook: a callable(case_dir) that replaces the real `aerodyn_driver` run.
 AERODYN_RUNNER = None
@@ -530,7 +530,7 @@ def main(argv=None):
     parser.add_argument("--config", type=Path, default=comparePhaseVI.DEFAULT_CONFIG)
     parser.add_argument("--thrust-scope", choices=("blade", "rotor"), default="blade")
     parser.add_argument("--openfast-env", type=Path, default=None,
-                        help="conda env prefix holding bin/aerodyn_driver (default: $OPENFAST_ENV, "
+                        help="OpenFAST prefix holding bin/aerodyn_driver (default: $OPENFAST_ENV, "
                              f"then {OPENFAST_ENV_DEFAULT})")
     parser.add_argument("--coverage", type=float, default=1.0,
                         help="coverage factor k applied to the combined term (default 1)")

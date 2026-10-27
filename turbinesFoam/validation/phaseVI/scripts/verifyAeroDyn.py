@@ -54,7 +54,7 @@ import compareAeroDyn  # noqa: E402
 ARCHIVE = ROOT / "data" / "experiment" / "uae6-archive"
 YAW_PITCH = ROOT / "data" / "experiment" / "yaw-pitch"
 OUT_DEFAULT = ROOT / "analysis" / "aerodyn-verification"
-OPENFAST_ENV_DEFAULT = Path("/scratch/leahk/eduardo.donestevez/conda-envs/openfast")
+OPENFAST_ENV_DEFAULT = Path("/scratch/leahk/eduardo.donestevez/openfast-5.0.0-dp")
 STATIONS = compareAeroDyn.STATIONS
 FAMILIES = ("s-curve", "pitch", "yaw")
 ATTACHED_SPEEDS = (5.0, 6.0, 7.0)
@@ -405,7 +405,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--list", action="store_true", help="print the selected points per family and exit (no OpenFAST needed)")
     parser.add_argument("--families", default=",".join(FAMILIES), help="comma list of s-curve,pitch,yaw (default all)")
     parser.add_argument("--max-yaw-speed", type=float, default=10.0, help="highest wind speed of the yaw tables (default 10 m/s)")
-    parser.add_argument("--openfast-env", type=Path, default=OPENFAST_ENV_DEFAULT, help="conda env prefix with bin/aerodyn_driver")
+    parser.add_argument("--openfast-env", type=Path, default=OPENFAST_ENV_DEFAULT, help="OpenFAST install prefix with bin/aerodyn_driver")
     parser.add_argument("--out", type=Path, default=OUT_DEFAULT, help="result directory (CSV tables, summary.json)")
     parser.add_argument("--work", type=Path, default=None, help="new scratch directory for the driver cases, outside the repository (default: a temp dir)")
     parser.add_argument("--no-skew-sensitivity", action="store_true", help="skip the SkewMomCorr=False run of the yawed points")

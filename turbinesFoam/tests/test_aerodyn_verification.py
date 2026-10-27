@@ -37,7 +37,8 @@ from case_config import load_config  # noqa: E402
 
 ARCHIVE = PACKAGE / "data" / "experiment" / "uae6-archive"
 YAW_PITCH = PACKAGE / "data" / "experiment" / "yaw-pitch"
-OPENFAST_ENV = Path("/scratch/leahk/eduardo.donestevez/conda-envs/openfast")
+DP_PREFIX = Path("/scratch/leahk/eduardo.donestevez/openfast-5.0.0-dp")
+OPENFAST_ENV = DP_PREFIX
 DRIVER = OPENFAST_ENV / "bin" / "aerodyn_driver"
 needs_driver = pytest.mark.skipif(not DRIVER.is_file(), reason="aerodyn_driver not installed")
 
@@ -433,3 +434,48 @@ def test_compare_precision_reports_the_largest_difference_per_family(tmp_path):
     assert rows["power_kw"]["max_difference"] == pytest.approx(0.04 / 4.04) and rows["power_kw"]["where"] == "p1"
     assert rows["cn"]["max_difference"] == pytest.approx(0.1 / 1.1)
     assert comparePrecision.compare(tmp_path / "a", tmp_path / "b", max_speed=4.0) == []
+
+
+# --- double-precision default binary (task T13) ---------------------------------
+
+
+def test_default_openfast_is_the_double_precision_prefix_in_every_consumer():
+    import quantifyUncertainty as qu
+
+    assert verify.OPENFAST_ENV_DEFAULT == DP_PREFIX
+    assert qu.OPENFAST_ENV_DEFAULT == DP_PREFIX
+    slurm = (PACKAGE / "scripts" / "slurm" / "aerodyn.slurm").read_text()
+    assert f'OPENFAST_ENV="${{OPENFAST_ENV:-{DP_PREFIX}}}"' in slurm
+
+
+def test_build_script_is_posix_double_precision_v5_with_rpath():
+    path = PACKAGE / "openfast" / "build_openfast_dp.sh"
+    text = path.read_text()
+    assert text.startswith("#!/bin/sh")
+    assert subprocess.run(["sh", "-n", str(path)], capture_output=True).returncode == 0
+    assert "-DDOUBLE_PRECISION=ON" in text and "OPENFAST_TAG=${OPENFAST_TAG:-v5.0.0}" in text
+    assert "-DCMAKE_INSTALL_RPATH=" in text and "BUILD-INFO.txt" in text
+    assert str(DP_PREFIX) in text
+
+
+def _fake_rtest_module(root: Path) -> Path:
+    for name, mod, ref in [("ad_bem", 1, True), ("ad_olaf", 3, True), ("ad_olaf_noref", 3, False)]:
+        case = root / name
+        case.mkdir(parents=True)
+        (case / "ad_driver.dvr").write_text('"aero.dat"   AeroFile\n')
+        (case / "aero.dat").write_text(f"{mod}   Wake_Mod\n")
+        if ref:
+            (case / "ad_driver.outb").write_bytes(b"")
+    return root
+
+
+def test_rtest_case_selection_is_bem_only_by_default_and_takes_olaf_on_request(tmp_path):
+    module = _fake_rtest_module(tmp_path / "aerodyn")
+    run, skipped = rtest.select_cases(module)
+    assert [e["case"] for e in run] == ["ad_bem"]
+    assert {e["case"]: e["reason"] for e in skipped}["ad_olaf"] == "Wake_Mod 3 (not selected)"
+    run, skipped = rtest.select_cases(module, wake_mods=(3,))
+    assert [e["case"] for e in run] == ["ad_olaf"]
+    assert {e["case"]: e["reason"] for e in skipped}["ad_olaf_noref"] == "no reference .outb"
+    run, _ = rtest.select_cases(module, wake_mods=(1, 3))
+    assert [e["case"] for e in run] == ["ad_bem", "ad_olaf"]
