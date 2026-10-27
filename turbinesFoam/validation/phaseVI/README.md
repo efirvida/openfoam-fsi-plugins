@@ -202,8 +202,13 @@ commit, OpenFOAM version, config sha256, variant, solver, `n_chordwise`,
   refuses to carry `--solver iddes`, `--nchordwise` or `--ranks` (Stage 3 has
   its own prepared arrays).
 - `-m asm-mesh` selects the mesh-backed surface twin (`fvOptions.ASM-MESH`),
-  produces the run id `asm-mesh-U<speed>-<mesh>`, and stages the committed
-  `geometry/stl/phaseVI_blade.stl` into `constant/triSurface/` through
+  produces the run id `asm-mesh-U<speed>-<mesh>`, and stages the blade STL into
+  `constant/triSurface/`. The sampler applies no element pitch, so the STL bakes the element chord
+  angle of the pitch reference: `--pitch-reference twist-zero` (v1.2) without `--blade-dz` stages the
+  committed `geometry/stl/phaseVI_blade.stl`; `tip` (v1.3) and any `--blade-dz` loft the surface per
+  run (`tools/make_equispaced_blade.py --pitch-reference ... [--dz ...]`, section angle
+  `twist - twist_reference + pitch`, i.e. the `elementData` pitch column;
+  `tests/test_blade_pitch_reference.py` measures it within 0.25 deg). The staging goes through
   `tools/stage_blade_stl.py` before the mesh link (sha256-checked against the
   geometry metadata; a missing source or a hash mismatch aborts with exit 3 and
   leaves no stale copy). The staged hash is recorded in `run.json` as

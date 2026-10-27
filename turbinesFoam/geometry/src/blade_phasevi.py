@@ -277,9 +277,15 @@ def section_uv(
 def section_points(
     station: Station,
     uv: tuple[tuple[float, float], ...],
+    twist_reference_deg: float = 0.0,
 ) -> tuple[tuple[float, float, float], ...]:
-    """Map `(u, w)` into the generation frame at the station (design §4.4)."""
-    angle = math.radians(SIGMA * -(station.twist_deg + PITCH_DEG))
+    """Map `(u, w)` into the generation frame at the station (design §4.4).
+
+    `twist_reference_deg` is the report twist at which the collective pitch is measured
+    (0 for the twist-zero reference, the tip table twist for `tip`); the section angle is
+    the element chord angle `SIGMA * -((twist - twist_reference) + pitch)`.
+    """
+    angle = math.radians(SIGMA * -((station.twist_deg - twist_reference_deg) + PITCH_DEG))
     cos_angle, sin_angle = math.cos(angle), math.sin(angle)
     points = []
     for u, w in uv:
@@ -299,12 +305,13 @@ def blade_triangles(
     stations: tuple[Station, ...],
     profile: tuple[tuple[float, float], ...],
     fractions: tuple[float, ...],
+    twist_reference_deg: float = 0.0,
 ) -> tuple[Triangle, ...]:
     """Loft the 26 rings into `2 x 60 x 25 = 3000` outward triangles."""
     rings = []
     for station in stations:
         uv = section_uv(station, profile, fractions)
-        rings.append((uv, section_points(station, uv)))
+        rings.append((uv, section_points(station, uv, twist_reference_deg)))
 
     triangles = []
     for index in range(len(rings) - 1):
@@ -389,14 +396,26 @@ def node_metadata(index: int, triangle: Triangle) -> dict:
     return entry
 
 
-def input_sha256(blade_bytes: bytes, s809_bytes: bytes, n_stations: int = N_STATIONS) -> str:
-    """sha256 over the committed input bytes and the canonical parameters."""
+def input_sha256(
+    blade_bytes: bytes,
+    s809_bytes: bytes,
+    n_stations: int = N_STATIONS,
+    twist_reference_deg: float = 0.0,
+) -> str:
+    """sha256 over the committed input bytes and the canonical parameters.
+
+    A non-zero `twist_reference_deg` (tip pitch reference) is part of the parameter block;
+    the twist-zero block, and so the committed hash, is unchanged.
+    """
+    parameters = {**PARAMETERS, "n_stations": n_stations}
+    if twist_reference_deg:
+        parameters["twist_reference_deg"] = twist_reference_deg
     payload = (
         blade_bytes
         + b"\0"
         + s809_bytes
         + b"\0"
-        + json.dumps({**PARAMETERS, "n_stations": n_stations}, sort_keys=True, separators=(",", ":")).encode()
+        + json.dumps(parameters, sort_keys=True, separators=(",", ":")).encode()
     )
     return hashlib.sha256(payload).hexdigest()
 
@@ -442,15 +461,20 @@ def build(
     blade_csv: Path = BLADE_CSV,
     s809_csv: Path = S809_CSV,
     expected_stations: int | None = N_STATIONS,
+    twist_reference_deg: float = 0.0,
 ) -> tuple[str, str]:
-    """Generate the STL and metadata; return `(metadata text, summary)`."""
+    """Generate the STL and metadata; return `(metadata text, summary)`.
+
+    `twist_reference_deg` follows the Phase VI pitch reference (see `section_points`);
+    the default 0 is the twist-zero (v1.2) surface the committed STL carries.
+    """
     from makeGeometry import stl_statistics, write_binary_stl
 
     stations = load_stations(blade_csv, expected_stations)
     upper, lower = load_s809(s809_csv)
     profile = closed_profile(upper, lower)
     fractions = perimeter_fractions(profile)
-    records = canonical_records(blade_triangles(stations, profile, fractions))
+    records = canonical_records(blade_triangles(stations, profile, fractions, twist_reference_deg))
 
     stl_path.parent.mkdir(parents=True, exist_ok=True)
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
@@ -470,7 +494,7 @@ def build(
             "pitch_deg": PITCH_DEG,
         },
         "input_sha256": input_sha256(
-            blade_csv.read_bytes(), s809_csv.read_bytes(), len(stations)
+            blade_csv.read_bytes(), s809_csv.read_bytes(), len(stations), twist_reference_deg
         ),
         "units": UNITS,
         "n_triangles": len(records),
@@ -479,6 +503,8 @@ def build(
             node_metadata(index, triangle) for index, triangle in enumerate(records)
         ],
     }
+    if twist_reference_deg:
+        metadata["inputs"]["twist_reference_deg"] = twist_reference_deg
     text = render_metadata(metadata)
     metadata_path.write_text(text, encoding="utf-8")
 

@@ -4,6 +4,27 @@
 
 ### Features
 
+#### Phase VI: ASM+mesh blade surface follows the pitch reference (v1.4 T4, B1)
+
+**Files:** `turbinesFoam/geometry/src/blade_phasevi.py`,
+`turbinesFoam/validation/phaseVI/tools/make_equispaced_blade.py`,
+`turbinesFoam/validation/phaseVI/scripts/{runPhaseVI.sh,slurm/asm-mesh.slurm}`,
+`turbinesFoam/validation/phaseVI/README.md`, `turbinesFoam/tests/test_blade_pitch_reference.py`.
+
+**Problem:** the committed blade STL is lofted at `-(twist + 3 deg)`, the v1.2 twist-zero orientation, and
+the surface sampler places it on the reference chord before pitch with no element pitch. Under
+`--pitch-reference tip` the elements carry `-(twist - twist_tip + 3 deg)`, so the ASM+mesh surface sat
+1.815 deg off its elements (committed STL vs tip elements: 1.97 deg worst airfoil section), on the committed
+table and on the `--blade-dz` re-loft alike.
+
+**Fix:** `blade_phasevi.build(twist_reference_deg=...)` lofts at `twist - twist_reference + pitch`;
+`make_equispaced_blade.py` takes `--pitch-reference` (default `tip`) and an optional `--dz`, and
+`runPhaseVI.sh` lofts per run whenever the reference is not `twist-zero` or `--blade-dz` is set. The
+committed STL and metadata are unchanged and a `twist-zero` committed-table loft is byte-identical to
+them. `test_blade_pitch_reference.py` measures the section chord angle of the lofted STL against the
+`elementData` pitch column under both references, on both paths (0.25 deg tolerance; the thick
+root-most section carries a 0.158 deg measurement bias, identical under both references).
+
 #### Phase VI: Model Definition v1.3 adopted as the definition of record
 
 **Files:** `turbinesFoam/validation/phaseVI/config/{model-definition.yaml,model-definition-v1.2.yaml,model-variants.yaml,case.yaml}`,

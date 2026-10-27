@@ -9,9 +9,10 @@
 # PREPARED ONLY. This file refuses to run without
 # TURBINE_LONG_QUEUE_AUTHORIZED=1 and is never submitted by this change.
 # runPhaseVI.sh --submit refuses -m asm-mesh and points here.
-# Renders Model Definition v1.3 (runPhaseVI.sh defaults, tip pitch reference). The blade
-# STL is still lofted at the v1.2 twist-zero pitch (odd/tasks/v13-adoption-asm.md T4, B1):
-# do not run this array until the surface is lofted/staged by pitch reference.
+# Renders Model Definition v1.3 (runPhaseVI.sh defaults, tip pitch reference). The staged
+# blade STL is lofted per pitch reference (tools/make_equispaced_blade.py), so its section
+# chord angle equals the element chord angle (odd/tasks/v13-adoption-asm.md T4, B1). The
+# v1.4 ASM-mesh runs use scripts/slurm/variant-run.slurm (MODEL=asm-mesh VARIANT=v1.3).
 #
 # Gate procedure (design sections 6.5 and 8.4): task 0 (asm-mesh:7:coarse:H,
 # the D/32 mesh) is the performance measurement gate. It must be executed only

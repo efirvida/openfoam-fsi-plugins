@@ -531,10 +531,17 @@ staged_stl_sha256=""
 if [ "$model" = "asm-mesh" ]; then
     stl_src="$root/../../geometry/stl/phaseVI_blade.stl"
     meta="$root/../../geometry/metadata/phaseVI_blade.json"
-    if [ -n "$blade_dz" ]; then
+    # The sampler applies no element pitch, so the STL bakes the element chord angle of the
+    # pitch reference: the committed STL is the twist-zero (v1.2) orientation; any other
+    # case is lofted per run with the same pipeline (--dz also resamples the stations).
+    if [ -n "$blade_dz" ] || [ "$pitch_reference" != twist-zero ]; then
         eq_dir="$run_dir/.blade-equispaced"
-        if ! python3 "$root/tools/make_equispaced_blade.py" --dz "$blade_dz" --out-dir "$eq_dir" >/dev/null; then
-            echo "ERROR: failed to loft the equispaced blade (dz $blade_dz)" >&2
+        loft_args=(--pitch-reference "$pitch_reference" --out-dir "$eq_dir")
+        if [ -n "$blade_dz" ]; then
+            loft_args+=(--dz "$blade_dz")
+        fi
+        if ! python3 "$root/tools/make_equispaced_blade.py" "${loft_args[@]}" >/dev/null; then
+            echo "ERROR: failed to loft the blade surface (pitch reference $pitch_reference, dz ${blade_dz:-committed})" >&2
             exit 3
         fi
         stl_src="$eq_dir/phaseVI_blade.stl"
