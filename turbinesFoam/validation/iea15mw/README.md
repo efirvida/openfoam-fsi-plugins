@@ -421,6 +421,16 @@ Both wake regions run one level below the disk (level 2, ~1.9 m at the default
 `-rotor_axis` — the rotor axis points upwind — so the cylinder points +y for the
 default Aeroelast axis and +x for `--flow-axis x`.
 
+**ASM and ASM+mesh on the Dag & Sorensen arm** (`scripts/submit_v14_asm_ds.sh`,
+`scripts/slurm/l2-ds-surface.slurm`). The pair of `iea15mw-l2-ds` on the frozen L2
+platform: Glauert tip off, root kept, D&S on, only the element type changes. Fresh
+start, 23 revolutions (averaging window revs 22-23 as the ALM run), one allocation,
+no requeue, snapshots every 120 deg (a resume restores the azimuth counter without
+rotating the blades, so any resumed state must have `angle0 mod 120 deg` = 0).
+`sh scripts/submit_v14_asm_ds.sh` is a dry run; `--apply` submits. Before launching
+check the staged surface against the element rows:
+`python3 tools/check_stl_orientation.py` (max 0.29 deg, bias of the thick sections).
+
 **Actuator-model comparison** (`scripts/slurm/asmcmp.slurm`). The ALM / ASM /
 ASM-mesh trio runs on one mesh and one domain — 3D upstream / 7D downstream /
 ±3D lateral, snappy level 3, 20 revolutions, a snapshot every 60°, 56 ranks — so
