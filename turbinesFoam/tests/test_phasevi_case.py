@@ -1034,7 +1034,28 @@ def test_asm_mesh_selection(cfg, tmp_path):
     assert run_dir.is_dir()
     committed_stl = TURBINESFOAM / "geometry" / "stl" / "phaseVI_blade.stl"
     staged = run_dir / "constant" / "triSurface" / "phaseVI_blade.stl"
-    assert staged.read_bytes() == committed_stl.read_bytes()
+    # The default pitch reference is `tip` (v1.3): the staged surface is lofted for it, so it
+    # is NOT the committed twist-zero STL; `--pitch-reference twist-zero` stages that one.
+    assert staged.read_bytes() != committed_stl.read_bytes()
+    lofted = tmp_path / "lofted"
+    subprocess.run(
+        [sys.executable, str(PACKAGE / "tools" / "make_equispaced_blade.py"),
+         "--pitch-reference", "tip", "--out-dir", str(lofted)],
+        check=True, capture_output=True,
+    )
+    assert staged.read_bytes() == (lofted / "phaseVI_blade.stl").read_bytes()
+    twist_zero = subprocess.run(
+        [
+            "sh", str(package / "scripts" / "runPhaseVI.sh"),
+            "-m", "asm-mesh", "-u", "7", "-mesh", "coarse",
+            "--pitch-reference", "twist-zero", "--run-label", "tz",
+        ],
+        cwd=package, capture_output=True, text=True, env=env,
+    )
+    assert twist_zero.returncode == 0, twist_zero.stderr
+    assert (
+        package / "runs" / "asm-mesh-U7-coarse-tz" / "constant" / "triSurface" / "phaseVI_blade.stl"
+    ).read_bytes() == committed_stl.read_bytes()
     payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     assert payload["model"] == "asm-mesh"
     assert payload["staged_stl_sha256"] == hashlib.sha256(
