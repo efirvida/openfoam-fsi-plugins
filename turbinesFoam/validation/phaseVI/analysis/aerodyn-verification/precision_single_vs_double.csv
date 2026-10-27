@@ -1,0 +1,21 @@
+quantity,max_difference,where,points_compared
+pitch    power_kw (relative),1.1942e-02,i1400000,253
+pitch    thrust_n (relative),5.0430e-03,j1500000,253
+pitch    torque_nm (relative),1.1941e-02,i1400000,253
+s-curve  power_kw (relative),6.3380e-03,s1900000,253
+s-curve  thrust_n (relative),3.3783e-03,s1900000,253
+s-curve  torque_nm (relative),6.3375e-03,s1900000,253
+yaw-H    power_kw (relative),3.4198e-02,h0501350,253
+yaw-H    thrust_n (relative),3.0356e-02,h1000750,253
+yaw-H    torque_nm (relative),3.4200e-02,h0501350,253
+yaw-S    power_kw (relative),3.3461e-02,s0501350,253
+yaw-S    thrust_n (relative),3.1079e-02,s1000750,253
+yaw-S    torque_nm (relative),3.3466e-02,s0501350,253
+s-curve  cn (relative),2.2553e-01,s1900000 r/R 0.80,253
+s-curve  ct (absolute),4.3318e-03,s1900000 r/R 0.80,253
+pitch    cn (relative),2.2558e-01,h1900003 r/R 0.80,253
+pitch    ct (absolute),6.4561e-03,u1300000 r/R 0.30,253
+yaw-S    cn (relative),3.9028e-02,s1000750 r/R 0.30,253
+yaw-S    ct (absolute),1.9722e-03,s0500750 r/R 0.47,253
+yaw-H    cn (relative),3.2099e-02,h0500750 r/R 0.47,253
+yaw-H    ct (absolute),1.9736e-03,h0500750 r/R 0.47,253

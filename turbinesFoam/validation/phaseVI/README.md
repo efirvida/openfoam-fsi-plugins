@@ -958,7 +958,10 @@ blade table (tip pitch reference), OSU total polar, rotor speed and density per 
 in two wake models: AeroDyn BEMT and OLAF (free vortex wake). Pipeline, v5 option choices with
 reasons, template provenance and the 10-case run: [`openfast/README.md`](openfast/README.md);
 `scripts/buildAeroDynCase.py`, `scripts/compareAeroDyn.py`, `scripts/slurm/aerodyn.slurm`;
-tests in `tests/test_aerodyn_case.py`. This is the repository's only BEM: whenever a BEM is needed
+tests in `tests/test_aerodyn_case.py`. Verification of this BEM against the OpenFAST r-test and against every
+Phase VI table on disk (S curve, pitch sweep, fixed yaw): `scripts/verifyAeroDyn.py`, results and rules in
+[`analysis/aerodyn-verification/README.md`](analysis/aerodyn-verification/README.md); tests in
+`tests/test_aerodyn_verification.py`. This is the repository's only BEM: whenever a BEM is needed
 (code-to-code checks, blockage and VTUN sensitivities in `quantifyUncertainty.py`) it is the AeroDyn
 BEM; `buildAeroDynCase.py --inflow-scale F` runs it at inflow x F with rpm and density fixed.
 

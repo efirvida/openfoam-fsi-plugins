@@ -23,6 +23,8 @@ Files (all generated from repository data; nothing here is hand-edited):
 | `scripts/compareAeroDyn.py` | `--case DIR`: power, thrust, torque, Cn/Ct/alpha at r/R 0.30/0.47/0.63/0.80/0.95, error % vs the experiment, convergence; prints a table, writes `metrics.json` |
 | `scripts/slurm/aerodyn.slurm` | one case: build, `aerodyn_driver`, compare (POSIX sh, `--ntasks=1`) |
 | `openfast/submit_matrix.sh` | the 10 cases (dry run by default, `--submit` to queue) |
+| `scripts/verifyAeroDyn.py` | the BEM against the Phase VI tables (S curve, pitch sweep, fixed yaw), one case per measured point with its own rpm, density, pitch and yaw; `analysis/aerodyn-verification/` |
+| `openfast/rtestAeroDyn.py`, `openfast/comparePrecision.py` | the installed `aerodyn_driver` against the r-test v5.0.0 BEM references; single vs double precision on the Phase VI points |
 | `tests/test_aerodyn_case.py` | geometry/sign pin against `element_data`, polar round trip, per-point inputs, option set, comparator on synthetic output |
 
 ## Template provenance
@@ -166,5 +168,5 @@ so both partition job limits are used (`AGENTS.md`).
 - The BEMT uses AeroDyn's own solver and induction handling, which this file does not
   switch; differences from any other BEM in hub-loss form, high-induction handling or node
   placement are implementation differences, to be located before any physical reading.
-- The binary is single precision (compile info in the driver banner).
+- The binary is single precision (compile info in the driver banner; the conda-forge recipe sets `-DDOUBLE_PRECISION=OFF`). It fails 7 of the 9 r-test BEM regression cases, whose baselines are double precision, while a double-precision build of the same source passes all nine; on the Phase VI points the two agree to 2e-4 at 5-8 m/s (`analysis/aerodyn-verification/README.md`).
 - The measured loads include tower shadow, nacelle and blockage; none is in the ALM or here.

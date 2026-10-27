@@ -4,6 +4,25 @@
 
 ### Features
 
+#### Phase VI: AeroDyn BEM verified against the r-test and every Phase VI table on disk (v1.4 T12)
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/{verifyAeroDyn.py,buildAeroDynCase.py,compareAeroDyn.py}`,
+`turbinesFoam/validation/phaseVI/openfast/{rtestAeroDyn.py,comparePrecision.py,README.md}`,
+`turbinesFoam/validation/phaseVI/analysis/aerodyn-verification/`, `turbinesFoam/validation/phaseVI/README.md`,
+`turbinesFoam/tests/{test_aerodyn_verification.py,test_cli_help.py}`.
+
+**Problem:** the owner made the AeroDyn BEM the only BEM and asked that it be shown correct against other
+experiments; it had been run only at the five gate points, and the installed binary had not been checked
+against the OpenFAST regression suite.
+
+**Fix:** `buildAeroDynCase.build_point_case` builds a case for any table point (own measured rpm, density,
+wind speed, nominal tip pitch and yaw; skew model on for yawed points; sign conventions of pitch and yaw pinned
+against the report and the driver docs); `verifyAeroDyn.py` runs the 253 selected points (S curve 5-25 m/s,
+the 125-row pitch table, fixed yaw at 5-10 m/s of sequences S and H) and writes the L12 tables;
+`rtestAeroDyn.py` reproduces the r-test v5.0.0 tolerance rule. The conda-forge binary is single precision
+and fails 7 of 9 r-test BEM cases; a double-precision build of the same source passes all nine, and the two
+builds agree to 2e-4 on the Phase VI points at 5-8 m/s (`comparePrecision.py`).
+
 #### Phase VI: in-house BEM removed, blockage/VTUN sensitivity moved to the AeroDyn BEM (v1.4 T11)
 
 **Files:** removed the in-house BEM script (`phaseVI/scripts`) and `turbinesFoam/tests/test_phasevi_bem.py`;
