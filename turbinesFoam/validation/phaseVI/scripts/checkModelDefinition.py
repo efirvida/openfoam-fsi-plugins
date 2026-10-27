@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Check Phase VI run directories against effective Model Definition v1.2.
+"""Check Phase VI run directories against effective Model Definition v1.3 (of record).
 
 Usage: python3 scripts/checkModelDefinition.py RUN_DIR [RUN_DIR ...]
        [--definition PATH] [--variant NAME]
 Exit 0: all conform; 1: mismatches; 2: unreadable/malformed input.
 `check_run(run_dir, definition)` returns every mismatch without writing files;
 `definition` is the mapping returned by `load_definition`.
+
+The definition of record is config/model-definition.yaml (v1.3, adopted
+2026-10-27). `--variant NAME` composes a registry entry on the frozen v1.2 base
+named by config/model-variants.yaml (`base`); `--variant v1.2` therefore
+reproduces the pre-adoption verdicts and `--variant v1.3` re-derives the record.
 
 Absent dictionary keys use the YAML's cited solver defaults, never the expected
 value. Unknown defaults fail closed. nVelocitySamples is inert for the frozen
@@ -20,9 +25,10 @@ runner's -r<N> name token is used (also before a run label), defaulting to 0.
 blade_dz is checked only when non-null metadata is recorded; geometry is not
 inferred from the committed non-equispaced render.
 
-The pitch reference (variant flag --pitch-reference) is certified from the
-rendered tip mounting of blade1.elementData (-3.0 deg for `tip`, -1.185 deg for
-the v1.2 `twist-zero` reference, twist_tip read from the blade table), so a
+The pitch reference (`pitch_reference` of the definition file, or variant flag
+--pitch-reference) is certified from the rendered tip mounting of
+blade1.elementData (-3.0 deg for `tip`, -1.185 deg for the v1.2 `twist-zero`
+reference, twist_tip read from the blade table), so a
 case is judged by what it contains, not by metadata.
 """
 import argparse
@@ -35,7 +41,9 @@ import sys
 
 import yaml
 
-DEFAULT_DEFINITION = Path(__file__).resolve().parents[1] / "config/model-definition.yaml"
+PHASE_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_DEFINITION = PHASE_ROOT / "config/model-definition.yaml"
+REGISTRY = DEFAULT_DEFINITION.parent / "model-variants.yaml"
 
 
 # Mirrors element_data.PITCH_REFERENCES (a test pins the equality); no import
@@ -67,11 +75,27 @@ FLAG_RULES = {
     '--velocity-sample-radius': 'velocitySampleRadius',
     '--n-velocity-samples': 'nVelocitySamples',
     '--pitch-reference': 'pitchReference',
+    '--polar': 'polar',
 }
 
 
+def valid_polar(value):
+    """The runPhaseVI.sh --polar rule: a bare *.dat name of a file in data/polars/."""
+    return (isinstance(value, str) and not value.startswith('.') and '/' not in value
+            and not value.endswith(' ') and value.endswith('.dat')
+            and (PHASE_ROOT / 'data/polars' / value).is_file())
+
+
+def load_base_definition():
+    """The frozen v1.2 definition every registry variant overrides (`base` of the registry)."""
+    registry = yaml.safe_load(REGISTRY.read_text())
+    if not isinstance(registry.get('base'), str):
+        raise ValueError('registry must name its base definition (base: FILE)')
+    return load_definition(REGISTRY.parent / registry['base'])
+
+
 def load_variants():
-    registry = yaml.safe_load((DEFAULT_DEFINITION.parent / 'model-variants.yaml').read_text())
+    registry = yaml.safe_load(REGISTRY.read_text())
     variants = registry['variants']
     for name, entry in variants.items():
         if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', name):
@@ -85,6 +109,8 @@ def load_variants():
                 valid = value in ('DuSelig', 'ChaviaropoulosHansen')
             elif flag == '--pitch-reference':
                 valid = value in PITCH_REFERENCES
+            elif flag == '--polar':
+                valid = valid_polar(value)
             elif flag in ('--tip-effects', '--tip-correction', '--rotational-augmentation'):
                 valid = value in ('on', 'off')
             else:
@@ -113,7 +139,7 @@ def variant_definition(definition, name):
         if flag == '--rotational-augmentation-model' and path not in knobs:
             knobs[path] = dict(path=path, solver_default='DuSelig')
         rule = knobs[path]
-        rule['expected'] = value
+        rule['expected'] = 'data/polars/' + value if flag == '--polar' else value
         rule.pop('inert', None)
     # Constants become active with their correction, so certify them as well.
     def add(path, value, default=None):
@@ -322,16 +348,20 @@ def check_run(run_dir, definition):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_dirs", nargs="*", type=Path)
-    parser.add_argument('--variant', help='check a named A/B arm, never of record for v1.2')
+    parser.add_argument('--variant', help='check a named registry arm composed on the frozen v1.2 base '
+                        '(v1.3 is the record; every other arm is diagnostic, never of record)')
     parser.add_argument('--renderer-flags', action='store_true',
                         help='print validated variant override tokens, one per line; no run required')
-    parser.add_argument("--definition", type=Path, default=DEFAULT_DEFINITION)
+    parser.add_argument("--definition", type=Path, default=None,
+                        help="definition file; default the record, or the registry base with --variant")
     args = parser.parse_args(argv)
     status = 0
     try:
-        definition = load_definition(args.definition)
         if args.variant is not None:
-            definition = variant_definition(definition, args.variant)
+            base = load_definition(args.definition) if args.definition else load_base_definition()
+            definition = variant_definition(base, args.variant)
+        else:
+            definition = load_definition(args.definition or DEFAULT_DEFINITION)
         if args.renderer_flags:
             if args.variant is None:
                 raise ValueError('--renderer-flags requires --variant')

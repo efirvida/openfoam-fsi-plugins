@@ -18,7 +18,7 @@ def _registry_with(tmp_path, flags):
         "runs", "results", "polyMesh", "__pycache__"))
     (tmp_path / "geometry").symlink_to(PACKAGE.parents[1] / "geometry")
     (package / "config/model-variants.yaml").write_text(
-        "variants:\n  probe:\n    reference: 'probe'\n    flags:\n" + flags)
+        "base: model-definition-v1.2.yaml\nvariants:\n  probe:\n    reference: 'probe'\n    flags:\n" + flags)
     return package
 
 
@@ -33,3 +33,15 @@ def test_tip_effects_flag_is_validated(tmp_path, value, returncode, stdout, stde
          "--variant", "probe", "--renderer-flags"],
         capture_output=True, text=True, env=ENV)
     assert (result.returncode, result.stdout, result.stderr) == (returncode, stdout, stderr)
+
+
+def test_registry_without_a_base_definition_is_refused(tmp_path):
+    package = _registry_with(tmp_path, "      --tip-effects: 'off'\n")
+    path = package / "config/model-variants.yaml"
+    path.write_text(path.read_text().replace("base: model-definition-v1.2.yaml\n", ""))
+    result = subprocess.run(
+        [sys.executable, str(package / "scripts/checkModelDefinition.py"),
+         "--variant", "probe", "--renderer-flags"],
+        capture_output=True, text=True, env=ENV)
+    assert (result.returncode, result.stdout, result.stderr) == (
+        2, "", "error: registry must name its base definition (base: FILE)\n")
