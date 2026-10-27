@@ -487,14 +487,25 @@ GridName  GridType  TStart   TEnd    DTGrid   XStart  XEnd   nX   YStart   YEnd 
 # --- case -------------------------------------------------------------------
 
 
-def build_case(sequence: str, speed: float, wake: str, out: Path) -> Path:
-    """Write the complete case into the new directory `out`; returns its path."""
+def build_case(sequence: str, speed: float, wake: str, out: Path, inflow_scale: float = 1.0) -> Path:
+    """Write the complete case into the new directory `out`; returns its path.
+
+    `inflow_scale` multiplies only the driver's `HWindSpeed`: rotor speed (tsr * U / R at the
+    measured point), density, geometry and polars stay those of the point, so the case is the
+    same rotor at fixed rpm in a faster stream (blockage and VTUN sensitivities, R6).
+    """
+    if not inflow_scale > 0.0:
+        raise ValueError(f"inflow scale must be positive, got {inflow_scale}")
     out = Path(out)
     if out.exists() and any(out.iterdir()):
         raise FileExistsError(f"{out} exists and is not empty")
     point = point_inputs(sequence, speed)
     cfg = point["cfg"]
     inputs = point["inputs"]
+    if inflow_scale != 1.0:
+        wind = inputs["wind_speed_m_s"]
+        wind["value"] = float(speed) * inflow_scale
+        wind["source"] += f", x {inflow_scale:.10g} (--inflow-scale; rpm, rho unchanged)"
     nodes = blade_nodes(cfg)
     rpm = inputs["rotor_speed_rpm"]["value"]
     period = 60.0 / rpm
@@ -503,7 +514,7 @@ def build_case(sequence: str, speed: float, wake: str, out: Path) -> Path:
 
     olaf = None
     if wake == "olaf":
-        olaf = olaf_parameters(rpm, float(speed), diameter)
+        olaf = olaf_parameters(rpm, float(speed) * inflow_scale, diameter)
         dt, t_max = olaf["dt_s"], olaf["t_max_s"]
         averaging = olaf["averaging_revolutions"]
     else:
@@ -525,6 +536,7 @@ def build_case(sequence: str, speed: float, wake: str, out: Path) -> Path:
         "sequence": sequence,
         "speed_m_s": float(speed),
         "wake": wake,
+        "inflow_scale": inflow_scale,
         "experiment_row": point["experiment_row"],
         "pitch_reference": element_data.pitch_reference(cfg),
         "blade_dz_m": BLADE_DZ,
@@ -544,11 +556,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--sequence", choices=("S", "H"), required=True)
     parser.add_argument("--speed", type=float, required=True, help="wind speed in m/s (a measured point of case.yaml)")
     parser.add_argument("--wake", choices=("bem", "olaf"), required=True)
+    parser.add_argument("--inflow-scale", type=float, default=1.0,
+                        help="factor on the driver wind speed at fixed rpm and density (default 1)")
     parser.add_argument("--out", type=Path, required=True, help="new, empty case directory")
     args = parser.parse_args(argv)
     try:
-        out = build_case(args.sequence, args.speed, args.wake, args.out)
-    except (KeyError, FileExistsError) as exc:
+        out = build_case(args.sequence, args.speed, args.wake, args.out, args.inflow_scale)
+    except (KeyError, FileExistsError, ValueError) as exc:
         parser.error(str(exc))
     print(f"wrote {out} ({args.wake}, sequence {args.sequence}, {args.speed:g} m/s)")
     return 0

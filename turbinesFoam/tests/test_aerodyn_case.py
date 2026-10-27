@@ -241,6 +241,32 @@ def test_bem_driver_runs_whole_revolutions(tmp_path):
     assert float(keyed(driver, "TMax")) >= 2 * period - dt
 
 
+def test_inflow_scale_changes_only_the_wind_speed(tmp_path):
+    base, scaled = tmp_path / "base", tmp_path / "scaled"
+    build.build_case("H", 7, "bem", base)
+    build.build_case("H", 7, "bem", scaled, inflow_scale=1.02)
+    base_driver, scaled_driver = (d / "ad_driver.dvr" for d in (base, scaled))
+    assert float(keyed(base_driver.read_text(), "HWindSpeed")) == pytest.approx(7.0)
+    assert float(keyed(scaled_driver.read_text(), "HWindSpeed")) == pytest.approx(7.0 * 1.02)
+    for key in ("RotSpeed(1)", "FldDens", "DT", "TMax"):
+        assert keyed(scaled_driver.read_text(), key) == keyed(base_driver.read_text(), key)
+    case = json.loads((scaled / "case.json").read_text())
+    assert case["inflow_scale"] == pytest.approx(1.02)
+    assert case["speed_m_s"] == 7.0  # the measured point stays the nominal one
+    assert json.loads((base / "case.json").read_text())["inflow_scale"] == 1.0
+    assert (scaled / "blade.dat").read_text() == (base / "blade.dat").read_text()
+
+
+def test_inflow_scale_cli_option_and_validation(tmp_path):
+    out = tmp_path / "case"
+    assert build.main(["--sequence", "H", "--speed", "7", "--wake", "bem", "--inflow-scale", "1.01",
+                       "--out", str(out)]) == 0
+    assert float(keyed((out / "ad_driver.dvr").read_text(), "HWindSpeed")) == pytest.approx(7.07)
+    with pytest.raises(SystemExit):
+        build.main(["--sequence", "H", "--speed", "7", "--wake", "bem", "--inflow-scale", "0",
+                    "--out", str(tmp_path / "zero")])
+
+
 def test_rejects_unknown_point(tmp_path):
     with pytest.raises(SystemExit):
         build.main(["--sequence", "S", "--speed", "7.5", "--wake", "bem", "--out", str(tmp_path / "x")])
