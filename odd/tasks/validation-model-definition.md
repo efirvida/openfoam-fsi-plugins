@@ -19,7 +19,11 @@
 > Evidence: `odd/tasks/p2-2-next-cycle-plan.md` ("Session 3 results", "Owner decisions 2026-10-17").
 > The v1.1 tables below are kept as written; the two rows marked v1.2 supersede them.
 
-**Status:** **v1 FROZEN except the IEA cp band** (2026-10-12). The owner delegated decisions 1
+**Status:** **v1.3 ADOPTED as the definition of record 2026-10-27** (tip pitch reference, Dag-Sorensen
+tip correction on with Glauert tip off, OSU total polar; record and gate evidence in
+`validation-model-definition-v1-3-record.md`). The v1.2 text below is kept as written and is no longer of
+record: `config/model-definition-v1.2.yaml` is its frozen reproducible form (`checkModelDefinition.py --variant v1.2`).
+Earlier status: **v1 FROZEN except the IEA cp band** (2026-10-12). The owner delegated decisions 1
 and 2 to the agent's physical judgment and chose option (b) for decision 3. The IEA cp
 band is re-centred after the 3-rev Glauert control (job 11613092) and the P3.1 root fix.
 **Plan:** `odd/tasks/validation-master-plan.md` (P0.3) · **Date:** 2026-10-12

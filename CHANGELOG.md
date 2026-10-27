@@ -4,6 +4,34 @@
 
 ### Features
 
+#### Phase VI: Model Definition v1.3 adopted as the definition of record
+
+**Files:** `turbinesFoam/validation/phaseVI/config/{model-definition.yaml,model-definition-v1.2.yaml,model-variants.yaml,case.yaml}`,
+`turbinesFoam/validation/phaseVI/scripts/{checkModelDefinition.py,summarizeVariants.py,runPhaseVI.sh}`,
+`turbinesFoam/validation/phaseVI/scripts/slurm/{variant-run,v1-2-run,v1-2-evaluation,v1-2-lag,v1-2-small-eps,asm-mesh}.slurm`,
+`turbinesFoam/validation/phaseVI/tools/{element_data,generate_case}.py`,
+`turbinesFoam/validation/phaseVI/case/system/fvOptions.{ALM,ASM,ASM-MESH}`,
+`turbinesFoam/validation/phaseVI/paper-yaw-2021/prepare.py`, `turbinesFoam/validation/phaseVI/{README.md,campaign-results/RESULTS.md}`,
+`turbinesFoam/tests/{test_model_definition_check,test_model_variants,test_phasevi_pitch_reference,test_phasevi_case,test_phasevi_nacelle}.py`,
+`odd/tasks/validation-model-definition{,-v1-3-record}.md`.
+
+**Problem:** the owner adopted v1.3 (2026-10-27: tip pitch reference, Dag-Sorensen tip correction on
+with the Glauert tip factor off, OSU total polar) but the checker, the renderer defaults and the
+committed twins were still v1.2, and every registry variant and the v1.2 launchers silently relied
+on those v1.2 defaults.
+
+**Fix:** `config/model-definition.yaml` is v1.3 and `config/model-definition-v1.2.yaml` is the frozen
+v1.2 base named by `base:` in the registry, which gains a `v1.3` entry (and a `--polar` flag rule with
+the `runPhaseVI.sh` validation). The checker defaults to the record (`CONFORMS v1.3`); `--variant NAME`
+composes on the v1.2 base, so `--variant v1.2` reproduces the old verdicts. The renderer defaults
+(`--pitch-reference tip`, `case.yaml` Glauert tip off and `tipCorrection` on, total polar) are v1.3 and
+the committed twins are re-rendered. `variant-run.slurm` and the `v1-2-*.slurm` launchers pass every
+v1.2 knob explicitly (including `--pitch-reference twist-zero`) and `paper-yaw-2021` pins its v1.2 render,
+so every pre-adoption variant, launcher and the paper-yaw case render byte-identically (differential
+check on all registry variants for alm/asm/asm-mesh); a plain render equals the base-commit
+`tip-pitch-dag-sorensen` + total-polar render. `summarizeVariants.py` takes the record as baseline
+(`--baseline` picks another).
+
 #### Validation tools: `run_diff.py`, a two-run regression differ
 
 **Files:** `turbinesFoam/validation/tools/run_diff.py`, `turbinesFoam/validation/tools/README.md`,

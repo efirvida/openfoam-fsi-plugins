@@ -1,9 +1,10 @@
 # Model Definition v1.3 decision record — Phase VI pitch reference and drag polar
 
-**Status: v1.3 FROZEN by the owner (2026-10-26), gate run 2026-10-27 (section "v1.3 gate result");
-adoption as the definition of record pending the owner.** Nothing here changes the definition of record:
-`validation-model-definition.md` and `config/model-definition.yaml` stay v1.2 until the owner
-adopts, amends or rejects this record. Evidence: `odd/tasks/phasevi-tip-pitch-reference.md`
+**Status: ADOPTED 2026-10-27.** v1.3 was FROZEN by the owner (2026-10-26), gate run 2026-10-27
+(section "v1.3 gate result"), and adopted as the definition of record on 2026-10-27 ("Sí, adoptar v1.3
+ahora"; `odd/tasks/v13-adoption-asm.md`, T1). `config/model-definition.yaml` is v1.3; v1.2 is the frozen
+base `config/model-definition-v1.2.yaml` that every registry variant overrides, and registry variant `v1.3`
+reproduces this record on it. Evidence: `odd/tasks/phasevi-tip-pitch-reference.md`
 (T3, Log L9), outputs `turbinesFoam/validation/phaseVI/runs/tip-pitch-2x2-20261023/`. Date: 2026-10-23.
 
 ## Proposal

@@ -1,5 +1,11 @@
 # Phase VI rotational-augmentation campaign — results (running)
 
+> **Note (2026-10-27):** this campaign and its tables were produced under Model
+> Definition v1.2 or earlier. The definition of record is now **v1.3** (tip pitch
+> reference, Dağ & Sørensen tip correction with the Glauert tip factor off, OSU total
+> polar; `config/model-definition.yaml`). Results below are historical, not of record;
+> re-check any run with `scripts/checkModelDefinition.py --variant v1.2`.
+
 **Last updated:** 2026-09-27
 **Campaign script:** `scripts/slurm/campaign-rotational-augmentation.slurm`
 **Jobs:** `11601429`, `11601968`; `11602818` cancelled (was still `PD`, never started).

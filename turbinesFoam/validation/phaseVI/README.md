@@ -39,7 +39,7 @@ tools/stage_blade_stl.py  sha256-gated STL staging for asm-mesh run dirs
 case/                     committed generated skeleton (ALM/ASM/ASM-MESH twins)
 data/                     geometry, polars, experiment, s809 + PROVENANCE per dir
 scripts/                  runners, mesh/stage tooling, comparison
-  checkModelDefinition.py effective-value v1.2 conformance gate
+  checkModelDefinition.py effective-value v1.3 (record) conformance gate; --variant v1.2 for the frozen base
   summarizeBands.py      pre-registered bands; refuses non-conforming evidence
   slurm/stage0.slurm      authorized development-queue job
   slurm/production.slurm  prepared-only long-queue array (do not submit)
@@ -164,8 +164,8 @@ commit, OpenFOAM version, config sha256, variant, solver, `n_chordwise`,
   `nElements` becomes one element per table segment and, for `asm-mesh`, the staged STL is lofted from
   the same table (`tools/make_equispaced_blade.py`). Rule: `DZ = min(0.05, h/2)`; see
   `scripts/scanEquispacedDz.py`. Recorded as `blade_dz` in `run.json`.
-- `--pitch-reference twist-zero|tip` (default `twist-zero`; any other value exits 2) selects where the
-  3° collective pitch is measured. `twist-zero` is Model Definition v1.2: the pitch is added to the
+- `--pitch-reference twist-zero|tip` (default `tip`, Model Definition v1.3; any other value exits 2)
+  selects where the 3° collective pitch is measured. `twist-zero` is Model Definition v1.2: the pitch is added to the
   report twist, which is zero at 75 % span, so the tip mounts at −1.185°. `tip` follows
   NREL/TP-500-29955 p.20, "blade pitch is defined as the angle between the blade tip chord line and
   the plane of the turbine disk", with Table A-1 note 2, "Twist convention is positive towards
@@ -175,7 +175,8 @@ commit, OpenFOAM version, config sha256, variant, solver, `n_chordwise`,
   moves by −1.815°. The equispaced `--blade-dz` layout uses the same original-table tip twist. One
   helper (`tools/element_data.py`, `effective_pitch_deg`) feeds the element data and the
   Chaviaropoulos–Hansen `pitchOffset` (`−(3 + 1.815)` under `tip`, so its theta excludes the collective
-  pitch). Recorded as `pitch_reference` in `run.json`. The default render is byte-identical to v1.2.
+  pitch). Recorded as `pitch_reference` in `run.json`. A plain render is the v1.3 record; v1.2 is reproduced byte-identical
+  only with every v1.2 knob explicit (`scripts/slurm/v1-2-run.slurm`: `--pitch-reference twist-zero --polar S809_OSU_Re1M_pressure.dat --tip-effects on --tip-correction off`).
 - `--mesh-factor F` (positive number, exit 2 otherwise) overrides
   `turbine.gaussian_mesh_factor` (1.0) so the ALM / no-mesh-ASM projection width
   `eps = 2*cbrt(V)*meshFactor` varies per run **without changing the mesh**: the
@@ -542,13 +543,23 @@ failure remains; the primary criterion is still reported unweakened.
 
 ## Model variants (A/B bench)
 
-`config/model-variants.yaml` registers diagnostic arms as **v1.2 plus renderer
-flag overrides**. No coefficient is fitted. Non-baseline variants are never of
-record for v1.2; `summarizeBands.py` keeps its unchanged baseline-only gate.
+**Definition of record: Model Definition v1.3** (owner decision 2026-10-26 freeze,
+2026-10-27 adoption; `config/model-definition.yaml`, record and gate evidence in
+`odd/tasks/validation-model-definition-v1-3-record.md`): tip pitch reference, Dağ & Sørensen tip
+correction on with the Glauert tip factor off (Glauert root kept), OSU total polar. It is the renderer
+default, so a plain `runPhaseVI.sh` render is the record. v1.2 results are no longer of record; v1.2
+stays reproducible from the frozen `config/model-definition-v1.2.yaml`.
+
+`config/model-variants.yaml` registers diagnostic arms as **v1.2 (the frozen base, `base:`) plus
+renderer flag overrides**. No coefficient is fitted. Non-record variants are never of record;
+`summarizeBands.py` follows the record through the default definition. Launchers compose on the
+v1.2 base (`scripts/slurm/variant-run.slurm` passes every v1.2 knob before the registry flags), so
+every existing arm renders exactly as before the adoption.
 
 | Variant | Exact renderer overrides | Reference / interpretation |
 |---|---|---|
-| `v1.2` | none | Model Definition v1.2 |
+| `v1.2` | none | Frozen Model Definition v1.2 (the base) |
+| `v1.3` | `--pitch-reference tip --tip-correction on --tip-effects off --polar S809_OSU_Re1M_total.dat` | Model Definition v1.3, the record, reproduced on the v1.2 base; equals `tip-pitch-dag-sorensen` plus the OSU total polar. No `POLAR` environment needed |
 | `shen-tip` | `--end-effects-model Shen` | I10, Shen, Mikkelsen, Sorensen & Bak, *Wind Energy* 8:457–475 (2005); explicit `ShenCoeffs c1=0.125, c2=21` |
 | `dag-sorensen-tip` | `--tip-correction on` | Dağ & Sørensen (2020), existing prescribed helical wake; other settings unchanged |
 | `ring-sampling` | `--velocity-sample-radius 3.3 --n-velocity-samples 16` | v1.1 freeze: 16 equally spaced ring samples, radius **3.3 times local projection epsilon**, not 3.3 metres |
@@ -664,7 +675,7 @@ refusal on written state remains: use a fresh label for a new arm.
 
 The summary prints one table per sequence/speed, with P, T and five c_n errors
 in percent versus experiment; parentheses give the change from the same model's
-v1.2 row in **percentage points**. Missing values or missing/ambiguous baselines
+baseline row in **percentage points** (default the record, v1.3; `--baseline v1.2` picks another registry entry). Missing values or missing/ambiguous baselines
 show `n/a`. Drifting baselines are not used as references. DRIFT and own-variant
 NON-CONFORMING rows are marked; nonconformance exits 1. Identity comes from
 `run.json`'s optional `variant`, the default `var-<variant>` label, or unique
@@ -674,13 +685,20 @@ arm must still be identifiable. No checker or summary writes run data.
 ## Definition conformance
 
 ```sh
-python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-d1-pdrag
+python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-seqS-var-tip-pitch-dag-sorensen-total   # CONFORMS v1.3
+python3 scripts/checkModelDefinition.py --variant v1.2 runs/alm-U7-coarse-seqS-v12                    # CONFORMS v1.2
 python3 scripts/summarizeBands.py results/U7-H
 ```
 
+With no `--variant` the checker judges against the record (`CONFORMS v1.3` / `NON-CONFORMING v1.3: ...`).
+`--variant NAME` composes a registry entry on the frozen v1.2 base, so `--variant v1.2` reproduces the
+pre-adoption verdicts and a v1.2 run checked against the record reports its tip mounting, `tipEffects`,
+`tipCorrection` and polar mismatches. `--polar FILE.dat` is a registry flag too (a bare name of a
+file in `data/polars/`, the `runPhaseVI.sh --polar` rule; invalid → exit 2).
+
 A `--variant tip-pitch` check certifies the pitch reference from the rendered tip mounting
 (last `blade1.elementData` row: −3 for `tip`, −1.185 for the v1.2 `twist-zero` reference, twist
-from the blade table), so a tip-pitch case is reported `NON-CONFORMING v1.2` and conforms only to
+from the blade table), so a tip-pitch case is reported `NON-CONFORMING v1.3` and conforms only to
 its own variant. The four `tip-pitch-*` arms are certified from the rendered case the same
 way: tip mounting, `GlauertCoeffs.tipEffects`, `tipCorrection.active` and the augmentation
 switch/model/constants must all match the arm (`--tip-effects` is a registry flag).
@@ -734,7 +752,7 @@ experimental uncertainty" only inside the quadrature sum (`--coverage k`,
 default 1). Exit **1** for a non-conforming run unless `--allow-nonconforming`
 (output then tagged `[not of record]`), **2** for missing input.
 
-`config/model-definition.yaml` records v1.2 expected effective values and cited
+`config/model-definition.yaml` records v1.3 (of record) expected effective values and cited
 solver defaults. An absent key uses its solver default; absence without a known
 default is a mismatch. Point sampling (`velocitySampleRadius 0`) is frozen;
 `nVelocitySamples` is inert and not checked. The checker accepts `--definition PATH`
