@@ -29,6 +29,11 @@ def test_cli_inventory_is_not_empty() -> None:
     assert len(CLIS) > 20
 
 
+def test_aerodyn_pipeline_clis_are_inventoried() -> None:
+    names = {path.name for path in CLIS}
+    assert {"buildAeroDynCase.py", "compareAeroDyn.py"} <= names
+
+
 @pytest.mark.parametrize("script", CLIS, ids=lambda path: path.relative_to(VALIDATION).as_posix())
 def test_help_exits_zero_and_prints_usage(script: Path) -> None:
     result = subprocess.run(
