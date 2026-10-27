@@ -243,6 +243,26 @@ def probe_configuration_rows(rows: list[dict]) -> list[dict]:
     return table
 
 
+def l12_summary(s_rows: list[dict], attached: list[dict], ratios: list[dict], band_pct: float = 10.0,
+                yaw_speeds: tuple[float, ...] = ATTACHED_SPEEDS, small_yaw_deg: float = 20.0, ratio_band_pp: float = 5.0) -> dict:
+    """The three judged quantities in one place: S-curve power band, attached-flow power by pitch, yaw ratio at 5-7 m/s."""
+    ok = [r for r in s_rows if r["status"] == "ok"]
+    worst = max(ok, key=lambda r: abs(r["power_error_pct"])) if ok else None
+    small = [r for r in ratios if r["wind_speed_m_s"] in yaw_speeds and abs(r["yaw_deg"]) <= small_yaw_deg]
+    large = [r for r in ratios if r["wind_speed_m_s"] in yaw_speeds and small_yaw_deg < abs(r["yaw_deg"]) <= 90.0]
+    def extreme(rows):
+        top = max(rows, key=lambda r: abs(r["diff_pp"])) if rows else None
+        return {"max_abs_diff_pp": abs(top["diff_pp"]), "at": f"{top['sequence']} {top['wind_speed_m_s']:g} m/s yaw {top['yaw_deg']:g}"} if top else None
+    return {
+        "s_curve_power_within_band": [r["wind_speed_m_s"] for r in ok if abs(r["power_error_pct"]) <= band_pct],
+        "s_curve_worst_power": {"wind_speed_m_s": worst["wind_speed_m_s"], "error_pct": worst["power_error_pct"]} if worst else None,
+        "attached_power_max_abs_error_pct_by_pitch": {f"{pitch:g}": max(abs(r["power_error_pct"]) for r in attached if r["pitch_deg"] == pitch) for pitch in sorted({r["pitch_deg"] for r in attached})},
+        "attached_power_within_band": sum(abs(r["power_error_pct"]) <= band_pct for r in attached), "attached_power_total": len(attached),
+        "yaw_ratio_small_yaw": {**(extreme(small) or {}), "within_band": sum(abs(r["diff_pp"]) <= ratio_band_pp for r in small), "total": len(small)},
+        "yaw_ratio_20_to_90_deg": {**(extreme(large) or {}), "within_band": sum(abs(r["diff_pp"]) <= ratio_band_pp for r in large), "total": len(large)},
+    }
+
+
 # --- running ----------------------------------------------------------------------
 
 
@@ -440,6 +460,7 @@ def main(argv: list[str] | None = None) -> int:
         "failed": [{"id": r["id"], "status": r["status"]} for r in failed],
         "not_converged": [r["id"] for r in rows if r["status"] == "ok" and r["converged"] is False],
         "pitch_sign_agreement": tally,
+        "l12": l12_summary(s_rows, attached, ratios),
         "wall_s": time.time() - started,
         "skew": {"Skew_Mod": 1, "SkewMomCorr": buildAeroDynCase.SKEW_MOM_CORR, "SkewRedistr_Mod": buildAeroDynCase.SKEW_REDISTR_MOD},
     }

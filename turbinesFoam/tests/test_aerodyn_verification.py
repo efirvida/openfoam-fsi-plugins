@@ -299,6 +299,24 @@ def test_probe_configuration_rows_pair_h_and_s_at_the_same_speed():
     assert table[0]["power_model_H_over_S"] == pytest.approx(2.0 / 2.05)
 
 
+def test_l12_summary_counts_the_band_the_attached_errors_and_the_yaw_ratio_differences():
+    s_rows = [{"status": "ok", "wind_speed_m_s": 5.0, "power_error_pct": -7.0}, {"status": "ok", "wind_speed_m_s": 9.0, "power_error_pct": -12.0},
+              {"status": "ok", "wind_speed_m_s": 18.0, "power_error_pct": -70.0}]
+    attached = [{"pitch_deg": 0.0, "power_error_pct": -8.0}, {"pitch_deg": 0.0, "power_error_pct": 11.0}, {"pitch_deg": 6.0, "power_error_pct": -21.0}]
+    ratios = [{"sequence": "S", "wind_speed_m_s": 5.0, "yaw_deg": 10.0, "diff_pp": -2.0}, {"sequence": "H", "wind_speed_m_s": 7.0, "yaw_deg": -10.0, "diff_pp": 6.5},
+              {"sequence": "S", "wind_speed_m_s": 7.0, "yaw_deg": 30.0, "diff_pp": 1.0}, {"sequence": "S", "wind_speed_m_s": 7.0, "yaw_deg": 135.0, "diff_pp": -40.0},
+              {"sequence": "S", "wind_speed_m_s": 9.0, "yaw_deg": 10.0, "diff_pp": 30.0}]
+    summary = verify.l12_summary(s_rows, attached, ratios)
+    assert summary["s_curve_power_within_band"] == [5.0]
+    assert summary["s_curve_worst_power"] == {"wind_speed_m_s": 18.0, "error_pct": -70.0}
+    assert summary["attached_power_max_abs_error_pct_by_pitch"] == {"0": 11.0, "6": 21.0}
+    assert (summary["attached_power_within_band"], summary["attached_power_total"]) == (1, 3)
+    small = summary["yaw_ratio_small_yaw"]
+    assert (small["within_band"], small["total"], small["max_abs_diff_pp"]) == (1, 2, 6.5) and small["at"] == "H 7 m/s yaw -10"
+    large = summary["yaw_ratio_20_to_90_deg"]  # 135 deg is outside BEM validity and 9 m/s is outside 5-7 m/s
+    assert (large["within_band"], large["total"]) == (1, 1)
+
+
 # --- CLI --------------------------------------------------------------------
 
 
