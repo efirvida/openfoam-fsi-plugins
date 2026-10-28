@@ -172,6 +172,27 @@ files regenerate byte-identical.
 
 ### Fixes
 
+#### Blade surface (ASM+mesh): cell search per node no longer dominates the step
+
+**Files:** `turbinesFoam/src/fvOptions/bladeSurface/{bladeSurfaceSampler.C,bladeSurfaceSampler.H,bladeSurfaceSource.C}`,
+`turbinesFoam/tests/test_blade_surface.py`, `turbinesFoam/README.md`, `turbinesFoam/validation/phaseVI/README.md`,
+`turbinesFoam/validation/iea15mw/scripts/run_iea15mw_case.sh`.
+
+**Problem:** `refreshNodeH()` runs on every rotation (once per blade per step) and called `findCell()` for
+every surface node on every rank, because the node set is replicated. On the IEA 15 MW ASM+mesh case
+(100 236 nodes per blade, 96 ranks) this was 15-17 s per blade on the slowest rank, 92 % of a 53.6 s step,
+so 23 revolutions needed ~144 h and could not fit an allocation.
+
+**Fix:** a node outside the rank's local point bounds is skipped (`findCell()` cannot place it there), and a
+node keeps the cell it was in: the next refresh tests that cell and its face neighbours with the same
+`CELL_TETS` inside test before falling back to the octree. `tetBasePtIs()` is now built on every rank before
+the loop, because its construction is collective and a rank that skips every node would otherwise deadlock
+the others. The distribution log line also reports the refresh search and reduce seconds (slowest rank).
+IEA ASM+mesh: 6.3 s/step (x8.5); 8 IEA steps and 20 Phase VI steps byte-identical in cp, ct, blade forces
+and residuals (`odd/tasks/v13-adoption-asm.md` T14-T15). `run_iea15mw_case.sh` takes an optional
+`TURBINE_LIBBIN` (library dir, default the shared `$FOAM_USER_LIBBIN`) so a run can load a library built
+from a frozen worktree while other jobs keep the shared one.
+
 #### Validation tools: `case_state.py` reads resumed runs
 
 **Files:** `turbinesFoam/validation/tools/case_state.py`, `turbinesFoam/tests/test_case_state.py`.

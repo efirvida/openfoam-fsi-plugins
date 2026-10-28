@@ -326,7 +326,7 @@ The per-`addSup` instrumentation added by W4 (`logDistribution`, default
 
 ```
 Blade surface distribution 'turbine.blade1.surface': nodes <N>, candidates <C>,
-mean <C/N>, max <max>, seconds <s>
+mean <C/N>, max <max>, seconds <s>, refresh search <s>, refresh reduce <s>
 ```
 
 and appends the matching row to
@@ -334,8 +334,11 @@ and appends the matching row to
 (`time,nodes,candidates,mean_candidates,max_candidates,seconds`). `candidates`
 is the number of candidate cell entries visited in the call — the bounded-query
 evidence, far below the naive `nodes × N_local cells` scan — and `seconds` is
-the `addSup` wall time. The counters are observational only: the distributed
-load is unchanged.
+the `addSup` wall time. `refresh search`/`refresh reduce` are the wall seconds
+of the per-node cell search (`refreshNodeH()`, run on each rotation) since the
+previous line, on the slowest rank, and of its list reduction (mostly the other
+ranks waiting for that one); they are printed only, not written to the CSV.
+The counters are observational only: the distributed load is unchanged.
 
 **Gate decision procedure** (recorded before any D/48 preparation):
 

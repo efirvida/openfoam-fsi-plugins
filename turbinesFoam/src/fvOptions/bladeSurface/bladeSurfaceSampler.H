@@ -137,6 +137,22 @@ class bladeSurfaceSampler
         //- Local cell size of every node, cbrt(V) of its containing cell
         List<scalar> nodeH_;
 
+        //- Wall seconds of refreshNodeH() since the last distribution on
+        //  this rank: the per-node findCell loop and the list reduction
+        //  (instrumentation only, reset by bladeSurfaceSource)
+        scalar refreshSearchSeconds_;
+        scalar refreshReduceSeconds_;
+
+        //- Bounding box of this rank's mesh points: a node outside it lies
+        //  in no local cell, so refreshNodeH() skips its findCell (the node
+        //  set is replicated on every rank)
+        boundBox localBounds_;
+
+        //- Local cell that held each node at the last refresh (-1 if none on
+        //  this rank): the seed of the next search, since a node moves at
+        //  most a few cells per step
+        List<label> nodeCell_;
+
         //- Per-node force on the blade per unit density, global frame
         //  patchAreaShare_[i]*elements_[patch_[i]].force()
         List<vector> nodeForces_;

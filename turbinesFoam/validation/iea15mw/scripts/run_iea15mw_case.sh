@@ -25,6 +25,10 @@
 #   TURBINE_REQUEUE            1 = requeue to continue a long run (default 1)
 #   TURBINE_SOLVER_TIME_BUDGET safety wall timeout in seconds (default: Slurm)
 #   TURBINE_MPI_MCA            override the mpirun MCA flags
+#   TURBINE_LIBBIN             dir holding libturbinesFoam.so (default
+#                              $WM_PROJECT_USER_DIR/platforms/$WM_OPTIONS/lib),
+#                              so a run can use a library built from a frozen
+#                              worktree without replacing the shared one
 #   TURBINE_NACELLE            on = add the nacelle surrogate (default off)
 #
 # Submit from the package directory so $SLURM_SUBMIT_DIR resolves the package.
@@ -43,7 +47,7 @@ set +eu
 . "$WM_PROJECT_DIR/etc/bashrc"
 set -eu
 
-export FOAM_USER_LIBBIN=$WM_PROJECT_USER_DIR/platforms/$WM_OPTIONS/lib
+export FOAM_USER_LIBBIN=${TURBINE_LIBBIN:-$WM_PROJECT_USER_DIR/platforms/$WM_OPTIONS/lib}
 export LD_LIBRARY_PATH=/scratch/app/gcc/14.2.0/lib64:$FOAM_USER_LIBBIN:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib/sys-openmpi:$LD_LIBRARY_PATH
 export PYTHON=${PYTHON:-/scratch/leahk/eduardo.donestevez/venv/bin/python}
 

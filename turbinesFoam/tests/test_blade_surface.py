@@ -124,7 +124,8 @@ DISTRIBUTION_COLUMNS = [
 DISTRIBUTION_RE = re.compile(
     r"Blade surface distribution 'blade\.surface': "
     r"nodes (\d+), candidates (\d+), mean ([0-9eE.+-]+), "
-    r"max (\d+), seconds ([0-9eE.+-]+)"
+    r"max (\d+), seconds ([0-9eE.+-]+), "
+    r"refresh search ([0-9eE.+-]+), refresh reduce ([0-9eE.+-]+)"
 )
 
 # Analytic fixture constants (see tests/bladeSurface/system)
@@ -676,11 +677,15 @@ def test_instrumentation_line(surface_case, default_case):
 
     # The candidate lists are built once, so every call reports the same counts
     counts = set()
-    for nodes, candidates, mean, max_candidates, seconds in matches:
+    for (nodes, candidates, mean, max_candidates, seconds, refresh_search,
+         refresh_reduce) in matches:
         assert int(nodes) == N_NODES
         assert int(candidates) > 0
         assert int(max_candidates) >= 1
         assert float(seconds) >= 0.0
+        # refreshNodeH() cost since the previous call, slowest rank
+        assert float(refresh_search) >= 0.0
+        assert float(refresh_reduce) >= 0.0
         assert_allclose(
             float(mean), int(candidates) / N_NODES, rtol=1e-4, atol=1e-9
         )

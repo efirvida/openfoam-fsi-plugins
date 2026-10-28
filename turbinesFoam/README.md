@@ -486,7 +486,10 @@ Written on the master rank under `postProcessing/bladeSurface/`:
   `nodes * N_local cells` scan), `mean_candidates`/`max_candidates` are the
   per-node mean and maximum, and `seconds` is the wall time of the call. The
   same counts are emitted as one `Info` line on the master rank
-  (`Blade surface distribution '<owner>.surface': ...`). The counters are
+  (`Blade surface distribution '<owner>.surface': ...`), which also reports
+  `refresh search`/`refresh reduce`: the wall seconds of the per-node cell
+  search run on each rotation (slowest rank) and of its list reduction, since
+  the previous line (printed only, not in the CSV). The counters are
   observational only and never change the distributed result.
 
 Both files are written with 12 significant digits: the per-node file is the
