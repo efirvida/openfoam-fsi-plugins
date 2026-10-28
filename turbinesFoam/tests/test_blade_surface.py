@@ -226,15 +226,27 @@ def _copy_case(src, dst):
     return dst
 
 
-def _run_case(case_dir, *args):
-    """Run `./Allrun` in `case_dir`; fail with the log tail on error."""
-    proc = subprocess.run(
-        ["./Allrun"] + list(args),
-        cwd=case_dir,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        universal_newlines=True,
-    )
+def _run_case(case_dir, *args, timeout=None):
+    """Run `./Allrun` in `case_dir`; fail with the log tail on error.
+
+    `timeout` (seconds) turns a hang, e.g. an MPI collective some rank never
+    reaches, into a test failure instead of a stuck suite.
+    """
+    try:
+        proc = subprocess.run(
+            ["./Allrun"] + list(args),
+            cwd=case_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail(
+            "Allrun ({}) did not finish in {} s (deadlock?)".format(
+                " ".join(args), timeout
+            )
+        )
     if proc.returncode != 0:
         log_path = os.path.join(case_dir, "log.pimpleFoam")
         tail = open(log_path).readlines()[-200:] if os.path.isfile(log_path) else []
@@ -299,7 +311,7 @@ def _read_aftal_station(case_dir):
     return pd.read_csv(os.path.join(case_dir, AFTAL_STATION_CSV))
 
 
-def _run_aftal_rotating(case_dir, parallel=False):
+def _run_aftal_rotating(case_dir, parallel=False, timeout=None):
     """Run the AFTAL fixture past its construction support box.
 
     Patches endTime/deltaT for `AFTAL_ROTATION_STEPS` steps of
@@ -325,9 +337,9 @@ def _run_aftal_rotating(case_dir, parallel=False):
         fh.write(text)
 
     if parallel:
-        _run_case(case_dir, "-parallel")
+        _run_case(case_dir, "-parallel", timeout=timeout)
     else:
-        _run_case(case_dir)
+        _run_case(case_dir, timeout=timeout)
 
 
 def _axis_rotation(radians):
@@ -868,6 +880,41 @@ def test_deposit_partition_of_unity_under_rotation(tmp_path, parallel):
         patch = _row_vector(rows.iloc[-1], ["force_x", "force_y", "force_z"])
         # The reported load is non-zero at every step: a zero field integral is
         # a lost deposit, not an absent load
+        assert np.linalg.norm(patch) > 0.0
+        assert_allclose(vec, -patch, rtol=1e-5, atol=1e-9)
+
+
+def test_deposit_with_node_free_ranks(tmp_path):
+    """Ranks whose mesh holds no surface node still join every collective.
+
+    `refreshNodeH()` skips the nodes outside a rank's point bounds, but the
+    first `findCell()` builds the face-diagonal decomposition collectively, so
+    a rank that skips every node must still build it or the others deadlock.
+    Four subdomains along the rotor axis leave the outer ranks without a
+    node; the run must finish and keep the partition of unity of
+    `test_deposit_partition_of_unity_under_rotation`.
+    """
+    case_dir = _copy_case(AFTAL_CASE_DIR, str(tmp_path / "rotating-4ranks"))
+    decomp = os.path.join(case_dir, "system", "decomposeParDict")
+    with open(decomp) as fh:
+        text = fh.read()
+    text, n_sub = re.subn(r"numberOfSubdomains\s+2;", "numberOfSubdomains 4;", text)
+    text, n_split = re.subn(r"n\s+\(1 1 2\);", "n               (4 1 1);", text)
+    assert n_sub == 1 and n_split == 1
+    with open(decomp, "w") as fh:
+        fh.write(text)
+
+    _run_aftal_rotating(case_dir, parallel=True, timeout=300)
+
+    assert len(glob.glob(os.path.join(case_dir, "processor*"))) == 4
+    station = _read_aftal_station(case_dir)
+    integral = _read_force_integral(case_dir)
+
+    assert len(integral) == AFTAL_ROTATION_STEPS
+    for time, vec in integral:
+        rows = station[station.time == time]
+        assert len(rows) == 1, f"no reported patch force at t = {time:g}"
+        patch = _row_vector(rows.iloc[-1], ["force_x", "force_y", "force_z"])
         assert np.linalg.norm(patch) > 0.0
         assert_allclose(vec, -patch, rtol=1e-5, atol=1e-9)
 

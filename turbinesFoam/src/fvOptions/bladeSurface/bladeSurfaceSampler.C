@@ -226,9 +226,22 @@ void Foam::fv::bladeSurfaceSampler::refreshNodeH()
     // after the first call), or the ranks that do call it deadlock
     (void)mesh_.tetBasePtIs();
 
-    // No seed yet (first refresh, from any caller)
-    if (nodeCell_.size() != nNodes())
+    // First refresh (from any caller), or a background mesh that moved or
+    // changed topology: rebuild the local bounds and drop the seeds, whose
+    // cell labels may no longer exist. moving()/topoChanging() are global
+    // flags, so every rank takes the same branch. Local (not globally
+    // reduced) point bounds, inflated so that round-off on the box faces can
+    // never drop a node findCell() would place
+    if
+    (
+        nodeCell_.size() != nNodes()
+     || mesh_.moving()
+     || mesh_.topoChanging()
+    )
     {
+        localBounds_ = boundBox(mesh_.points(), false);
+        localBounds_.inflate(1e-6);
+
         nodeCell_.setSize(nNodes());
         nodeCell_ = -1;
     }
@@ -324,11 +337,6 @@ void Foam::fv::bladeSurfaceSampler::buildBins()
     // Per-node local cell size at the construction geometry: the kernel width
     // and the query support follow the cells the node is actually in, and
     // refreshNodeH() keeps them following the nodes as the blade rotates
-    // Local (not globally reduced) point bounds, inflated so that round-off
-    // on the box faces can never drop a node findCell() would place
-    localBounds_ = boundBox(mesh_.points(), false);
-    localBounds_.inflate(1e-6);
-
     nodeH_.setSize(nNodes());
     refreshNodeH();
 
