@@ -27,6 +27,7 @@ Files (all generated from repository data; nothing here is hand-edited):
 | `openfast/submit_matrix.sh` | the 10 cases (dry run by default, `--submit` to queue) |
 | `scripts/verifyAeroDyn.py` | the BEM against the Phase VI tables (S curve, pitch sweep, fixed yaw), one case per measured point with its own rpm, density, pitch and yaw; `analysis/aerodyn-verification/` |
 | `openfast/rtestAeroDyn.py`, `openfast/comparePrecision.py` | the installed `aerodyn_driver` against the r-test v5.0.0 BEM references; single vs double precision on the Phase VI points |
+| `openfast/compareWakes.py` | `CASE_DIR ... [--out table.csv]`: the `metrics.json` errors of several cases side by side per point (P, T, c_n at the five stations), one column per configuration (`bem`, `olaf`, `olaf-dp`) and `diff_pp` = second minus first; flags unconverged cases (`tests/test_compare_wakes.py`) |
 | `tests/test_aerodyn_case.py` | geometry/sign pin against `element_data`, polar round trip, per-point inputs, option set, comparator on synthetic output |
 
 ## Template provenance
