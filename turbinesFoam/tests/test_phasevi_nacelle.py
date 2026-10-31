@@ -48,9 +48,12 @@ def sha(path: Path) -> str:
 
 
 def test_default_and_off_renders_are_byte_identical_to_the_frozen_baseline(tmp_path):
-    # The baseline predates Model Definition v1.2, whose default polar is the
-    # pressure-drag table; pin the v1.1 polar so only the nacelle option is tested.
-    v1_1_polar = ("--polar", "S809_OSU_Re1M_total.dat")
+    # The baseline predates Model Definition v1.2 (pressure-drag polar) and v1.3
+    # (tip pitch reference, Dag-Sorensen tip correction, Glauert tip factor off, the
+    # renderer defaults since 2026-10-27): pin the v1.1 knobs so only the nacelle
+    # option is tested.
+    v1_1_polar = ("--polar", "S809_OSU_Re1M_total.dat", "--pitch-reference", "twist-zero",
+                  "--tip-effects", "on", "--tip-correction", "off")
     default = render(tmp_path / "a", *v1_1_polar)
     off = render(tmp_path / "b", "--nacelle", "off", *v1_1_polar)
     for name, digest in FROZEN.items():

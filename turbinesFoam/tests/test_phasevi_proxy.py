@@ -285,3 +285,35 @@ def test_measured_anchors():
     assert measured["7"]["rotpow_kw"] == pytest.approx(5.9458)
     assert measured["13"]["rotpow_kw"] == pytest.approx(9.7936)
     assert measured["7"]["rho_kg_m3"] > 0.0
+
+
+def write_segments(base: Path, name: str, header: str, segments) -> None:
+    """Write `<base>/<segment>/<name>` for each (segment, rows) pair."""
+    for segment, rows in segments:
+        (base / segment).mkdir(parents=True, exist_ok=True)
+        with (base / segment / name).open("w", encoding="utf-8") as out:
+            out.write(header + "\n")
+            for row in rows:
+                out.write(",".join(str(v) for v in row) + "\n")
+
+
+def test_turbine_rows_join_resume_segments(tmp_path):
+    """The proxy averages the whole resumed run, not segment 0 only."""
+    write_segments(tmp_path / "postProcessing" / "turbines", "turbine.csv",
+                   "time,cp", [("0", [(0.1, 1.0), (0.2, 1.0)]),
+                               ("0.2", [(0.2, 2.0), (0.3, 2.0)])])
+    rows = proxy.read_turbine_rows(tmp_path)
+    assert [r["time"] for r in rows] == [0.1, 0.2, 0.3]
+    assert [r["cp"] for r in rows] == [1.0, 2.0, 2.0]
+
+
+def test_midspan_c_ref_t_reads_resume_segments(tmp_path):
+    """Element files of a resumed run are joined; the later segment wins."""
+    base = tmp_path / "postProcessing" / "actuatorLineElements"
+    for element, root_dist in (("element0.csv", 0.0), ("element1.csv", 1.0)):
+        write_segments(base, element, "time,root_dist,c_ref_t",
+                       [("0", [(0.1, root_dist, -1.0)]),
+                        ("0.1", [(0.1, root_dist, 3.0), (0.2, root_dist, 3.0)])])
+    radius = 5.029
+    station = proxy.r_over_r(0.5, radius)
+    assert proxy.read_midspan_c_ref_t(tmp_path, station, radius) == pytest.approx(3.0)

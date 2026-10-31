@@ -60,6 +60,7 @@ if str(PACKAGE / "tools") not in sys.path:
     sys.path.insert(0, str(PACKAGE / "tools"))
 
 import generate_case  # noqa: E402
+from comparePhaseVI import read_rows_resumed  # noqa: E402
 from case_config import (  # noqa: E402
     DEFAULT_CONFIG,
     ROOT_CUTOUT_RADIUS,
@@ -547,6 +548,11 @@ def r_over_r(root_dist: float, radius: float) -> float:
     return ROOT_CUTOUT_RADIUS / radius + root_dist * span
 
 
+def read_turbine_rows(run_dir: Path) -> list[dict[str, float]]:
+    """Turbine rows of the whole run, resume segments joined."""
+    return read_rows_resumed(run_dir / TURBINE_CSV)
+
+
 def read_midspan_c_ref_t(run_dir: Path, station: float, radius: float):
     element_dir = run_dir / ELEMENT_DIR
     files = sorted(path for path in element_dir.glob("*.csv") if path.is_file())
@@ -554,7 +560,7 @@ def read_midspan_c_ref_t(run_dir: Path, station: float, radius: float):
         raise FileNotFoundError(str(element_dir / "*.csv"))
     profile = []
     for path in files:
-        rows = read_rows(path)
+        rows = read_rows_resumed(path)
         if not rows:
             continue
         root_dist = mean([float(row["root_dist"]) for row in rows])
@@ -601,7 +607,7 @@ def build_metrics(work_root: Path, cfg, measured, model: str = MODEL) -> dict[st
         q_dyn = 0.5 * rho * area * float(speed) ** 2
         for variant in VARIANTS:
             vdir = variant_dir(work_root, speed, variant, model)
-            rows = read_rows(vdir / TURBINE_CSV)
+            rows = read_turbine_rows(vdir)
             if not rows:
                 raise ValueError(f"{vdir / TURBINE_CSV}: no data rows")
             cp = mean([float(row["cp"]) for row in rows])

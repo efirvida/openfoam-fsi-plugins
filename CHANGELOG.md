@@ -4,6 +4,415 @@
 
 ### Features
 
+#### Phase VI: double-precision OpenFAST as the binary of record
+
+**Files:** `turbinesFoam/validation/phaseVI/openfast/{build_openfast_dp.sh,README.md}`,
+`turbinesFoam/validation/phaseVI/scripts/{quantifyUncertainty.py,verifyAeroDyn.py}`,
+`turbinesFoam/validation/phaseVI/scripts/slurm/aerodyn.slurm`,
+`turbinesFoam/validation/phaseVI/analysis/aerodyn-verification/`, `turbinesFoam/validation/phaseVI/README.md`.
+
+**Problem:** the conda-forge OpenFAST v5.0.0 is built single precision and fails the r-test AeroDyn-driver
+cases (BEM 2/9, OLAF 2/7) whose baselines are double precision; the site OpenBLAS cannot be linked with GCC
+(Intel runtime symbols) and the system libgfortran is older than GCC 14's.
+
+**Fix:** `build_openfast_dp.sh` builds tag v5.0.0 with `DOUBLE_PRECISION=ON`, GCC 14.2, static reference
+BLAS/LAPACK and an RPATH, checks the binaries run with an empty environment and writes `BUILD-INFO.txt`;
+it is the default `OPENFAST_ENV`. r-test: BEM 9/9, OLAF 7/7. The verification tables were regenerated with
+it (L12 verdicts unchanged but one deep-stall thrust-slope step); the single-precision tables moved to
+`analysis/aerodyn-verification/single-precision-conda/` (`odd/tasks/v13-adoption-asm.md` T13).
+
+#### Phase VI: AeroDyn BEM verified against the r-test and every Phase VI table on disk (v1.4 T12)
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/{verifyAeroDyn.py,buildAeroDynCase.py,compareAeroDyn.py}`,
+`turbinesFoam/validation/phaseVI/openfast/{rtestAeroDyn.py,comparePrecision.py,README.md}`,
+`turbinesFoam/validation/phaseVI/analysis/aerodyn-verification/`, `turbinesFoam/validation/phaseVI/README.md`,
+`turbinesFoam/tests/{test_aerodyn_verification.py,test_cli_help.py}`.
+
+**Problem:** the owner made the AeroDyn BEM the only BEM and asked that it be shown correct against other
+experiments; it had been run only at the five gate points, and the installed binary had not been checked
+against the OpenFAST regression suite.
+
+**Fix:** `buildAeroDynCase.build_point_case` builds a case for any table point (own measured rpm, density,
+wind speed, nominal tip pitch and yaw; skew model on for yawed points; sign conventions of pitch and yaw pinned
+against the report and the driver docs); `verifyAeroDyn.py` runs the 253 selected points (S curve 5-25 m/s,
+the 125-row pitch table, fixed yaw at 5-10 m/s of sequences S and H) and writes the L12 tables;
+`rtestAeroDyn.py` reproduces the r-test v5.0.0 tolerance rule. The conda-forge binary is single precision
+and fails 7 of 9 r-test BEM cases; a double-precision build of the same source passes all nine, and the two
+builds agree to 2e-4 on the Phase VI points at 5-8 m/s (`comparePrecision.py`).
+
+#### Phase VI: in-house BEM removed, blockage/VTUN sensitivity moved to the AeroDyn BEM (v1.4 T11)
+
+**Files:** removed the in-house BEM script (`phaseVI/scripts`) and `turbinesFoam/tests/test_phasevi_bem.py`;
+`turbinesFoam/validation/phaseVI/scripts/{quantifyUncertainty.py,buildAeroDynCase.py}`,
+`turbinesFoam/validation/phaseVI/{README.md,openfast/README.md}`,
+`turbinesFoam/tests/{test_uncertainty.py,test_aerodyn_case.py}`,
+`odd/tasks/{validation-model-definition-v1-3-record.md,phasevi-physics-diagnosis.md}` (dated notes).
+
+**Problem:** the in-house BEM applied the S809 polar on the cylindrical root (r < 1.0675 m), where the
+ALM and AeroDyn use the cylinder profile (Cl 0, Cd 1.1): its power carried a root-polar defect
+(`odd/tasks/v13-adoption-asm.md` L11) and the owner asked for OpenFAST's BEM to be the only BEM.
+
+**Fix:** the script and its tests are deleted. `quantifyUncertainty.py` estimates the R6 blockage and
+VTUN sensitivities with `buildAeroDynCase.py --wake bem --inflow-scale` (new option, default 1, changes
+only the driver wind speed at fixed rpm and density) and `aerodyn_driver`, read with `compareAeroDyn.py`;
+the env is `--openfast-env` / `$OPENFAST_ENV` / the default conda env, and the U^3/U^2 bound (labelled as
+such) is the fallback when OpenFAST is unavailable. H 7 m/s `alm-U7-coarse-d1-pdrag` (v1.2 evidence, not
+of record), blockage +1 %/+2 %: power 1.83/3.67 -> 2.12/4.19 %, thrust 0.73/1.39 -> 1.23/2.43 %,
+c_n 0.95 1.32/2.64 -> 1.52/3.03 %. Historical records are not rewritten; they carry a dated note.
+
+#### Phase VI: OpenFAST AeroDyn (BEM and OLAF) code-to-code arbiter of the v1.3 ALM (v1.4 T9)
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/{buildAeroDynCase.py,compareAeroDyn.py,slurm/aerodyn.slurm}`,
+`turbinesFoam/validation/phaseVI/openfast/{README.md,submit_matrix.sh}`, `turbinesFoam/validation/phaseVI/README.md`,
+`turbinesFoam/tests/{test_aerodyn_case.py,test_cli_help.py}`.
+
+**Problem:** the ALM/ASM results had no independent implementation to arbitrate them, and the repository
+BEM is our own code; a reviewer finds the OpenFAST AeroDyn BEMT and its free vortex wake (OLAF) more defensible.
+
+**Fix:** `buildAeroDynCase.py` writes a self-contained OpenFAST v5.0.0 AeroDyn-driver case (templates:
+r-test v5.0.0 `ad_BAR_OLAF`/`BAR_Baseline`) from repository data with `case.json` recording every input and
+its source: rigid tower-less two-blade rotor, cone/tilt/yaw 0, hub radius 0.5083 m, blade stations of the
+v1.3 `tip` pitch reference (`BlTwist + BldPitch = -mounting` of `element_data`, pinned by test), OSU total
+polar as one table, ALM `cylinder` root profile, rotor speed `tsr U / R` and experiment density per point.
+`compareAeroDyn.py` reads the output with the `comparePhaseVI` definitions (power, blade thrust, chord-line
+Cn/Ct at r/R 0.30-0.95, error % with the same experiment tables and bands) over whole revolutions with a
+last-two-revolutions convergence figure (OLAF also needs a full wake). Options and reasons:
+`openfast/README.md`. Smoke only; the 10-case matrix (S 5-8, H 7; BEM, OLAF) is run separately.
+
+#### Phase VI: ASM+mesh blade surface follows the pitch reference (v1.4 T4, B1)
+
+**Files:** `turbinesFoam/geometry/src/blade_phasevi.py`,
+`turbinesFoam/validation/phaseVI/tools/make_equispaced_blade.py`,
+`turbinesFoam/validation/phaseVI/scripts/{runPhaseVI.sh,slurm/asm-mesh.slurm}`,
+`turbinesFoam/validation/phaseVI/README.md`, `turbinesFoam/tests/test_blade_pitch_reference.py`.
+
+**Problem:** the committed blade STL is lofted at `-(twist + 3 deg)`, the v1.2 twist-zero orientation, and
+the surface sampler places it on the reference chord before pitch with no element pitch. Under
+`--pitch-reference tip` the elements carry `-(twist - twist_tip + 3 deg)`, so the ASM+mesh surface sat
+1.815 deg off its elements (committed STL vs tip elements: 1.97 deg worst airfoil section), on the committed
+table and on the `--blade-dz` re-loft alike.
+
+**Fix:** `blade_phasevi.build(twist_reference_deg=...)` lofts at `twist - twist_reference + pitch`;
+`make_equispaced_blade.py` takes `--pitch-reference` (default `tip`) and an optional `--dz`, and
+`runPhaseVI.sh` lofts per run whenever the reference is not `twist-zero` or `--blade-dz` is set. The
+committed STL and metadata are unchanged and a `twist-zero` committed-table loft is byte-identical to
+them. `test_blade_pitch_reference.py` measures the section chord angle of the lofted STL against the
+`elementData` pitch column under both references, on both paths (0.25 deg tolerance; the thick
+root-most section carries a 0.158 deg measurement bias, identical under both references).
+
+#### Phase VI: ASM+mesh spanwise frame stated and recorded (v1.4 T4, B3)
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/comparePhaseVI.py`, `turbinesFoam/validation/phaseVI/README.md`,
+`turbinesFoam/tests/test_phasevi_compare.py`.
+
+**Problem:** the comparison's Limitations (and the README) still said the ASM+mesh spanwise rows are
+plane-of-rotation referenced. The cause is that the surface station CSV carries only the plane pair
+(`c_ref_n`/`c_ref_t` from `inflowRefAngle()`), but since e5d2710 `analyse_model` already rebuilds the chord
+pair from the `cl,cd,alpha_deg` of the element CSVs the run also writes; only the text was stale, and a
+run without element CSVs repeated the plane pair in the chord slots silently.
+
+**Fix:** the ASM-mesh report states the true frame, `metrics.json` records `spanwise_frame` (`chord`, or
+`plane-fallback` with its own limitation). Numbers are unchanged; ALM/ASM-only reports are byte-identical.
+
+#### Phase VI: Model Definition v1.3 adopted as the definition of record
+
+**Files:** `turbinesFoam/validation/phaseVI/config/{model-definition.yaml,model-definition-v1.2.yaml,model-variants.yaml,case.yaml}`,
+`turbinesFoam/validation/phaseVI/scripts/{checkModelDefinition.py,summarizeVariants.py,runPhaseVI.sh}`,
+`turbinesFoam/validation/phaseVI/scripts/slurm/{variant-run,v1-2-run,v1-2-evaluation,v1-2-lag,v1-2-small-eps,asm-mesh}.slurm`,
+`turbinesFoam/validation/phaseVI/tools/{element_data,generate_case}.py`,
+`turbinesFoam/validation/phaseVI/case/system/fvOptions.{ALM,ASM,ASM-MESH}`,
+`turbinesFoam/validation/phaseVI/paper-yaw-2021/prepare.py`, `turbinesFoam/validation/phaseVI/{README.md,campaign-results/RESULTS.md}`,
+`turbinesFoam/tests/{test_model_definition_check,test_model_variants,test_phasevi_pitch_reference,test_phasevi_case,test_phasevi_nacelle}.py`,
+`odd/tasks/validation-model-definition{,-v1-3-record}.md`.
+
+**Problem:** the owner adopted v1.3 (2026-10-27: tip pitch reference, Dag-Sorensen tip correction on
+with the Glauert tip factor off, OSU total polar) but the checker, the renderer defaults and the
+committed twins were still v1.2, and every registry variant and the v1.2 launchers silently relied
+on those v1.2 defaults.
+
+**Fix:** `config/model-definition.yaml` is v1.3 and `config/model-definition-v1.2.yaml` is the frozen
+v1.2 base named by `base:` in the registry, which gains a `v1.3` entry (and a `--polar` flag rule with
+the `runPhaseVI.sh` validation). The checker defaults to the record (`CONFORMS v1.3`); `--variant NAME`
+composes on the v1.2 base, so `--variant v1.2` reproduces the old verdicts. The renderer defaults
+(`--pitch-reference tip`, `case.yaml` Glauert tip off and `tipCorrection` on, total polar) are v1.3 and
+the committed twins are re-rendered. `variant-run.slurm` and the `v1-2-*.slurm` launchers pass every
+v1.2 knob explicitly (including `--pitch-reference twist-zero`) and `paper-yaw-2021` pins its v1.2 render,
+so every pre-adoption variant, launcher and the paper-yaw case render byte-identically (differential
+check on all registry variants for alm/asm/asm-mesh); a plain render equals the base-commit
+`tip-pitch-dag-sorensen` + total-polar render. `summarizeVariants.py` takes the record as baseline
+(`--baseline` picks another).
+
+#### Validation tools: `run_diff.py`, a two-run regression differ
+
+**Files:** `turbinesFoam/validation/tools/run_diff.py`, `turbinesFoam/validation/tools/README.md`,
+`turbinesFoam/tests/test_run_diff.py`, `tools/analysis_gap.py`.
+
+**Problem:** checking that a rebuilt library or a changed renderer reproduces a reference run
+(the IEA 15 MW control replayed with the current library) had no reader; it would have been an
+inline snippet over ~150 element CSVs.
+
+**Fix:** a pure reader that joins resumed segments like `case_state.py`, aligns both runs' own CSV
+rows on `time` and reports per shared column the largest absolute and relative difference;
+columns and files present in one run only are listed, never compared; `--until` bounds the
+window; `--tolerance` sets exit 3. Self-diff of `iea15mw-l2-ctrl`: 149 files, worst 0, 23 s.
+
+#### Phase VI: DUT polar table for the P4 diagnostic arm
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/buildPolars.py`,
+`turbinesFoam/validation/phaseVI/data/polars/{S809_DUT_Re1M_total.dat,PROVENANCE.md}`,
+`turbinesFoam/validation/phaseVI/README.md`, `turbinesFoam/tests/test_build_polars.py`.
+
+**Problem:** arm P4 compares the polar source at Re 1e6 (OSU Table A-7 vs DUT Table A-8), but
+only the OSU table was emitted as a `profileData` polar.
+
+**Fix:** `buildPolars.py` also writes `S809_DUT_Re1M_total.dat` (`Cd = Cdw`) through the same
+`extension_rows()` path as the OSU total table (CSU A-3 extension, flat-plate closure); no new
+constants. Diagnostic only (`POLAR=S809_DUT_Re1M_total.dat`), never of record. All existing polar
+files regenerate byte-identical.
+
+### Fixes
+
+#### Phase VI acceptance criteria R3: uniform 10 % including the tip station
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/{summarizeBands.py,comparePhaseVI.py}`,
+`turbinesFoam/tests/{test_summarize_bands.py,test_phasevi_compare.py}`, `odd/tasks/validation-model-definition.md`,
+`turbinesFoam/validation/phaseVI/README.md`.
+
+**Problem:** R2 accepted thrust and c_n at r/R 0.30 within 15 % and left r/R 0.95 unbanded, although the tip
+station carries the largest structural moment arm for the FSI loads; `comparePhaseVI.py` printed a stale
+`+-15 %; spanwise max(0.15, 20 %)` band line.
+
+**Fix:** R3 (owner, 2026-10-30) is the default: P, T and c_n at r/R 0.30, 0.47, 0.63, 0.80 and 0.95 within 10 %.
+A 0.30 failure is documented and justified from results, not exempted in code. `--criteria r2` reproduces
+the R2 verdicts byte-identically; `comparePhaseVI.py` prints the selected criteria.
+
+#### Actuator surface element: Dag & Sorensen tip correction was inert (`epsilon 0`)
+
+**Files:** `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineElement/actuatorSurfaceElement.C`,
+`turbinesFoam/tests/{test_asm_tip_epsilon.py,asmTipEpsilon/}`, `turbinesFoam/README.md`.
+
+**Problem:** `actuatorSurfaceElement::calcProjectionEpsilon()` returned its mesh-based epsilon without
+storing it in `projectionEpsilon_` (only the line element did), so the member stayed at `-VGREAT`. The
+tip correction with `epsilon 0` reads `e.projectionEpsilon()`: the circulation smoothing flattened and every
+wake station was rejected (`epsV >= 0`), so the correction was exactly zero for ASM and ASM+mesh.
+
+**Fix:** the surface element stores `projectionEpsilon_` as the line element does. The ALM element CSVs
+and tip-correction dump are byte-identical to the pre-fix build. `test_asm_tip_epsilon.py` (RED before the fix: epsilon
+`-1e+300`, `maxCorr=0`) asserts a positive epsilon and a non-zero correction through the solver log
+(`odd/tasks/v13-adoption-asm.md` T16). ASM results produced before this fix carry no tip correction.
+
+#### Blade surface (ASM+mesh): cell search per node no longer dominates the step
+
+**Files:** `turbinesFoam/src/fvOptions/bladeSurface/{bladeSurfaceSampler.C,bladeSurfaceSampler.H,bladeSurfaceSource.C}`,
+`turbinesFoam/tests/test_blade_surface.py`, `turbinesFoam/README.md`, `turbinesFoam/validation/phaseVI/README.md`,
+`turbinesFoam/validation/iea15mw/scripts/run_iea15mw_case.sh`.
+
+**Problem:** `refreshNodeH()` runs on every rotation (once per blade per step) and called `findCell()` for
+every surface node on every rank, because the node set is replicated. On the IEA 15 MW ASM+mesh case
+(100 236 nodes per blade, 96 ranks) this was 15-17 s per blade on the slowest rank, 92 % of a 53.6 s step,
+so 23 revolutions needed ~144 h and could not fit an allocation.
+
+**Fix:** a node outside the rank's local point bounds is skipped (`findCell()` cannot place it there), and a
+node keeps the cell it was in: the next refresh tests that cell and its face neighbours with the same
+`CELL_TETS` inside test before falling back to the octree. `tetBasePtIs()` is now built on every rank before
+the loop, because its construction is collective and a rank that skips every node would otherwise deadlock
+the others. A background mesh that moves or changes topology rebuilds the bounds and drops the seeds
+(a stale cell label would index out of range). The distribution log line also reports the refresh search and reduce seconds (slowest rank).
+IEA ASM+mesh: 6.3 s/step (x8.5); 8 IEA steps and 20 Phase VI steps byte-identical in cp, ct, blade forces
+and residuals (`odd/tasks/v13-adoption-asm.md` T14-T15). `run_iea15mw_case.sh` takes an optional
+`TURBINE_LIBBIN` (library dir, default the shared `$FOAM_USER_LIBBIN`) so a run can load a library built
+from a frozen worktree while other jobs keep the shared one.
+
+#### Validation tools: `case_state.py` reads resumed runs
+
+**Files:** `turbinesFoam/validation/tools/case_state.py`, `turbinesFoam/tests/test_case_state.py`.
+
+**Problem:** the reader took the first `turbines/*/turbine.csv` in lexicographic order, so a run
+continued with `resume-run.slurm` was reported at the end of segment 0 (S U5 v12: 21.85 rev
+instead of 24.1).
+
+**Fix:** segments are joined in numeric order and a later segment replaces the rows it overlaps
+(the `comparePhaseVI` rule); JSON gains `segments`, the text report prints `+ resume <time>`.
+Single-segment output is unchanged.
+
+#### Validation tools: `--help` of every CLI is pinned
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/{compareSectionLoads,compareInflowAngle}.py`,
+`turbinesFoam/tests/test_cli_help.py`.
+
+**Problem:** a literal `1%` in an argparse help string made `--help` crash with
+`ValueError: incomplete format` in two scripts (the tools themselves ran).
+
+**Fix:** escaped as `1%%`; `test_cli_help.py` runs `--help` on every argparse CLI under
+`validation/` (54) and requires exit 0, a `usage:` line and empty stderr.
+
+#### Phase VI: `compareSectionLoads.py` twist (`tw_sim`, `dTw`) no longer depends on the polar
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/compareSectionLoads.py`,
+`turbinesFoam/tests/test_section_twist.py`.
+
+**Problem:** `angle_from_pair` chose between two branches `psi ± acos(cl/R)` and was applied to
+WINDOW-AVERAGED `cl, cd, c_ref_n, c_ref_t`, where the identity no longer holds, so it silently took
+the fallback branch (the branches differ by `2*atan(cd/cl)`, large in stall). At the same geometry
+S U8 gave dTw −1.75 (pressure polar) vs +7.33 (total polar) at r/R 0.95.
+
+**Fix:** exact branch-free inverse `phi = atan2(cl*ct + cd*cn, cl*cn - cd*ct)` (nan for `cl²+cd²≈0`),
+applied per row; `phi` and `phi - alpha_deg` are averaged over the window. R, dR, the force/torque
+table and exit codes are unchanged (byte-identical on five real runs); v12 and v11polar `tw_sim`
+now agree at every station.
+
+#### Phase VI: four diagnostic `tip-pitch-*` arms and the `--tip-effects` registry flag
+
+**Files:** `turbinesFoam/validation/phaseVI/config/model-variants.yaml`,
+`turbinesFoam/validation/phaseVI/scripts/checkModelDefinition.py`,
+`turbinesFoam/validation/phaseVI/README.md`, `turbinesFoam/tests/test_model_variants.py`,
+`turbinesFoam/tests/test_check_model_definition.py`.
+
+**Problem:** the diagnosis (`odd/tasks/phasevi-physics-diagnosis.md`, E3/P2/P3) needs the tip
+treatment and rotational augmentation tested on the corrected tip-pitch geometry, but
+`dag-sorensen-tip` stacks the velocity-side correction on the Glauert factor, and the registry could
+not express `--tip-effects off`.
+
+**Fix:** registry arms `tip-pitch-dag-sorensen` (tip pitch, D&S on, Glauert tip off, root kept),
+`tip-pitch-no-tip` (tip pitch, tip off, root kept), `tip-pitch-du-selig-ra`, `tip-pitch-ch-ra`; all
+diagnostic, never of record, existing renderer flags only, no fitted constant. `checkModelDefinition.py`
+accepts `--tip-effects on|off` and certifies each arm from the rendered case. Existing variants'
+`--renderer-flags` output is byte-identical.
+
+#### Phase VI: `--pitch-reference twist-zero|tip` renderer switch and `tip-pitch` variant
+
+**Files:** `turbinesFoam/validation/phaseVI/tools/element_data.py`,
+`turbinesFoam/validation/phaseVI/tools/generate_case.py`,
+`turbinesFoam/validation/phaseVI/scripts/runPhaseVI.sh`,
+`turbinesFoam/validation/phaseVI/scripts/checkModelDefinition.py`,
+`turbinesFoam/validation/phaseVI/config/model-variants.yaml`,
+`turbinesFoam/validation/phaseVI/README.md`,
+`turbinesFoam/tests/test_phasevi_pitch_reference.py`, `turbinesFoam/tests/test_model_variants.py`.
+
+**Problem:** the blade is mounted at `twist + 3°` with the table twist zero at 75 % span, but
+NREL/TP-500-29955 p.20 defines the pitch at the tip chord (twist −1.815° at the tip), so the tip
+mounts at −1.185° instead of −3.0°. There was no way to render the tip reference to measure it.
+
+**Fix:** `--pitch-reference` (default `twist-zero`, byte-identical v1.2 render) with `tip`
+mounting `-(twist - twist_tip + pitch_deg)`; one helper feeds the element data (also the
+`--blade-dz` path) and the Chaviaropoulos–Hansen `pitchOffset`. `run.json` records
+`pitch_reference`; registry variant `tip-pitch` (diagnostic, never of record) is certified by
+`checkModelDefinition.py` from the rendered tip mounting. v1.2 stays v1.2.
+
+#### Phase VI: resumed diagnostic windows and force-moment torque reconciliation
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/{compareElementStates,compareSectionLoads,compareInflowAngle,reconcileTorqueIntegral}.py`,
+`turbinesFoam/tests/test_{compare_element_states,section_window,section_moments,inflow_angle_reference,reconcile_torque_integral}.py`,
+`turbinesFoam/validation/phaseVI/README.md`, `turbinesFoam/validation/tools/README.md`.
+
+**Problem:** diagnostic readers stopped at segment 0; element-state means had
+no end bound, and angle/torque diagnostics used U7 kinematics at other speeds.
+The reconciler treated per-span `f_ref_t` as integrated, guessed widths, omitted
+the blade factor and claimed agreement without establishing a physical closure.
+Force direction was incorrectly described as independent induction evidence.
+
+**Fix:** reuse the resumed reader (numeric order, later overlap replaces),
+select sequence/speed TSR and expose inclusive end bounds. Preserve the
+start-only element API and the existing sectional drift/error gates. Reconcile
+rowwise `((position-origin) cross (fx,fy,fz)) dot axis` against rotor mean ct
+on identical samples; rendered element counts prevent incomplete sums. Print
+radial torque contributions, kinematic density convention and explicit blade
+scaling/axisymmetry assumption. Retain `--alm-dir` / `--discard-revs`, adding
+speed/sequence/end/revolution overrides; torque defaults now follow the rotor
+window rather than discarding only one revolution. Label atan2(force pair) as
+a proxy, without inferring measured experimental alpha or velocity components.
+
+Observed **analytical fixture**, not real-run evidence: rotating element
+force moments give rotor-scaled Q/rho = 28, radial contributions 4 + 24 = 28,
+and ratio 1.000000 to the fixture rotor ct. `f_ref_t=999` deliberately does not
+represent that integral. Observed real-run evidence: S U5/U6 at revolutions 16..24 and U7/U8 at
+4..12 give element/rotor torque ratios 0.999986, 0.999969, 0.999937 and
+0.999898 respectively. All twelve torque/section/proxy commands exit 0 with
+empty stderr; outputs: `turbinesFoam/validation/phaseVI/runs/section-diagnosis-20261022/corrected/`.
+No simulations or aerodynamic changes were made. Focused tests: 53 passed;
+parent torque spot check: 17 passed. Full Python suite: 672 passed, 3 skipped,
+2 known yaw/pitch reference-header failures (exit 1), not a green suite.
+Independent verification was unavailable due to a provider error.
+The closure is limited to straight radial incompressible ALM; missing blade
+histories require axisymmetric averaging and rotor hub moments may leave a
+residual. No scientific cause of a performance deficit is claimed.
+
+#### Phase VI: comparison reads resumed runs
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/comparePhaseVI.py`,
+`turbinesFoam/tests/test_phasevi_compare.py`.
+
+**Problem:** only `postProcessing/<object>/0/` was read, so a run continued with
+`resume-run.slurm` was truncated or rejected as a short window.
+
+**Fix:** `read_rows_resumed` joins the resume segments; the later one replaces the overlap.
+
+#### Phase VI: figures, proxy and resume launcher honour resumed A/B runs
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/plotComparisonFigures.py`,
+`turbinesFoam/validation/phaseVI/scripts/proxyRotationalAugmentation.py`,
+`turbinesFoam/validation/phaseVI/scripts/slurm/resume-run.slurm`,
+`turbinesFoam/tests/test_plot_comparison_figures.py`, `turbinesFoam/tests/test_phasevi_proxy.py`.
+
+**Problem:** the cp-history figure and the rotational-augmentation proxy still read segment 0
+only; `resume-run.slurm` always loaded the installed `libturbinesFoam`, so an A/B arm started
+with a run-local library (`runs/lib-flags`) would have been continued with a different binary.
+
+**Fix:** both readers use `comparePhaseVI.read_rows_resumed`; `resume-run.slurm` accepts the
+optional `LIB_DIR` of `variant-run.slurm` and prepends it to `LD_LIBRARY_PATH`.
+
+#### Phase VI: remaining diagnostics honour resumed runs
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/inspectInboardAngle.py`,
+`compareHubLossFormula.py`, `quantifyPolarReScaling.py`, `plotPhaseVIDiagnosis.py`;
+`turbinesFoam/tests/test_phasevi_resumed_readers.py`. (`compareSectionLoads.py`,
+`compareElementStates.py`, `compareInflowAngle.py` and `reconcileTorqueIntegral.py` are
+covered by the resumed-diagnostic-windows entry above.)
+
+**Problem:** these readers still used segment 0 alone, omitting resumed samples from
+the R1 mesh-ladder diagnostics and the sectional-load turbine convergence check.
+
+**Fix:** read simulation CSVs through `comparePhaseVI.read_rows_resumed`, with later
+segments replacing overlapping rows and existing averaging windows unchanged;
+experiment and polar readers remain unchanged. Tests cover resumed loads and states, unchanged single-segment
+results, and guard all Phase VI segment-0 readers against missing resume support.
+### Features
+
+#### Phase VI: isolated paper-like ALM preparation (S1–S3)
+
+**Files:** `turbinesFoam/validation/phaseVI/paper-yaw-2021/{config.json,prepare.py,README.md}`,
+`turbinesFoam/tests/test_phasevi_paper_yaw_2021.py`,
+`turbinesFoam/validation/tools/README.md`; generated dictionaries/report under
+`phaseVI/runs/paper-yaw-2021-v2/` (ignored run artifacts, not a mesh).
+The unexecuted original `runs/paper-yaw-2021/` is preserved but superseded.
+
+**Problem:** comparing aerodynamic formulations with the article's dt on the
+old mesh would confound mesh/numerics and imply unearned execution readiness.
+
+**Fix:** prepare 7/13 m/s numerically matched control versus Shen tip-only + SGC
++ 16-point displaced-sampling ALM, with realizableKE, 71.63 rpm through effective
+TSR, dt=0.001 s, CrankNicolson 0.9 and symmetry far boundaries. Apply published
+PBiCG/DILU and nu=1.46e-5 m2/s; retain rho=1.23 kg/m3 as reference metadata
+and fvOptions rhoRef (not consumed by the incompressible per-unit-density force
+path). Enable SGC equivalent incidence for eq5 with `calcAlphaEquiv=true`;
+the 3G Sheng-family counterpart is not equation-for-equation proof. Preserve all
+baseline inputs/root polars and audit exact dictionaries with hashes of actual
+rendering inputs only, excluding incidental baseline logs/caches.
+Prominently disclose conformal castellation/transition cells as a reconstruction
+of reported resolution criteria, NOT identical paper topology; nested zone
+bounds, epsilon/polars and SGC coefficients are explicit assumptions.
+
+Observed **preparation report**, not simulation: planned finest widths
+(0.099781746, 0.098387097, 0.099456522) m, nominal 3,811,364 cells (not measured,
+not tuned to the article's approximately 400k); angular step 0.42978 degrees,
+tip displacement 0.037722912 m, displacement/min(h)=0.383413199; nominal
+advective Co at 7/13 m/s is 0.071147541 / 0.132131148 (**NOT measured Co**).
+Public prepare/check/report exited 0. `execution_ready=false`: no meshing,
+checkMesh, measured-Co/time proof or root-SGC compatibility evidence obtained;
+source inspection risk is not a reproduced runtime failure. No jobs or solver
+runs authorized or performed. Focused public CLI tests cover published settings,
+actual effective dictionary values, provenance exclusions and nonmutation.
+
 #### Phase VI: selectable Chaviaropoulos–Hansen rotational augmentation (I7)
 
 **Files:** `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineSource.C`,

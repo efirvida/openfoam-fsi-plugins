@@ -179,6 +179,10 @@ runtime, while the ALM tutorial defaults to `0.5`.
 - **Turbulence injection:** only the momentum/force path uses the
   strip-wise spreading; turbulence injection (`addTurbulence`) keeps the
   inherited single-point kernel.
+- **Tip correction:** the surface element stores its mesh-based projection
+  epsilon, so `tipCorrection { epsilon 0; }` (Dag & Sorensen) works on
+  surface elements. Before this fix the stored width stayed at `-VGREAT` and
+  the correction was silently zero for ASM and ASM+mesh.
 - **HAWT-only:** the surface element is turbine-agnostic in principle, but
   only the axial-flow HAWT path is tested here. CFTAL/VAWT usage is
   untested.
@@ -486,7 +490,10 @@ Written on the master rank under `postProcessing/bladeSurface/`:
   `nodes * N_local cells` scan), `mean_candidates`/`max_candidates` are the
   per-node mean and maximum, and `seconds` is the wall time of the call. The
   same counts are emitted as one `Info` line on the master rank
-  (`Blade surface distribution '<owner>.surface': ...`). The counters are
+  (`Blade surface distribution '<owner>.surface': ...`), which also reports
+  `refresh search`/`refresh reduce`: the wall seconds of the per-node cell
+  search run on each rotation (slowest rank) and of its list reduction, since
+  the previous line (printed only, not in the CSV). The counters are
   observational only and never change the distributed result.
 
 Both files are written with 12 significant digits: the per-node file is the

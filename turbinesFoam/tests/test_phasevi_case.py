@@ -533,7 +533,7 @@ def test_runner_run_label_isolates_arms(tmp_path):
 
 
 def test_root_effect_ablation_rendered(cfg, tmp_path):
-    """The root-effect ablation is render-time; the committed default keeps on."""
+    """The root-effect ablation is render-time; the committed default keeps on (v1.3 too)."""
     committed = (PACKAGE / "case" / "system" / "fvOptions.ALM").read_text()
     assert "rootEffects on;" in block(committed, "GlauertCoeffs")
 
@@ -547,8 +547,8 @@ def test_root_effect_ablation_rendered(cfg, tmp_path):
     )
     assert "rootEffects off;" in block(ablation, "GlauertCoeffs")
     assert "rootEffects on;" not in ablation
-    # The tip effect is not part of the ablation.
-    assert "tipEffects on;" in ablation
+    # The tip effect is not part of the ablation (v1.3: the Glauert tip factor is off).
+    assert "tipEffects off;" in ablation
 
     case_dir = tmp_path / "case"
     result = subprocess.run(
@@ -567,10 +567,20 @@ def test_root_effect_ablation_rendered(cfg, tmp_path):
 
 
 def test_tip_effect_ablation_rendered(cfg, tmp_path):
-    """The tip-effect ablation is render-time; the committed default keeps on."""
+    """The Glauert tip factor toggles at render time; the committed default is off (v1.3)."""
     committed = (PACKAGE / "case" / "system" / "fvOptions.ALM").read_text()
-    assert "tipEffects on;" in block(committed, "GlauertCoeffs")
+    assert "tipEffects off;" in block(committed, "GlauertCoeffs")
 
+    v12 = generate_case.render_fv_options(
+        cfg,
+        "7",
+        "coarse",
+        PACKAGE / "case",
+        generate_case.ALM_ELEMENT,
+        tip_effects=True,
+    )
+    assert "tipEffects on;" in block(v12, "GlauertCoeffs")
+    assert "tipEffects off;" not in v12
     ablation = generate_case.render_fv_options(
         cfg,
         "7",
@@ -601,10 +611,10 @@ def test_tip_effect_ablation_rendered(cfg, tmp_path):
 
 
 def test_tip_correction_rendered(cfg, tmp_path):
-    """The Dag & Sorensen tip correction renders beside `endEffects`, off.
+    """The Dag & Sorensen tip correction renders beside `endEffects`, on (v1.3).
 
     Mirrors the `endEffects`/`rotationalAugmentation` contract: the committed
-    YAML default is off, the block always renders with the keys AFTAL reads,
+    YAML default is on (v1.2: off), the block always renders with the keys AFTAL reads,
     and the `--tip-correction` flag overrides the default in both directions.
     """
     def render(element_type, **kwargs):
@@ -621,7 +631,7 @@ def test_tip_correction_rendered(cfg, tmp_path):
         ),
         "tipCorrection",
     )
-    assert "active off;" in default
+    assert "active on;" in default
     for key in (
         "model DagSorensen;",
         "wakeTurns 2;",
@@ -638,9 +648,9 @@ def test_tip_correction_rendered(cfg, tmp_path):
     assert "tipCorrection" in coeffs
     assert "tipCorrection" not in block(coeffs, "blade1")
 
-    # The committed default is `active off;`.
+    # The committed default is `active on;`.
     committed = (PACKAGE / "case" / "system" / "fvOptions.ALM").read_text()
-    assert "active off;" in block(committed, "tipCorrection")
+    assert "active on;" in block(committed, "tipCorrection")
 
     # The CLI toggle reaches every rendered twin.
     case_dir = tmp_path / "case-on"
@@ -659,7 +669,7 @@ def test_tip_correction_rendered(cfg, tmp_path):
         rendered = (case_dir / "system" / f"fvOptions.{name}").read_text()
         assert "active on;" in block(rendered, "tipCorrection")
 
-    # An explicit `off` keeps it off as well.
+    # An explicit `off` restores the v1.2 setting.
     off_dir = tmp_path / "case-off"
     off = subprocess.run(
         [
@@ -1024,7 +1034,28 @@ def test_asm_mesh_selection(cfg, tmp_path):
     assert run_dir.is_dir()
     committed_stl = TURBINESFOAM / "geometry" / "stl" / "phaseVI_blade.stl"
     staged = run_dir / "constant" / "triSurface" / "phaseVI_blade.stl"
-    assert staged.read_bytes() == committed_stl.read_bytes()
+    # The default pitch reference is `tip` (v1.3): the staged surface is lofted for it, so it
+    # is NOT the committed twist-zero STL; `--pitch-reference twist-zero` stages that one.
+    assert staged.read_bytes() != committed_stl.read_bytes()
+    lofted = tmp_path / "lofted"
+    subprocess.run(
+        [sys.executable, str(PACKAGE / "tools" / "make_equispaced_blade.py"),
+         "--pitch-reference", "tip", "--out-dir", str(lofted)],
+        check=True, capture_output=True,
+    )
+    assert staged.read_bytes() == (lofted / "phaseVI_blade.stl").read_bytes()
+    twist_zero = subprocess.run(
+        [
+            "sh", str(package / "scripts" / "runPhaseVI.sh"),
+            "-m", "asm-mesh", "-u", "7", "-mesh", "coarse",
+            "--pitch-reference", "twist-zero", "--run-label", "tz",
+        ],
+        cwd=package, capture_output=True, text=True, env=env,
+    )
+    assert twist_zero.returncode == 0, twist_zero.stderr
+    assert (
+        package / "runs" / "asm-mesh-U7-coarse-tz" / "constant" / "triSurface" / "phaseVI_blade.stl"
+    ).read_bytes() == committed_stl.read_bytes()
     payload = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     assert payload["model"] == "asm-mesh"
     assert payload["staged_stl_sha256"] == hashlib.sha256(
@@ -1074,6 +1105,9 @@ def test_tip_displacement_constraint(cfg):
 
 
 def test_element_data_convention(cfg):
+    """Model Definition v1.2 (twist-zero) mounting; the v1.3 tip reference is tested in test_phasevi_pitch_reference."""
+    cfg = copy.deepcopy(cfg)
+    cfg["turbine"]["pitch_reference"] = "twist-zero"
     blade = blade_element_rows(cfg)
     assert len(blade) == 26
     assert blade[0][1] == pytest.approx(0.5083)
@@ -1705,16 +1739,32 @@ def test_runner_mesh_factor_validation_and_run_json(tmp_path):
     )) == {"4"}
 
 
-def test_model_definition_v1_2_defaults(cfg):
-    """v1.2: pressure-drag OSU polar, Glauert tip + Prandtl hub on, D&S off."""
+def test_model_definition_v1_3_defaults(cfg):
+    """v1.3: total-drag OSU polar, Glauert tip off + Prandtl hub on, D&S on."""
     text = generate_case.render_fv_options(
         cfg, "7", "coarse", PACKAGE / "case", generate_case.ALM_ELEMENT
+    )
+    assert "data/polars/S809_OSU_Re1M_total.dat" in text
+    assert "S809_OSU_Re1M_pressure.dat" not in text
+    glauert = block(text, "GlauertCoeffs")
+    assert "tipEffects off;" in glauert and "rootEffects on;" in glauert
+    assert "active on;" in block(text, "tipCorrection")
+
+
+def test_model_definition_v1_2_knobs_stay_reproducible(cfg):
+    """v1.2 is the frozen base: every knob passed explicitly renders it."""
+    cfg = copy.deepcopy(cfg)
+    cfg["turbine"]["pitch_reference"] = "twist-zero"
+    text = generate_case.render_fv_options(
+        cfg, "7", "coarse", PACKAGE / "case", generate_case.ALM_ELEMENT,
+        tip_effects=True, tip_correction=False, polar="S809_OSU_Re1M_pressure.dat",
     )
     assert "data/polars/S809_OSU_Re1M_pressure.dat" in text
     assert "S809_OSU_Re1M_total.dat" not in text
     glauert = block(text, "GlauertCoeffs")
     assert "tipEffects on;" in glauert and "rootEffects on;" in glauert
     assert "active off;" in block(text, "tipCorrection")
+    assert "(0 5.029 0 0.3551 0.3 -1.185)" in text
 
 
 def test_polar_override_still_selects_the_named_file(cfg):

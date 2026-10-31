@@ -346,16 +346,18 @@ actuator:
   end_effects:
     active: true
     model: Glauert
-    tip: true
+    # Model Definition v1.3: Glauert tip factor off (the Dag & Sorensen
+    # correction below replaces it), Glauert root kept. v1.2 had tip: true.
+    tip: false
     root: true
   # Dağ & Sørensen 2020 tip correction (prescribed helical wake), rendered into
-  # every `fvOptions` twin beside `endEffects`. The committed default is off;
-  # the Phase VI proxy turns it on as a render-time variant
-  # (`--tip-correction on`). `model` is the only registered name,
+  # every `fvOptions` twin beside `endEffects`. The committed default is on
+  # (Model Definition v1.3; v1.2 had it off, `--tip-correction off` restores
+  # that). `model` is the only registered name,
   # `wake_turns`/`wake_azimuthal_step` are the paper's 2 revolutions at 2
   # degrees, and `epsilon` 0 selects the local element projection width.
   tip_correction:
-    active: false
+    active: true
     model: DagSorensen
     wake_turns: 2
     wake_azimuthal_step: 2

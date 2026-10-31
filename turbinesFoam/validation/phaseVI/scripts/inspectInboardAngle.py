@@ -13,7 +13,10 @@ movement in `alpha_deg` is induction.
 Usage:  python3 scripts/inspectInboardAngle.py --alm-dir runs/alm-U7-coarse-r2
 """
 from __future__ import annotations
-import argparse, csv, glob, math, os, re, statistics
+import argparse, glob, math, os, re, statistics
+from pathlib import Path
+
+from comparePhaseVI import read_rows_resumed  # noqa: E402
 
 R, CUT = 5.029, 0.5083
 TSR, U_REF = 5.408, 7.0
@@ -36,7 +39,7 @@ def main():
     files = sorted(glob.glob(f"{d}/*blade1.element*.csv"), key=idx)
     data = []
     for p in files:
-        rs = list(csv.DictReader(open(p)))
+        rs = read_rows_resumed(Path(p))
         if not rs:
             continue
         rr = CUT / R + float(rs[0]["root_dist"]) * (1 - CUT / R)

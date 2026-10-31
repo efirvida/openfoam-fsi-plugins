@@ -49,6 +49,7 @@ def test_variant_launcher_library_and_forwarding(tmp_path, local_lib):
     package = tmp_path / 'package'
     (package / 'scripts/slurm').mkdir(parents=True)
     shutil.copytree(ROOT / 'config', package / 'config')
+    shutil.copytree(ROOT / 'data/polars', package / 'data/polars', ignore=shutil.ignore_patterns('raw'))
     shutil.copy(ROOT / 'scripts/checkModelDefinition.py', package / 'scripts')
     shutil.copy(ROOT / 'scripts/slurm/variant-run.slurm', package / 'scripts/slurm')
     runner = package / 'scripts/runPhaseVI.sh'
@@ -74,7 +75,15 @@ def test_variant_launcher_library_and_forwarding(tmp_path, local_lib):
     result = subprocess.run(['bash', str(package / 'scripts/slurm/variant-run.slurm')],
                             env=env, capture_output=True, text=True)
     assert (result.returncode, result.stderr) == (0, '')
-    ld, args = json.loads(result.stdout)
+    # The launcher reports the prepended run-local library on the job's .out
+    # before the runner starts; without LIB_DIR it reports nothing.
+    lines = result.stdout.splitlines()
+    if local_lib:
+        assert lines[0] == f'Using run-local library {lib}'
+        lines = lines[1:]
+    else:
+        assert not any(x.startswith('Using run-local library') for x in lines)
+    ld, args = json.loads('\n'.join(lines))
     expected = f'{tmp_path}/user/platforms/linux64GccDPInt64Opt/lib:{foam}/platforms/linux64GccDPInt64Opt/lib:{foam}/platforms/linux64GccDPInt64Opt/lib/sys-openmpi:{inherited_ld}'
     assert ld == (str(lib) + ':' if local_lib else '') + expected
     i = args.index('--rotational-augmentation-model')
@@ -82,6 +91,9 @@ def test_variant_launcher_library_and_forwarding(tmp_path, local_lib):
     # Registry's on overrides the launcher's baseline off (last value wins).
     values = [args[i + 1] for i, x in enumerate(args[:-1]) if x == '--rotational-augmentation']
     assert values == ['off', 'on']
+    # Every v1.2 knob is explicit and precedes the registry flags (the renderer default is v1.3).
+    assert [args[i + 1] for i, x in enumerate(args[:-1]) if x == '--pitch-reference'] == ['twist-zero']
+    assert args.index('--pitch-reference') < args.index('--rotational-augmentation-model')
     assert not (package / 'runs').exists()
 
 

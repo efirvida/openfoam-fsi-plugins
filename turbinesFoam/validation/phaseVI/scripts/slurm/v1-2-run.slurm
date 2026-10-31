@@ -1,7 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Generic Model Definition v1.2 run (production-readiness campaign R1/R2, owner-approved 2026-10-17).
-# Every v1.2 knob is passed explicitly; check the rendered case with scripts/checkModelDefinition.py.
+# Every v1.2 knob is passed explicitly (the renderer defaults are v1.3 since 2026-10-27); check the
+# rendered case with scripts/checkModelDefinition.py --variant v1.2.
 # Set by the environment:
 #     MODEL        alm | asm | asm-mesh
 #     SPEED        wind speed token of config/case.yaml for SEQUENCE
@@ -45,5 +46,5 @@ export LD_LIBRARY_PATH=$FOAM_USER_LIBBIN:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/l
 echo "$MODEL $SEQUENCE U$SPEED level $REFINE_LEVEL dt $DELTA_T revs $END_REVS polar $POLAR label $LABEL on $(hostname), $SLURM_NTASKS tasks"
 exec scripts/runPhaseVI.sh -m "$MODEL" -u "$SPEED" -mesh coarse --sequence "$SEQUENCE" \
     --refine-level "$REFINE_LEVEL" --delta-t "$DELTA_T" --end-revs "$END_REVS" --ranks "$SLURM_NTASKS" \
-    --blade-dz 0.05 --polar "$POLAR" --tip-effects on --tip-correction off \
+    --blade-dz 0.05 --polar "$POLAR" --tip-effects on --tip-correction off --pitch-reference twist-zero \
     --root-effects on --rotational-augmentation off --run-label "$LABEL" --restart --run

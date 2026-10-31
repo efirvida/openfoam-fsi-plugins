@@ -44,17 +44,38 @@ modified (there is a test that verifies this byte for byte).
 
 Exit codes: `1` run directory missing, `2` no `postProcessing` output yet.
 
+### `run_diff.py` — does a candidate run reproduce a reference run?
+
+```sh
+python3 turbinesFoam/validation/tools/run_diff.py runs/reference runs/candidate
+python3 turbinesFoam/validation/tools/run_diff.py --until 2.5 --tolerance 1e-6 REF CAND
+python3 turbinesFoam/validation/tools/run_diff.py --json REF CAND
+```
+
+Joins the resume segments of every `postProcessing/<family>/<segment>/<name>.csv`
+(as `case_state.py` does), aligns the two runs on `time` and reports `max_abs` and
+`max_rel` (relative to `max|reference|`) per shared column, the worst column, and
+the files/columns present in only one run. Text output lists only the `--top` worst
+files. Pure reader: no calibrated quantities, neither run is modified.
+
+Exit codes: `1` run directory missing, `2` no `postProcessing` output yet, `3`
+`--tolerance` exceeded.
+
 Related tools outside this directory:
 
 | tool | answers |
 | --- | --- |
 | `phaseVI/scripts/comparePhaseVI.py` | simulation vs measured WDH data, with metric definitions fixed against the NREL report |
+| `phaseVI/scripts/compareElementStates.py` | resumed element-column means in an explicit inclusive window; sequence/speed TSR, optional `--tsr` and `--end-revolutions`; start-only default retained |
+| `phaseVI/scripts/compareSectionLoads.py` / `compareInflowAngle.py` | resumed sectional loads / explicitly labelled force-direction proxy (not independent induction evidence); rotor window/drift gates, sequence/speed kinematics |
+| `phaseVI/scripts/reconcileTorqueIntegral.py` | rowwise written ALM force moments vs rotor ct on identical samples; radial torque sum, explicit kinematic density/blade conventions and observed ratio, not a claim of agreement; see [limitations and options](../phaseVI/README.md#resumed-diagnostic-windows-and-torque-closure) |
 | `iea15mw/scripts/compare_spanwise.py` | spanwise diagnosis of an IEA 15 MW ALM run, and a two-run per-band comparison (`--compare-with`); `--references` adds each reference model's band stations/means and its `cn`/`ct` ratios **to run A** (`--reference-source`, `analysis/spanwise-references.csv`) |
 | `iea15mw/scripts/station_ratio.py` | ratio of two `compare_spanwise.py --out` profiles pooled in r/R bands, including the root and tip bands that `--compare-with` leaves out |
 | `iea15mw/scripts/import_olaf_reference.py` | the `olaf-fvw` OLAF free-vortex-wake spanwise block in `analysis/spanwise-references.csv` (`alpha_deg`/`cn`/`ct` per node), regenerated from the gitignored OpenFAST CSV |
 | `nacelle-asn/scripts/compareNacelle.py` | nacelle actuator-surface comparison |
 | `phaseVI/tools/generate_case.py` | renders the committed case; `--check` is non-destructive |
 | `phaseVI/tools/case_config.py` | loads and validates `config/case.yaml` |
+| [`phaseVI/paper-yaw-2021/prepare.py`](../phaseVI/paper-yaw-2021/README.md) | preparation-only `--prepare` / read-only `--check` / `--report`, all with required `--output DIR`; four matched 7/13 m/s control/paper-like ALM dictionaries, input/dictionary hashes and nominal mesh/timestep arithmetic; never execution approval or a P/Q/Cp producer |
 
 ### `window_response.py` — what did a model switched on at a restart do, window by window?
 

@@ -55,6 +55,8 @@ Usage:
     compare_spanwise.py [--run-dir DIR] [--revs N] [--out FILE]
     compare_spanwise.py --run-dir DIR --compare-with DIR2 [--comparison-out FILE]
     compare_spanwise.py --run-dir DIR --compare-with DIR2 --references
+    compare_spanwise.py --run-dir DIR --compare-with DIR2 --references \
+        --bands 0.7-0.8,0.8-0.9,0.9-0.95,0.95-1.0
     compare_spanwise.py --profiles-out analysis/spanwise-profiles.csv
     compare_spanwise.py --from-csv analysis/spanwise-profiles.csv
 
@@ -64,6 +66,13 @@ are compared band by band (``r/R`` 0.3-0.5, 0.5-0.7, 0.7-0.9 and the pooled
 (B minus A) and the ``c_n``/``c_t`` ratios B/A.  The runs are paired **by
 element index** and must share one ``r/R`` grid -- a different element count or
 a station whose ``r/R`` differs is a hard error, never an interpolation.
+
+``--bands LO-HI,...`` replaces the three default bands with caller-chosen
+``r/R`` bands (``0 <= LO < HI <= 1``), printed in the order given, followed by
+the pooled row spanning ``min(LO)``..``max(HI)``; it applies to the reference
+columns too.  Membership stays ``LO <= r/R < HI`` for every band, so a station
+exactly on a shared edge belongs to the upper band only.  This is how the tip
+region (``r/R`` > 0.9) is compared.
 
 ``--references`` appends to each band row the committed reference models'
 station count, band-mean ``alpha_deg``/``cn``/``ct`` and the ratios
@@ -536,8 +545,39 @@ def _read_profile(run_dir, time_name, revs, rpm):
     return profile, [_element_index(path) for path in files]
 
 
+def parse_bands(text: str) -> tuple:
+    """Parse ``--bands`` ``LO-HI,LO-HI,...`` into a tuple of ``(lo, hi)``.
+
+    Each band needs ``0 <= lo < hi <= 1``; anything else raises
+    :class:`argparse.ArgumentTypeError` so the CLI exits 2 with a message.
+    """
+    bands = []
+    for part in text.split(","):
+        pieces = part.strip().split("-")
+        try:
+            if len(pieces) != 2:
+                raise ValueError
+            low, high = float(pieces[0]), float(pieces[1])
+        except ValueError:
+            raise argparse.ArgumentTypeError(
+                f"invalid band {part.strip()!r}: expected LO-HI, e.g. "
+                f"0.9-0.95 (comma-separated list)"
+            ) from None
+        if not 0.0 <= low < high <= 1.0:
+            raise argparse.ArgumentTypeError(
+                f"invalid band {part.strip()!r}: need 0 <= LO < HI <= 1"
+            )
+        bands.append((low, high))
+    return tuple(bands)
+
+
+def pooled_band(bands) -> tuple:
+    """The band spanning ``min(lo)``..``max(hi)`` of ``bands``."""
+    return (min(low for low, _ in bands), max(high for _, high in bands))
+
+
 def compare_profiles(profile_a, label_a, profile_b, label_b,
-                     tolerance=R_OVER_R_TOLERANCE):
+                     tolerance=R_OVER_R_TOLERANCE, bands=None):
     """Per-band comparison of two spanwise profiles paired by station index.
 
     ``label_a``/``label_b`` name the runs in the output and in the error.  A
@@ -546,7 +586,13 @@ def compare_profiles(profile_a, label_a, profile_b, label_b,
     then not on the same mesh and a station-by-station comparison would be
     meaningless.  A band with no stations is kept in the result with
     ``stations == 0`` and ``None`` metrics, never dropped or synthesised.
+    ``bands`` (default :data:`COMPARISON_BANDS`) are reported in the order
+    given, followed by their pooled span (:data:`OVERALL_BAND` by default).
     """
+    if bands is None:
+        all_bands = COMPARISON_BANDS + (OVERALL_BAND,)
+    else:
+        all_bands = tuple(bands) + (pooled_band(bands),)
     if len(profile_a) != len(profile_b):
         raise StationGridMismatchError(
             f"{label_a} has {len(profile_a)} stations but {label_b} has "
@@ -562,7 +608,7 @@ def compare_profiles(profile_a, label_a, profile_b, label_b,
                 f"runs are not on the same element grid"
             )
     results = []
-    for band in COMPARISON_BANDS + (OVERALL_BAND,):
+    for band in all_bands:
         low, high = band
         stations = [
             i for i, rr in enumerate(grid_a) if low <= rr < high
@@ -852,6 +898,17 @@ def main(argv: list[str] | None = None) -> int:
         help="write the two-run band table as CSV",
     )
     parser.add_argument(
+        "--bands", type=parse_bands, default=None, metavar="LO-HI,...",
+        help=(
+            "r/R bands of the --compare-with table, comma-separated, in the "
+            "order printed (e.g. 0.7-0.8,0.8-0.9,0.9-0.95,0.95-1.0); each "
+            "needs 0 <= LO < HI <= 1 and holds stations with LO <= r/R < HI. "
+            "A pooled row spanning min(LO)..max(HI) is appended. Applies to "
+            "the --references columns too (default: 0.3-0.5,0.5-0.7,0.7-0.9 "
+            "and the pooled 0.3-0.9)"
+        ),
+    )
+    parser.add_argument(
         "--references",
         action="store_true",
         help=(
@@ -1028,7 +1085,8 @@ def main(argv: list[str] | None = None) -> int:
                     f"has {indices_b}: the two runs are not on the same "
                     f"element grid"
                 )
-            results = compare_profiles(profile, label_a, profile_b, label_b)
+            results = compare_profiles(
+                profile, label_a, profile_b, label_b, bands=args.bands)
         except StationGridMismatchError as error:
             print(f"error: {error}", file=sys.stderr)
             return 1

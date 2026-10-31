@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Phase VI effective-value definition v1.2, owner decision 2026-10-17. FROZEN:
+# no longer the definition of record (v1.3 is, config/model-definition.yaml) but
+# the base every registry variant in config/model-variants.yaml overrides, and
+# the reference `checkModelDefinition.py --variant v1.2` certifies. Do not edit.
+# Source paths below are relative to turbinesFoam/src/fvOptions/.
+# null solver_default means no known default: absence must fail closed.
+version: v1.2
+pitch_reference: twist-zero # report twist zero at the 75% span station; mounting at the tip -1.185 deg
+coefficients: turbine.axialFlowTurbineALSourceCoeffs
+knobs:
+  endEffects.active:
+    path: endEffects.active
+    expected: 'on'
+    solver_default: null # axialFlowTurbineALSource/axialFlowTurbineALSource.C:1569 (required lookup)
+  endEffectsModel:
+    path: endEffects.endEffectsModel
+    expected: Glauert
+    solver_default: null # axialFlowTurbineALSource/axialFlowTurbineALSource.C:1570 (required lookup)
+  tipEffects:
+    path: endEffects.GlauertCoeffs.tipEffects
+    expected: 'on'
+    solver_default: true # axialFlowTurbineALSource/axialFlowTurbineALSource.C:655
+  rootEffects:
+    path: endEffects.GlauertCoeffs.rootEffects
+    expected: 'on'
+    solver_default: false # axialFlowTurbineALSource/axialFlowTurbineALSource.C:663
+  hubRadius:
+    path: hubRadius
+    expected: 0.5083
+    solver_default: -VGREAT # axialFlowTurbineALSource/axialFlowTurbineALSource.C:1575 (invalid sentinel)
+  tipCorrection.active:
+    path: tipCorrection.active
+    expected: 'off'
+    solver_default: false # axialFlowTurbineALSource/axialFlowTurbineALSource.C:1582-1585
+  rotationalAugmentation.active:
+    path: rotationalAugmentation.active
+    expected: 'off'
+    solver_default: false # actuatorLineSource/actuatorLineElement/actuatorLineElement.C:129
+  dynamicStall.active:
+    path: dynamicStall.active
+    expected: 'off'
+    solver_default: null # actuatorLineSource/actuatorLineElement/actuatorLineElement.C:116 (required lookup)
+  addedMass:
+    path: blades.*.addedMass
+    expected: false
+    solver_default: false # actuatorLineSource/actuatorLineElement/actuatorLineElement.C:882
+  velocitySampleRadius:
+    path: velocitySampleRadius
+    expected: 0
+    solver_default: 0.0 # axialFlowTurbineALSource/axialFlowTurbineALSource.C:359
+  nVelocitySamples:
+    path: nVelocitySamples
+    expected: null # Inert for point sampling; deliberately not checked.
+    solver_default: 20 # axialFlowTurbineALSource/axialFlowTurbineALSource.C:364
+    inert: true
+  liftReCorrExp:
+    path: profileData.S809.liftReCorrExp
+    expected: 0
+    solver_default: 0.23 # actuatorLineSource/actuatorLineElement/profileData/profileData.C:714
+  meshFactor:
+    path: profileData.S809.GaussianCoeffs.meshFactor
+    expected: 1
+    solver_default: 2.0 # actuatorLineSource/actuatorLineElement/actuatorLineElement.C:534; actuatorSurfaceElement.C:68
+    scale_with_refinement: true
+  polar:
+    path: profileData.S809.data
+    expected: data/polars/S809_OSU_Re1M_pressure.dat
+    solver_default: null # No default polar include; input data is required.
+    comparison: include_suffix
+  nChordwise:
+    path: blades.*.nChordwise
+    expected: 5
+    solver_default: 5 # actuatorLineSource/actuatorLineElement/actuatorSurfaceElement.C:239
+    element_type: actuatorSurfaceElement
+metadata:
+  blade_dz:
+    expected: 0.05
+    solver_default: null # Not a solver key. Check only when recorded in run.json.

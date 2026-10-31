@@ -355,6 +355,15 @@ void Foam::fv::bladeSurfaceSource::distribute
         std::chrono::steady_clock::now() - startTime
     ).count();
 
+    // refreshNodeH() cost since the previous distribution (the rotations of
+    // this step), slowest rank
+    const scalar refreshSearch =
+        returnReduce(sampler_.refreshSearchSeconds_, maxOp<scalar>());
+    const scalar refreshReduce =
+        returnReduce(sampler_.refreshReduceSeconds_, maxOp<scalar>());
+    sampler_.refreshSearchSeconds_ = 0.0;
+    sampler_.refreshReduceSeconds_ = 0.0;
+
     if (logDistribution_ and Pstream::master())
     {
         const label nNodes = sampler_.nNodes();
@@ -366,7 +375,9 @@ void Foam::fv::bladeSurfaceSource::distribute
             << ", candidates " << lastCandidateTotal_
             << ", mean " << meanCandidates
             << ", max " << maxCandidates
-            << ", seconds " << lastSeconds_ << endl;
+            << ", seconds " << lastSeconds_
+            << ", refresh search " << refreshSearch
+            << ", refresh reduce " << refreshReduce << endl;
 
         if (distributionFile_)
         {

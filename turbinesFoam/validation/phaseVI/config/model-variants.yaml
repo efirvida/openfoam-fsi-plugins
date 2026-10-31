@@ -1,10 +1,21 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Each flags mapping is an override of Model Definition v1.2, not a new baseline.
+# Each flags mapping is an override of the frozen Model Definition v1.2 named by
+# `base` (not of the definition of record, which is v1.3, config/model-definition.yaml),
+# and not a new baseline. Variants `v1.2` and `v1.3` reproduce the two definitions.
 # Future C2-C3 arms can add renderer flags here once implemented and validated.
+base: model-definition-v1.2.yaml
 variants:
   v1.2:
-    reference: 'Model Definition v1.2, config/model-definition.yaml'
+    reference: 'Model Definition v1.2, config/model-definition-v1.2.yaml (frozen; the base of every variant)'
     flags: {}
+  v1.3:
+    reference: 'Model Definition v1.3, config/model-definition.yaml (of record since 2026-10-27); odd/tasks/validation-model-definition-v1-3-record.md'
+    note: 'Reproduces the record on the v1.2 base: tip pitch reference, Dag & Sorensen tip correction on, Glauert tip factor off (root kept), OSU total polar. Equals tip-pitch-dag-sorensen plus the polar; the gate runs were launched that way. No POLAR environment is needed.'
+    flags:
+      --pitch-reference: tip
+      --tip-correction: 'on'
+      --tip-effects: 'off'
+      --polar: S809_OSU_Re1M_total.dat
   shen-tip:
     reference: 'I10: Standard Shen tip correction (c2 = 21); Shen, Mikkelsen, Sorensen, Bak, Wind Energy 8:457-475 (2005)'
     note: 'Not a pure tip substitution: the solver Shen model also replaces the hub/root loss formula. Explicit literature constants c1=0.125, c2=21; no fit.'
@@ -32,3 +43,34 @@ variants:
     note: 'Paper constants a=b=d=1, unchanged from v1.2 inactive block.'
     flags:
       --rotational-augmentation: 'on'
+  tip-pitch:
+    reference: 'NREL/TP-500-29955 p.20 "blade pitch is defined as the angle between the blade tip chord line and the plane of the turbine disk"; Table A-1 note 2 "Twist convention is positive towards feather. Values listed are relative to zero twist at the 3.772-m station [75% span on a 5.029-m blade]."'
+    note: 'Pitch measured at the tip chord: mounting = -(twist - twist_tip + pitch), twist_tip = -1.815 deg from the blade table, so the tip mounting is -3.0 deg (v1.2: -1.185). Diagnostic arm, never of record; v1.2 stays the twist-zero reference (the v1.3 record also uses the tip reference, with the tip correction and total polar).'
+    flags:
+      --pitch-reference: tip
+  tip-pitch-dag-sorensen:
+    reference: 'Dag & Sorensen, Wind Energy 23:148-160 (2020); Meyer Forsting et al., Wind Energy Science (2019, 2020); pitch reference as tip-pitch'
+    note: 'Diagnostic, never of record (v1.3 is this arm plus the OSU total polar). Tip pitch reference with the velocity-side Dag & Sorensen correction and the cl-side Glauert tip factor off (root/hub loss kept): those papers correct the induced velocity instead of a tip-loss factor, whereas dag-sorensen-tip stacks both (diagnosis E3). Existing flags only; no fitted constant.'
+    flags:
+      --pitch-reference: tip
+      --tip-correction: 'on'
+      --tip-effects: 'off'
+  tip-pitch-no-tip:
+    reference: 'Jha, Churchfield, Moriarty & Schmitz, J. Sol. Energy Eng. 136:031003 (2014) p.6: "there should be no need for using the Prandtl correction within the ALM framework"; pitch reference as tip-pitch'
+    note: 'Diagnostic, never of record. Tip pitch reference with no tip correction at all (Glauert tip factor off, Dag & Sorensen off); root/hub loss kept. Measures the size of the tip over-load on this mesh. Existing flags only; no fitted constant.'
+    flags:
+      --pitch-reference: tip
+      --tip-effects: 'off'
+  tip-pitch-du-selig-ra:
+    reference: 'tip-pitch (NREL/TP-500-29955 p.20) combined with du-selig-ra (Du & Selig, AIAA-98-0021, 1998)'
+    note: 'Diagnostic, never of record. Rotational augmentation on the tip-pitch-corrected geometry; DuSelig paper constants a=b=d=1, Glauert tip and root unchanged.'
+    flags:
+      --pitch-reference: tip
+      --rotational-augmentation: 'on'
+  tip-pitch-ch-ra:
+    reference: 'tip-pitch (NREL/TP-500-29955 p.20) combined with ch-ra (I7, Burgos Tafur et al., Acta Mech. Sin. 36:306-319, 2020, pp.307-308 Eqs.(1)-(4))'
+    note: 'Diagnostic, never of record. Chaviaropoulos-Hansen baseline a=2.2, h=1, n=4 on the tip-pitch-corrected geometry; its pitchOffset follows the tip pitch reference (-4.815), not the twist-zero -3.'
+    flags:
+      --pitch-reference: tip
+      --rotational-augmentation: 'on'
+      --rotational-augmentation-model: ChaviaropoulosHansen

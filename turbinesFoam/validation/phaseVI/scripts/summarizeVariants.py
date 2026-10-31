@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Summarize comparePhaseVI --out directories, grouped by sequence and speed.
 
-Cells are percent error vs experiment, then change vs the matching v1.2 error
-in percentage points. Baselines match model, sequence and speed. Missing or
+Cells are percent error vs experiment, then change vs the matching baseline
+error (default the version of record, config/model-definition.yaml; --baseline
+picks another registry entry, e.g. v1.2) in percentage points. Baselines match
+model, sequence and speed. Missing or
 ambiguous baselines give n/a. Variant identity uses run.json variant, the default
 var-<variant> label, or a unique conformance match. Custom labels on malformed
 runs need run.json variant to identify their intended arm. Diagnostic only;
@@ -16,7 +18,7 @@ import json
 from pathlib import Path
 import sys
 
-from checkModelDefinition import load_definition, load_variants, variant_definition, check_run
+from checkModelDefinition import load_base_definition, load_definition, load_variants, variant_definition, check_run
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIONS = (0.30, 0.47, 0.63, 0.80, 0.95)
@@ -64,18 +66,23 @@ def rows(directory, definitions):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('dirs', nargs='+', type=Path)
+    parser.add_argument('--baseline', help='registry entry used as baseline (default: the version of record)')
     args = parser.parse_args(argv)
     try:
-        base = load_definition()
+        record = load_definition()['version']
+        baseline_name = args.baseline or record
+        base = load_base_definition()
         definitions = {name: variant_definition(base, name) for name in load_variants()}
+        if baseline_name not in definitions:
+            raise ValueError(f'unknown baseline: {baseline_name}')
         entries = [row for directory in args.dirs for row in rows(directory, definitions)]
         for group in sorted({r['group'] for r in entries}):
             print(f'== {group[0]} U{group[1]:g}')
             print('variant | model | P | T | ' + ' | '.join(f'cn{x:.2f}' for x in STATIONS)
-                  + ' | status / source (errors %, change vs v1.2 in pp)')
+                  + f' | status / source (errors %, change vs {baseline_name} in pp)')
             group_rows = [r for r in entries if r['group'] == group]
-            for row in sorted(group_rows, key=lambda r: (r['variant'] != 'v1.2', r['variant'], r['model'], r['source'])):
-                baselines = [r for r in group_rows if r['variant'] == 'v1.2'
+            for row in sorted(group_rows, key=lambda r: (r['variant'] != baseline_name, r['variant'], r['model'], r['source'])):
+                baselines = [r for r in group_rows if r['variant'] == baseline_name
                              and r['model'] == row['model'] and not r['errors'] and not r['drift']]
                 baseline = baselines[0]['values'] if len(baselines) == 1 else [None] * 7
                 cells = ['n/a' if value is None else
@@ -84,7 +91,7 @@ def main(argv=None):
                 tags = ['NON-CONFORMING: ' + '; '.join(row['errors']) if row['errors'] else 'CONFORMS']
                 if row['drift']:
                     tags.append('DRIFT')
-                if row['variant'] != 'v1.2' or row['errors'] or row['drift']:
+                if row['variant'] != record or row['errors'] or row['drift']:
                     tags.append('[not of record]')
                 print(' | '.join([row['variant'], row['model'], *cells, ' '.join(tags), row['source']]))
         return int(any(r['errors'] for r in entries))

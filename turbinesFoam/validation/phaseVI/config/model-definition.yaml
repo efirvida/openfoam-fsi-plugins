@@ -1,8 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Phase VI effective-value definition, owner decision 2026-10-17.
+# Phase VI effective-value definition v1.3, the definition of record. Owner
+# decisions: freeze 2026-10-26, adoption 2026-10-27. Evidence and rationale:
+# odd/tasks/validation-model-definition-v1-3-record.md. It equals the frozen v1.2
+# (config/model-definition-v1.2.yaml) except the pitch reference (tip), the
+# Dag-Sorensen tip correction on with the Glauert tip factor off (Glauert root
+# kept) and the OSU total polar. Registry variant `v1.3` reproduces it on the v1.2 base.
 # Source paths below are relative to turbinesFoam/src/fvOptions/.
 # null solver_default means no known default: absence must fail closed.
-version: v1.2
+version: v1.3
+pitch_reference: tip # NREL/TP-500-29955 p.20: pitch at the tip chord; mounting at the tip -3.0 deg
 coefficients: turbine.axialFlowTurbineALSourceCoeffs
 knobs:
   endEffects.active:
@@ -15,7 +21,7 @@ knobs:
     solver_default: null # axialFlowTurbineALSource/axialFlowTurbineALSource.C:1570 (required lookup)
   tipEffects:
     path: endEffects.GlauertCoeffs.tipEffects
-    expected: 'on'
+    expected: 'off'
     solver_default: true # axialFlowTurbineALSource/axialFlowTurbineALSource.C:655
   rootEffects:
     path: endEffects.GlauertCoeffs.rootEffects
@@ -27,8 +33,24 @@ knobs:
     solver_default: -VGREAT # axialFlowTurbineALSource/axialFlowTurbineALSource.C:1575 (invalid sentinel)
   tipCorrection.active:
     path: tipCorrection.active
-    expected: 'off'
+    expected: 'on'
     solver_default: false # axialFlowTurbineALSource/axialFlowTurbineALSource.C:1582-1585
+  tipCorrection.model:
+    path: tipCorrection.model
+    expected: DagSorensen
+    solver_default: DagSorensen # Dag & Sorensen (2020), the only registered model
+  tipCorrection.wakeTurns:
+    path: tipCorrection.wakeTurns
+    expected: 2
+    solver_default: 2
+  tipCorrection.wakeAzimuthalStep:
+    path: tipCorrection.wakeAzimuthalStep
+    expected: 2
+    solver_default: 2
+  tipCorrection.epsilon:
+    path: tipCorrection.epsilon
+    expected: 0
+    solver_default: 0
   rotationalAugmentation.active:
     path: rotationalAugmentation.active
     expected: 'off'
@@ -61,7 +83,7 @@ knobs:
     scale_with_refinement: true
   polar:
     path: profileData.S809.data
-    expected: data/polars/S809_OSU_Re1M_pressure.dat
+    expected: data/polars/S809_OSU_Re1M_total.dat
     solver_default: null # No default polar include; input data is required.
     comparison: include_suffix
   nChordwise:

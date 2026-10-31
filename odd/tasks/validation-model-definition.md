@@ -19,7 +19,11 @@
 > Evidence: `odd/tasks/p2-2-next-cycle-plan.md` ("Session 3 results", "Owner decisions 2026-10-17").
 > The v1.1 tables below are kept as written; the two rows marked v1.2 supersede them.
 
-**Status:** **v1 FROZEN except the IEA cp band** (2026-10-12). The owner delegated decisions 1
+**Status:** **v1.3 ADOPTED as the definition of record 2026-10-27** (tip pitch reference, Dag-Sorensen
+tip correction on with Glauert tip off, OSU total polar; record and gate evidence in
+`validation-model-definition-v1-3-record.md`). The v1.2 text below is kept as written and is no longer of
+record: `config/model-definition-v1.2.yaml` is its frozen reproducible form (`checkModelDefinition.py --variant v1.2`).
+Earlier status: **v1 FROZEN except the IEA cp band** (2026-10-12). The owner delegated decisions 1
 and 2 to the agent's physical judgment and chose option (b) for decision 3. The IEA cp
 band is re-centred after the 3-rev Glauert control (job 11613092) and the P3.1 root fix.
 **Plan:** `odd/tasks/validation-master-plan.md` (P0.3) · **Date:** 2026-10-12
@@ -97,6 +101,28 @@ results. They are frozen except the IEA cp centre.
 | IEA | `abs(cp_ASM - cp_ALM) / cp_ALM` | <= 3 % | chord is only about 2.7 cells there, so the surface and the line resolve differently; the previous-platform +7.05 % is explained by P3.4 and the band stands |
 | Both | ASM+mesh against ALM | same band as the ASM of its pillar | the mesh is a different realisation of the same loading |
 
+### Acceptance criteria R3 (2026-10-30, supersedes the Phase VI rows above for new verdicts)
+
+The Phase VI rows above are criteria **R2** (P 10 %, T 15 %, c_n 15 % at r/R 0.30 and 10 % at 0.47-0.80, 0.95 reported only). R2 is frozen and stays
+reproducible: `summarizeBands.py --criteria r2` and `comparePhaseVI.py --criteria r2` give the earlier verdicts unchanged.
+The owner adopted **R3** on 2026-10-30; it is the default of both scripts.
+
+| Pillar | Quantity | R3 band |
+| --- | --- | --- |
+| Phase VI | `abs(%P)`, `abs(%T)` (and torque `Q` in the `within_band` column) | <= 10 % |
+| Phase VI | spanwise `c_n` at r/R 0.30, 0.47, 0.63, 0.80 **and 0.95** | within +-10 % of the experiment (35 bands per model over the five gate points) |
+
+Owner's reasons (S11, S12, verbatim): "si vamos a adoptar el 10%, y si la diferencia al 30% no la pasa, la documentamos y justificamos en
+dependencia de los resultados. Al 95% si hay que establecer un criterio ya que es el punto donde comienza a ser maximo el torque
+estructural y la deformacion tener las fuerzas arodinamicas ahi debe ser de ala precision, o por lo menos una precision aceptable y
+justificable" and "a modo general apretar la precision nos va a obligar a tener modelos mas presicos fisicamente".
+
+- r/R 0.95 is banded because the structural torque and the deformation peak there, so the aerodynamic loads must be accurate (or at least acceptable and justifiable) at that station.
+- The 0.30 station is **not exempted in code**. A 0.30 failure is documented and justified from the results. Known context for that justification: the experiment's 0.30
+  `c_n` carries a normalisation offset of about 8.7 % (the measured QNORM against 0.5 rho W^2), so part of a 0.30 miss is in the reference, not the model.
+- Tightening is deliberate: it requires physically more accurate models rather than retuned coefficients (S5 stays).
+- Stricter than R2 on thrust (15 -> 10 %) and at 0.30 (15 -> 10 %); the IEA rows are unchanged.
+
 ## Open items
 
 - **D&S asymptote on the IEA rotor (P0.4) -- measured, and it fails the proposed
@@ -133,7 +159,7 @@ cientifica?" Answer: not on Phase VI 7 m/s alone. The definition is declared rea
 
 | id | condition | pass rule | status |
 | --- | --- | --- | --- |
-| R1 | Numerical independence: mesh ladder at FIXED eps (`meshFactor = 2^level`, levels 0-2) and a time-step pair, on H 7 m/s, v1.2 | P, T and F'n at r/R 0.47-0.95 change < 2 % between the two finest levels and between the two time steps | queued: level 1 job 11618055, level 2 11618056, dt 0.0005 11618057; level 0 = `d1-pdrag` |
+| R1 | Numerical independence: mesh ladder at FIXED eps (`meshFactor = 2^level`, levels 0-2) and a time-step pair, on H 7 m/s, v1.2 | P, T and F'n at r/R 0.47-0.95 change < 2 % between the two finest levels and between the two time steps | DONE 2026-10-21 (`compareLadder.py`, H 7 m/s, revs 4-12, drift-free): dt 0.0005 vs `d1-pdrag` max 0.11 %; level 0 -> 1 max 1.23 % (P); level 1 -> 2 (`r2-v12-l2`, resumed run) max 0.42 % (P), T -0.001 %, F'n 0.47-0.95 within 0.18 %: PASS |
 | R2 | Attached-regime coverage on Sequence S, v1.2 frozen, no retuning: 5, 6, 7, 8 m/s | each speed inside the pre-registered bands (P 10 %, T 15 %, F'n/c_n bands as written, the 0.30 band judged per the owner's decision on the reference pressure) | ALM: 7 m/s 11618033, 5/6/8 m/s 11618058-60; ASM/ASM-mesh 7 m/s 11618034/35 (other speeds after ALM passes) |
 | R3 | IEA 15 MW pillar re-evaluated with v1.2 (Glauert) against OLAF/BEM at rated, polar Re issue (I14) resolved or bounded | cp inside the re-centred IEA band; spanwise loads reported | open |
 | R4 | Tip residual closed or bounded: the r/R 0.95 F'n deficit has an identified cause (P2.3 T4/T5) and its effect on the flapwise and edgewise root moments is quantified | either inside the 0.80 band or documented as a limit with its root-moment impact (currently flap -3.4 %, edge -0.3 %) | diagnosing: T5 job 11618046, T4 lag run (runs/lib-p23) |

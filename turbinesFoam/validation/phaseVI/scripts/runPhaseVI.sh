@@ -11,7 +11,7 @@
 #                 [--restart] [--rotational-augmentation on|off]
 #                 [--rotational-augmentation-model DuSelig|ChaviaropoulosHansen]
 #                 [--root-effects on|off] [--refine-level N] [--mesh-factor F]
-#                 [--nacelle on|off]
+#                 [--nacelle on|off] [--pitch-reference twist-zero|tip]
 #                 [--blade-dz DZ] [--end-effects-model Glauert|Shen|liftingLine]
 #                 [--velocity-sample-radius R] [--n-velocity-samples N]
 #                 [--run] [--submit]
@@ -54,6 +54,12 @@
 # --n-elements). Elements, and for asm-mesh the lofted STL staged into the run
 # directory, follow the resampled table; run.json records `blade_dz`. Rule:
 # DZ = min(0.05, h/2). Absent, the committed layout is used unchanged.
+# --pitch-reference twist-zero|tip (default tip) selects where the collective
+# pitch is measured. tip is Model Definition v1.3 (NREL/TP-500-29955 p.20: pitch at
+# the tip chord, tip mounting -pitch); twist-zero is v1.2 (pitch added to the report
+# twist, zero at 75 % span). Any other value exits 2. run.json records
+# `pitch_reference`. A plain render is the v1.3 record; v1.2 needs every knob passed
+# explicitly (scripts/slurm/v1-2-run.slurm).
 # --run-label WORD appends -WORD to the run id (`runs/<id>-WORD`) and records it
 # in run.json, so two render variants of the same (model, speed, mesh) live in
 # separate, independently restartable directories (the two-arm campaign uses it
@@ -111,6 +117,7 @@ polar=""
 refine_level=0
 mesh_factor=""
 blade_dz=""
+pitch_reference=tip
 nacelle=off
 delta_t=""
 end_revs=""
@@ -143,6 +150,7 @@ while [ $# -gt 0 ]; do
         --refine-level) refine_level="$2"; shift ;;
         --mesh-factor) mesh_factor="$2"; shift ;;
         --blade-dz) blade_dz="$2"; shift ;;
+        --pitch-reference) pitch_reference="$2"; shift ;;
         --nacelle) nacelle="$2"; shift ;;
         --delta-t) delta_t="$2"; shift ;;
         --end-revs) end_revs="$2"; shift ;;
@@ -287,6 +295,10 @@ case "$nacelle" in
     on|off) ;;
     *) echo "ERROR: --nacelle takes on or off" >&2; exit 2 ;;
 esac
+case "$pitch_reference" in
+    twist-zero|tip) ;;
+    *) echo "ERROR: --pitch-reference takes twist-zero or tip (got: $pitch_reference)" >&2; exit 2 ;;
+esac
 if [ -n "$blade_dz" ]; then
     if ! python3 -c 'import math, sys; v = float(sys.argv[1]); sys.exit(0 if v > 0 and math.isfinite(v) else 1)' "$blade_dz" 2>/dev/null; then
         echo "ERROR: --blade-dz must be a positive number" >&2; exit 2
@@ -423,6 +435,7 @@ fi
 if [ -n "$blade_dz" ]; then
     render_args+=(--blade-dz "$blade_dz")
 fi
+render_args+=(--pitch-reference "$pitch_reference")
 if [ -n "$end_effects_model" ]; then
     render_args+=(--end-effects-model "$end_effects_model")
 fi
@@ -518,10 +531,17 @@ staged_stl_sha256=""
 if [ "$model" = "asm-mesh" ]; then
     stl_src="$root/../../geometry/stl/phaseVI_blade.stl"
     meta="$root/../../geometry/metadata/phaseVI_blade.json"
-    if [ -n "$blade_dz" ]; then
+    # The sampler applies no element pitch, so the STL bakes the element chord angle of the
+    # pitch reference: the committed STL is the twist-zero (v1.2) orientation; any other
+    # case is lofted per run with the same pipeline (--dz also resamples the stations).
+    if [ -n "$blade_dz" ] || [ "$pitch_reference" != twist-zero ]; then
         eq_dir="$run_dir/.blade-equispaced"
-        if ! python3 "$root/tools/make_equispaced_blade.py" --dz "$blade_dz" --out-dir "$eq_dir" >/dev/null; then
-            echo "ERROR: failed to loft the equispaced blade (dz $blade_dz)" >&2
+        loft_args=(--pitch-reference "$pitch_reference" --out-dir "$eq_dir")
+        if [ -n "$blade_dz" ]; then
+            loft_args+=(--dz "$blade_dz")
+        fi
+        if ! python3 "$root/tools/make_equispaced_blade.py" "${loft_args[@]}" >/dev/null; then
+            echo "ERROR: failed to loft the blade surface (pitch reference $pitch_reference, dz ${blade_dz:-committed})" >&2
             exit 3
         fi
         stl_src="$eq_dir/phaseVI_blade.stl"
@@ -560,7 +580,7 @@ echo "Linked shared $mesh mesh (refinement level $refine_level) from $mesh_dir"
 
 python3 - "$run_dir" "$root" "$model" "$speed_token" "$mesh" "$domain" "$sequence" \
     "$stage0" "$solver" "$nchordwise" "$ranks" "$staged_stl_sha256" "$run_label" \
-    "$mesh_factor" "$refine_level" "$blade_dz" "$nacelle" <<'PY'
+    "$mesh_factor" "$refine_level" "$blade_dz" "$nacelle" "$pitch_reference" <<'PY'
 import datetime
 import hashlib
 import json
@@ -586,7 +606,8 @@ from pathlib import Path
     refine_level,
     blade_dz,
     nacelle,
-) = sys.argv[1:18]
+    pitch_reference,
+) = sys.argv[1:19]
 run_dir = Path(run_dir)
 root = Path(root)
 
@@ -625,6 +646,7 @@ payload = {
     "mesh_factor": effective_mesh_factor,
     "blade_dz": float(blade_dz) if blade_dz else None,
     "nacelle": nacelle,
+    "pitch_reference": pitch_reference,
     "ranks": int(ranks),
     "run_label": run_label or None,
     "stage0": stage0 == "1",
@@ -741,6 +763,9 @@ else
     fi
     if [ -n "$div_phi_u" ]; then
         suggestion="$suggestion --div-phi-u \"$div_phi_u\""
+    fi
+    if [ "$pitch_reference" != tip ]; then
+        suggestion="$suggestion --pitch-reference $pitch_reference"
     fi
     if [ -n "$polar" ]; then
         suggestion="$suggestion --polar $polar"

@@ -1,7 +1,11 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
-# A/B arm of v1.2. Run from phaseVI; VARIANT is required, LABEL defaults var-<variant>.
-# MODEL, SPEED, SEQUENCE required; REFINE_LEVEL, DELTA_T, END_REVS, POLAR as v1-2-run.slurm.
+# Registry arm composed on the frozen Model Definition v1.2 (every v1.2 knob, incl.
+# --pitch-reference twist-zero, is passed explicitly; the registry flags come last and
+# override). VARIANT=v1.3 renders the definition of record with no POLAR needed.
+# Run from phaseVI; VARIANT is required, LABEL defaults var-<variant>.
+# MODEL, SPEED, SEQUENCE required; REFINE_LEVEL, DELTA_T, END_REVS, POLAR as v1-2-run.slurm
+# (POLAR defaults to the v1.2 pressure polar; a registry --polar overrides it).
 # Preflight without allocation: VARIANT=ring-sampling sh scripts/slurm/variant-run.slurm --check
 # Then: sbatch --export=ALL,VARIANT=ring-sampling,MODEL=alm,SPEED=7,SEQUENCE=S scripts/slurm/variant-run.slurm
 # --check validates only the registry; never submits or prepares a case.
@@ -35,7 +39,9 @@ export FOAM_USER_LIBBIN=$WM_PROJECT_USER_DIR/platforms/$WM_OPTIONS/lib
 export LD_LIBRARY_PATH=$FOAM_USER_LIBBIN:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib:$WM_PROJECT_DIR/platforms/$WM_OPTIONS/lib/sys-openmpi:$LD_LIBRARY_PATH
 if [ -n "${LIB_DIR:-}" ]; then
     test -f "$LIB_DIR/libturbinesFoam.so" || { echo "missing $LIB_DIR/libturbinesFoam.so" >&2; exit 3; }
+    LIB_DIR=$(cd "$LIB_DIR" && pwd)
     export LD_LIBRARY_PATH=$LIB_DIR:$LD_LIBRARY_PATH
+    echo "Using run-local library $LIB_DIR"
 fi
 # Registry validation admits only known flags and scalar enum/numeric values.
 # Deliberately split token-per-line output, with pathname expansion disabled.
@@ -43,5 +49,5 @@ set -f
 set -- $flags
 exec scripts/runPhaseVI.sh -m "$MODEL" -u "$SPEED" -mesh coarse --sequence "$SEQUENCE" \
     --refine-level "$REFINE_LEVEL" --delta-t "$DELTA_T" --end-revs "$END_REVS" --ranks "$SLURM_NTASKS" \
-    --blade-dz 0.05 --polar "$POLAR" --tip-effects on --tip-correction off \
+    --blade-dz 0.05 --polar "$POLAR" --tip-effects on --tip-correction off --pitch-reference twist-zero \
     --root-effects on --rotational-augmentation off "$@" --run-label "$LABEL" --restart --run

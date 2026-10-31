@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import csv
 import json
+import shutil
 import math
 import re
 import sys
@@ -521,3 +522,108 @@ def test_drift_ignores_a_trailing_partial_revolution():
     result = compare.drift_flags(rows, 0.0, period)
     assert result["cp"]["per_revolution"] == pytest.approx([0.30, 0.30, 0.30])
     assert result["cp"]["flag"] is False
+
+
+def test_resumed_segments_are_merged_and_later_segment_wins(tmp_path):
+    """A resumed run writes postProcessing/<object>/<resume time>/; the reader
+    must join it to segment 0, the later segment replacing the overlap."""
+    base = tmp_path / "postProcessing" / "turbines"
+    for name, times in (("0", [0.1, 0.2, 0.3]), ("0.2", [0.2, 0.3, 0.4])):
+        (base / name).mkdir(parents=True)
+        with (base / name / "turbine.csv").open("w", encoding="utf-8") as out:
+            out.write("time,value\n")
+            for t in times:
+                out.write(f"{t},{1.0 if name == '0' else 2.0}\n")
+    rows = compare.read_rows_resumed(base / "0" / "turbine.csv")
+    assert [r["time"] for r in rows] == [0.1, 0.2, 0.3, 0.4]
+    assert [r["value"] for r in rows] == [1.0, 2.0, 2.0, 2.0]
+
+
+def test_unresumed_run_reads_segment_zero_unchanged(tmp_path):
+    run = write_run(tmp_path)
+    path = run / compare.TURBINE_CSV
+    assert compare.read_rows_resumed(path) == compare.read_rows(path)
+
+
+def _compare_metrics(tmp_path, **runs):
+    args = []
+    for name, run in runs.items():
+        args += [f"--{name.replace('_', '-')}-dir", str(run)]
+    out = tmp_path / "out"
+    rc = compare.main(args + ["--out", str(out), "--allow-short-window", "--revolutions", "0", "1"])
+    assert rc == compare.EXIT_OK
+    return json.loads((out / "metrics.json").read_text(encoding="utf-8")), (out / "report.txt").read_text(encoding="utf-8")
+
+
+def test_asm_mesh_frame_is_stated_chord_when_element_csvs_exist(tmp_path):
+    """T4/B3: the ASM-mesh report no longer claims its rows are off the experiment's frame."""
+    metrics, report = _compare_metrics(tmp_path, asm_mesh=write_run(tmp_path / "m", surface_stations=5))
+    assert metrics["models"]["asm-mesh"]["metrics"]["spanwise_frame"] == "chord"
+    text = "\n".join(metrics["limitations"])
+    assert "NOT on the experiment's frame" not in text
+    assert compare.ASM_MESH_CHORD_LIMITATION in metrics["limitations"]
+    assert compare.ASM_MESH_CHORD_LIMITATION in report
+    assert "rebuilt from the element CSVs" in metrics["definitions"]["surface_conversion"]
+
+
+def test_asm_mesh_without_element_csvs_declares_the_plane_fallback(tmp_path):
+    run = write_run(tmp_path / "m", surface_stations=5)
+    shutil.rmtree(run / compare.ELEMENT_DIR)
+    metrics, report = _compare_metrics(tmp_path, asm_mesh=run)
+    assert metrics["models"]["asm-mesh"]["metrics"]["spanwise_frame"] == "plane-fallback"
+    assert compare.ASM_MESH_PLANE_FALLBACK_LIMITATION in metrics["limitations"]
+    assert compare.ASM_MESH_PLANE_FALLBACK_LIMITATION in report
+    values = metrics["models"]["asm-mesh"]["spanwise"]["0.30"]
+    assert values[0] == pytest.approx(values[2]) and values[1] == pytest.approx(values[3])
+
+
+def test_alm_asm_only_report_keeps_the_delivered_limitations(tmp_path):
+    metrics, report = _compare_metrics(
+        tmp_path, alm=write_run(tmp_path / "a"), asm=write_run(tmp_path / "s")
+    )
+    assert metrics["limitations"] == compare.LIMITATIONS
+    assert "spanwise_frame" not in metrics["models"]["alm"]["metrics"]
+    assert "surface_conversion" not in metrics["definitions"]
+
+
+def _write_comparison_csvs(tmp_path, criteria=None):
+    out = tmp_path / "csv"
+    out.mkdir()
+    kwargs = {} if criteria is None else {"criteria": criteria}
+    sim = {"power_kw": 108.0, "torque_nm": 91.0, "thrust_n": 112.0}
+    results = {"alm": {"metrics": sim, "spanwise": {
+        f"{s:.2f}": (1.12, 0.5) for s in compare.STATIONS}}}
+    experiment = {"rotpow_kw": "100", "lsstqcor_nm": "100", "eaeroth_n": "100"}
+    compare.write_turbine_comparison(out / "t.csv", results, experiment, "blade", **kwargs)
+    spanwise = {s: {"cn": 1.0, "ct": 0.5, "cm": 0.0} for s in compare.STATIONS}
+    compare.write_spanwise_comparison(out / "s.csv", results, spanwise, **kwargs)
+    turbine = {r["quantity"]: r["within_band"] for r in csv.DictReader((out / "t.csv").open())}
+    stations = [r["within_band"] for r in csv.DictReader((out / "s.csv").open())]
+    return turbine, stations
+
+
+def test_r3_is_the_default_within_band_rule(tmp_path):
+    turbine, stations = _write_comparison_csvs(tmp_path)
+    # 8 % P, -9 % Q pass; +12 % T fails; c_n +12 % fails at every station
+    assert turbine == {"power": "yes", "torque": "yes", "thrust": "no"}
+    assert stations == ["no"] * len(compare.STATIONS)
+
+
+def test_r2_within_band_rule_is_the_legacy_one(tmp_path):
+    turbine, stations = _write_comparison_csvs(tmp_path, "r2")
+    # R2: turbine +-15 %; spanwise max(0.15, 20 %) absolute: c_n +0.12 passes
+    assert turbine == {"power": "yes", "torque": "yes", "thrust": "yes"}
+    assert stations == ["yes"] * len(compare.STATIONS)
+
+
+def test_report_bands_line_names_the_selected_criteria(tmp_path):
+    run = write_run(tmp_path / "a")
+    for flag, expected in ((None, compare.BANDS_LINE["r3"]), ("r2", compare.BANDS_LINE["r2"])):
+        out = tmp_path / f"out-{flag}"
+        extra = [] if flag is None else ["--criteria", flag]
+        rc = compare.main(["--run-dir", str(run), "--out", str(out), "--allow-short-window",
+                           "--revolutions", "0", "1", *extra])
+        assert rc == compare.EXIT_OK
+        assert expected in (out / "report.txt").read_text(encoding="utf-8").splitlines()
+    assert compare.BANDS_LINE["r2"] == "Bands: turbine power/torque/thrust +-15 %; spanwise max(0.15, 20 %)."
+    assert "10 %" in compare.BANDS_LINE["r3"] and "0.95" in compare.BANDS_LINE["r3"]

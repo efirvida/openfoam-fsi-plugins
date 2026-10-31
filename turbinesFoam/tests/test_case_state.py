@@ -187,3 +187,66 @@ def test_cli_reports_a_missing_run_without_a_traceback(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "Traceback" not in result.stderr
+
+
+def _write_segment(case: Path, segment: str, rows: list[tuple[float, float]]) -> None:
+    """Write a resume segment ``turbines/<segment>/turbine.csv`` of (time, cp) rows."""
+    source = case / "postProcessing" / "turbines" / segment / "turbine.csv"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(
+        "time,cp\n" + "".join(f"{time:.3f},{cp:.4f}\n" for time, cp in rows)
+    )
+
+
+def test_resume_segments_are_joined_and_later_rows_replace_overlap(tmp_path: Path) -> None:
+    run = tmp_path / "alm-U5-coarse-seqS-v12"
+    _write_segment(run, "0", [(0.000, 0.30), (0.001, 0.31), (0.002, 0.32), (0.003, 0.33)])
+    # resume-run.slurm restarts from the last written time, so the new segment
+    # repeats rows the old one already had; the later segment wins.
+    _write_segment(run, "0.002", [(0.002, 0.42), (0.003, 0.43), (0.004, 0.44)])
+
+    state = case_state.inspect_run(run, mean_last=3, rpm=60.0)
+
+    assert state["rows"] == 5
+    assert state["t_first"] == pytest.approx(0.000)
+    assert state["t_last"] == pytest.approx(0.004)
+    assert state["revolutions"] == pytest.approx(0.004)
+    assert state["means"]["cp"] == pytest.approx((0.42 + 0.43 + 0.44) / 3)
+    assert state["source"] == "turbines/0/turbine.csv"
+    assert state["segments"] == ["turbines/0/turbine.csv", "turbines/0.002/turbine.csv"]
+
+
+def test_resume_segments_follow_numeric_not_lexicographic_order(tmp_path: Path) -> None:
+    run = tmp_path / "alm-U5-coarse-seqS-v12"
+    _write_segment(run, "0", [(0.0, 0.1), (5.0, 0.2)])
+    _write_segment(run, "9.5", [(9.5, 0.3), (10.0, 0.4)])
+    _write_segment(run, "10.5", [(10.5, 0.5), (11.0, 0.6)])
+
+    state = case_state.inspect_run(run)
+
+    assert state["rows"] == 6
+    assert state["t_last"] == pytest.approx(11.0)
+    assert state["means"]["cp"] == pytest.approx(0.6)
+    assert [Path(name).parent.name for name in state["segments"]] == ["0", "9.5", "10.5"]
+
+
+def test_single_segment_run_reports_one_segment(case: Path) -> None:
+    state = case_state.inspect_run(case)
+
+    assert state["rows"] == 5
+    assert state["segments"] == ["turbines/0/turbine.csv"]
+
+
+def test_text_report_names_the_resume_segments(tmp_path: Path) -> None:
+    run = tmp_path / "alm-U5-coarse-seqS-v12"
+    _write_segment(run, "0", [(0.000, 0.30), (0.001, 0.31)])
+    _write_segment(run, "0.001", [(0.001, 0.41), (0.002, 0.42)])
+
+    result = subprocess.run(
+        [sys.executable, str(TOOL), str(run)], capture_output=True, text=True, check=False
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+    assert "alm-U5-coarse-seqS-v12  turbines/0/turbine.csv + resume 0.001\n" in result.stdout
+    assert "rows=3  t=[0, 0.002]" in result.stdout

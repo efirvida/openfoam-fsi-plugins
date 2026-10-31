@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# One-blade axialFlowTurbineALSource with the Dag & Sorensen tip correction
+# (epsilon 0: the width is the element projection epsilon) and its debug dump.
+#   $1: -asm (actuatorSurfaceElement) | -alm (actuatorLineElement)
+# The test runs on a throwaway copy of the case.
+
+cd ${0%/*} || exit 1    # run from this directory
+
+# Source tutorial run functions
+. $WM_PROJECT_DIR/bin/tools/RunFunctions
+
+case "$1" in
+    -asm) cp system/fvOptions.asm system/fvOptions ;;
+    -alm) cp system/fvOptions.alm system/fvOptions ;;
+    *) echo "usage: $0 -asm|-alm" >&2; exit 1 ;;
+esac
+
+cp -rf 0.org 0
+
+runApplication blockMesh
+runApplication topoSet
+runApplication pimpleFoam
+
+# ----------------------------------------------------------------- end-of-file

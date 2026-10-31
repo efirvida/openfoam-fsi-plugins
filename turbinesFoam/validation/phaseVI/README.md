@@ -39,8 +39,8 @@ tools/stage_blade_stl.py  sha256-gated STL staging for asm-mesh run dirs
 case/                     committed generated skeleton (ALM/ASM/ASM-MESH twins)
 data/                     geometry, polars, experiment, s809 + PROVENANCE per dir
 scripts/                  runners, mesh/stage tooling, comparison
-  checkModelDefinition.py effective-value v1.2 conformance gate
-  summarizeBands.py      pre-registered bands; refuses non-conforming evidence
+  checkModelDefinition.py effective-value v1.3 (record) conformance gate; --variant v1.2 for the frozen base
+  summarizeBands.py      acceptance criteria (R3 default, --criteria r2); refuses non-conforming evidence
   slurm/stage0.slurm      authorized development-queue job
   slurm/production.slurm  prepared-only long-queue array (do not submit)
   slurm/stage3.slurm      prepared-only IDDES + nChordwise array (do not submit)
@@ -130,6 +130,7 @@ scripts/runPhaseVI.sh -m alm|asm|asm-mesh -u <speed> [-mesh coarse|fine|ultra]
                       [--domain long|squat] [-s H|S] [--solver urans|iddes]
                       [--nchordwise N] [--ranks N] [--run-label WORD]
                       [--stage0] [--restart] [--refine-level N] [--mesh-factor F] [--blade-dz DZ]
+                      [--pitch-reference twist-zero|tip]
                       [--rotational-augmentation on|off] [--root-effects on|off]
                       [--rotational-augmentation-model DuSelig|ChaviaropoulosHansen]
                       [--run] [--submit]
@@ -163,6 +164,19 @@ commit, OpenFOAM version, config sha256, variant, solver, `n_chordwise`,
   `nElements` becomes one element per table segment and, for `asm-mesh`, the staged STL is lofted from
   the same table (`tools/make_equispaced_blade.py`). Rule: `DZ = min(0.05, h/2)`; see
   `scripts/scanEquispacedDz.py`. Recorded as `blade_dz` in `run.json`.
+- `--pitch-reference twist-zero|tip` (default `tip`, Model Definition v1.3; any other value exits 2)
+  selects where the 3° collective pitch is measured. `twist-zero` is Model Definition v1.2: the pitch is added to the
+  report twist, which is zero at 75 % span, so the tip mounts at −1.185°. `tip` follows
+  NREL/TP-500-29955 p.20, "blade pitch is defined as the angle between the blade tip chord line and
+  the plane of the turbine disk", with Table A-1 note 2, "Twist convention is positive towards
+  feather. Values listed are relative to zero twist at the 3.772-m station [75% span on a 5.029-m
+  blade]": mounting `= -(twist - twist_tip + pitch_deg)`, `twist_tip` read from the blade-table row at
+  the rotor radius (5.029 m, −1.815°), so the tip mounts at exactly −3.0° and every other station
+  moves by −1.815°. The equispaced `--blade-dz` layout uses the same original-table tip twist. One
+  helper (`tools/element_data.py`, `effective_pitch_deg`) feeds the element data and the
+  Chaviaropoulos–Hansen `pitchOffset` (`−(3 + 1.815)` under `tip`, so its theta excludes the collective
+  pitch). Recorded as `pitch_reference` in `run.json`. A plain render is the v1.3 record; v1.2 is reproduced byte-identical
+  only with every v1.2 knob explicit (`scripts/slurm/v1-2-run.slurm`: `--pitch-reference twist-zero --polar S809_OSU_Re1M_pressure.dat --tip-effects on --tip-correction off`).
 - `--mesh-factor F` (positive number, exit 2 otherwise) overrides
   `turbine.gaussian_mesh_factor` (1.0) so the ALM / no-mesh-ASM projection width
   `eps = 2*cbrt(V)*meshFactor` varies per run **without changing the mesh**: the
@@ -188,8 +202,13 @@ commit, OpenFOAM version, config sha256, variant, solver, `n_chordwise`,
   refuses to carry `--solver iddes`, `--nchordwise` or `--ranks` (Stage 3 has
   its own prepared arrays).
 - `-m asm-mesh` selects the mesh-backed surface twin (`fvOptions.ASM-MESH`),
-  produces the run id `asm-mesh-U<speed>-<mesh>`, and stages the committed
-  `geometry/stl/phaseVI_blade.stl` into `constant/triSurface/` through
+  produces the run id `asm-mesh-U<speed>-<mesh>`, and stages the blade STL into
+  `constant/triSurface/`. The sampler applies no element pitch, so the STL bakes the element chord
+  angle of the pitch reference: `--pitch-reference twist-zero` (v1.2) without `--blade-dz` stages the
+  committed `geometry/stl/phaseVI_blade.stl`; `tip` (v1.3) and any `--blade-dz` loft the surface per
+  run (`tools/make_equispaced_blade.py --pitch-reference ... [--dz ...]`, section angle
+  `twist - twist_reference + pitch`, i.e. the `elementData` pitch column;
+  `tests/test_blade_pitch_reference.py` measures it within 0.25 deg). The staging goes through
   `tools/stage_blade_stl.py` before the mesh link (sha256-checked against the
   geometry metadata; a missing source or a hash mismatch aborts with exit 3 and
   leaves no stale copy). The staged hash is recorded in `run.json` as
@@ -307,7 +326,7 @@ The per-`addSup` instrumentation added by W4 (`logDistribution`, default
 
 ```
 Blade surface distribution 'turbine.blade1.surface': nodes <N>, candidates <C>,
-mean <C/N>, max <max>, seconds <s>
+mean <C/N>, max <max>, seconds <s>, refresh search <s>, refresh reduce <s>
 ```
 
 and appends the matching row to
@@ -315,8 +334,11 @@ and appends the matching row to
 (`time,nodes,candidates,mean_candidates,max_candidates,seconds`). `candidates`
 is the number of candidate cell entries visited in the call — the bounded-query
 evidence, far below the naive `nodes × N_local cells` scan — and `seconds` is
-the `addSup` wall time. The counters are observational only: the distributed
-load is unchanged.
+the `addSup` wall time. `refresh search`/`refresh reduce` are the wall seconds
+of the per-node cell search (`refreshNodeH()`, run on each rotation) since the
+previous line, on the slowest rank, and of its list reduction (mostly the other
+ranks waiting for that one); they are printed only, not written to the CSV.
+The counters are observational only: the distributed load is unchanged.
 
 **Gate decision procedure** (recorded before any D/48 preparation):
 
@@ -529,18 +551,33 @@ failure remains; the primary criterion is still reported unweakened.
 
 ## Model variants (A/B bench)
 
-`config/model-variants.yaml` registers diagnostic arms as **v1.2 plus renderer
-flag overrides**. No coefficient is fitted. Non-baseline variants are never of
-record for v1.2; `summarizeBands.py` keeps its unchanged baseline-only gate.
+**Definition of record: Model Definition v1.3** (owner decision 2026-10-26 freeze,
+2026-10-27 adoption; `config/model-definition.yaml`, record and gate evidence in
+`odd/tasks/validation-model-definition-v1-3-record.md`): tip pitch reference, Dağ & Sørensen tip
+correction on with the Glauert tip factor off (Glauert root kept), OSU total polar. It is the renderer
+default, so a plain `runPhaseVI.sh` render is the record. v1.2 results are no longer of record; v1.2
+stays reproducible from the frozen `config/model-definition-v1.2.yaml`.
+
+`config/model-variants.yaml` registers diagnostic arms as **v1.2 (the frozen base, `base:`) plus
+renderer flag overrides**. No coefficient is fitted. Non-record variants are never of record;
+`summarizeBands.py` follows the record through the default definition. Launchers compose on the
+v1.2 base (`scripts/slurm/variant-run.slurm` passes every v1.2 knob before the registry flags), so
+every existing arm renders exactly as before the adoption.
 
 | Variant | Exact renderer overrides | Reference / interpretation |
 |---|---|---|
-| `v1.2` | none | Model Definition v1.2 |
+| `v1.2` | none | Frozen Model Definition v1.2 (the base) |
+| `v1.3` | `--pitch-reference tip --tip-correction on --tip-effects off --polar S809_OSU_Re1M_total.dat` | Model Definition v1.3, the record, reproduced on the v1.2 base; equals `tip-pitch-dag-sorensen` plus the OSU total polar. No `POLAR` environment needed |
 | `shen-tip` | `--end-effects-model Shen` | I10, Shen, Mikkelsen, Sorensen & Bak, *Wind Energy* 8:457–475 (2005); explicit `ShenCoeffs c1=0.125, c2=21` |
 | `dag-sorensen-tip` | `--tip-correction on` | Dağ & Sørensen (2020), existing prescribed helical wake; other settings unchanged |
 | `ring-sampling` | `--velocity-sample-radius 3.3 --n-velocity-samples 16` | v1.1 freeze: 16 equally spaced ring samples, radius **3.3 times local projection epsilon**, not 3.3 metres |
 | `du-selig-ra` | `--rotational-augmentation on` | Du & Selig (1998); existing `DuSelig`, `a=b=d=1` |
 | `ch-ra` | `--rotational-augmentation on --rotational-augmentation-model ChaviaropoulosHansen` | I7, original CH baseline `a=2.2, h=1, n=4`; Burgos Tafur et al. (2020), pp. 307–308 Eqs. (1)–(4); not yet A/B tested |
+| `tip-pitch` | `--pitch-reference tip` | NREL/TP-500-29955 p.20 ("blade pitch is defined as the angle between the blade tip chord line and the plane of the turbine disk") and Table A-1 note 2 ("Twist convention is positive towards feather. Values listed are relative to zero twist at the 3.772-m station [75% span on a 5.029-m blade]"); tip mounting −3.0° instead of −1.185°. Diagnostic arm, never of record |
+| `tip-pitch-dag-sorensen` | `--pitch-reference tip --tip-correction on --tip-effects off` | Dağ & Sørensen (2020), Meyer Forsting et al. (2019, 2020): the velocity-side correction replaces the cl-side Glauert tip factor (root/hub loss kept), where `dag-sorensen-tip` stacks both. Diagnostic arm, never of record |
+| `tip-pitch-no-tip` | `--pitch-reference tip --tip-effects off` | Jha et al., *J. Sol. Energy Eng.* 136:031003 (2014) p.6: "there should be no need for using the Prandtl correction within the ALM framework"; no tip correction at all, root kept. Diagnostic arm, never of record |
+| `tip-pitch-du-selig-ra` | `--pitch-reference tip --rotational-augmentation on` | `tip-pitch` plus `du-selig-ra` (`a=b=d=1`). Diagnostic arm, never of record |
+| `tip-pitch-ch-ra` | `--pitch-reference tip --rotational-augmentation on --rotational-augmentation-model ChaviaropoulosHansen` | `tip-pitch` plus `ch-ra` (`a=2.2, h=1, n=4`; `pitchOffset` −4.815 from the tip reference). Diagnostic arm, never of record |
 
 ### Chaviaropoulos–Hansen rotational augmentation (I7)
 
@@ -625,6 +662,15 @@ python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-seqS-var-ring-samplin
 python3 scripts/summarizeVariants.py results/cmp-baseline results/cmp-ring
 ```
 
+The DUT/Delft Re 1e6 table (TP-500-29955 Table A-8) is built as
+`data/polars/S809_DUT_Re1M_total.dat` **for the P4 diagnostic arm only**
+(`POLAR=S809_DUT_Re1M_total.dat` with `variant-run.slurm`); it is never of record.
+It has `Cd = Cdw`, the same CSU Table A-3 extension and flat-plate closure as the OSU
+total table, so only the source data differ inside the DUT range (-1.04..20.16 deg).
+Below -1.04 deg and between 20.16 deg and the first extension row it carries the
+mirrored/plain CSU rows (a single CSU row at 20.2 deg directly follows the last DUT
+sample); the OSU table steps to the extension at its own range edges, without blending.
+
 Unknown variants are refused before module loading or case preparation. The
 launcher accepts the v1-2-run environment (`MODEL`, `SPEED`, `SEQUENCE`, optional
 `REFINE_LEVEL`, `DELTA_T`, `END_REVS`, `POLAR`, `LABEL`, `LIB_DIR`), defaulting `LABEL` to
@@ -637,7 +683,7 @@ refusal on written state remains: use a fresh label for a new arm.
 
 The summary prints one table per sequence/speed, with P, T and five c_n errors
 in percent versus experiment; parentheses give the change from the same model's
-v1.2 row in **percentage points**. Missing values or missing/ambiguous baselines
+baseline row in **percentage points** (default the record, v1.3; `--baseline v1.2` picks another registry entry). Missing values or missing/ambiguous baselines
 show `n/a`. Drifting baselines are not used as references. DRIFT and own-variant
 NON-CONFORMING rows are marked; nonconformance exits 1. Identity comes from
 `run.json`'s optional `variant`, the default `var-<variant>` label, or unique
@@ -647,9 +693,24 @@ arm must still be identifiable. No checker or summary writes run data.
 ## Definition conformance
 
 ```sh
-python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-d1-pdrag
-python3 scripts/summarizeBands.py results/U7-H
+python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-seqS-var-tip-pitch-dag-sorensen-total   # CONFORMS v1.3
+python3 scripts/checkModelDefinition.py --variant v1.2 runs/alm-U7-coarse-seqS-v12                    # CONFORMS v1.2
+python3 scripts/summarizeBands.py results/U7-H                  # R3: P, T, c_n all within 10 % (r/R 0.30-0.95)
+python3 scripts/summarizeBands.py results/U7-H --criteria r2    # frozen R2 verdicts (P 10, T 15, c_n 15/10, 0.95 report)
 ```
+
+With no `--variant` the checker judges against the record (`CONFORMS v1.3` / `NON-CONFORMING v1.3: ...`).
+`--variant NAME` composes a registry entry on the frozen v1.2 base, so `--variant v1.2` reproduces the
+pre-adoption verdicts and a v1.2 run checked against the record reports its tip mounting, `tipEffects`,
+`tipCorrection` and polar mismatches. `--polar FILE.dat` is a registry flag too (a bare name of a
+file in `data/polars/`, the `runPhaseVI.sh --polar` rule; invalid → exit 2).
+
+A `--variant tip-pitch` check certifies the pitch reference from the rendered tip mounting
+(last `blade1.elementData` row: −3 for `tip`, −1.185 for the v1.2 `twist-zero` reference, twist
+from the blade table), so a tip-pitch case is reported `NON-CONFORMING v1.3` and conforms only to
+its own variant. The four `tip-pitch-*` arms are certified from the rendered case the same
+way: tip mounting, `GlauertCoeffs.tipEffects`, `tipCorrection.active` and the augmentation
+switch/model/constants must all match the arm (`--tip-effects` is a registry flag).
 
 ### Numerical ladder (R1)
 
@@ -679,7 +740,7 @@ python3 scripts/quantifyUncertainty.py --run-dir runs/alm-U5-coarse-seqS-v12 --s
 The run uses the nominal wind speed while the tunnel's measured speed (`VTUN`,
 e.g. 7.049 m/s in `h0700000`) differs slightly; rpm and rho are already the measured
 values. The report adds a `VTUN correction` block: the simulated value scaled by the
-BEM response at fixed rpm to U x VTUN/U_nominal, beside the raw difference and judged
+AeroDyn BEM response at fixed rpm to U x VTUN/U_nominal, beside the raw difference and judged
 against the same combined uncertainty. The raw verdict stays the comparison of record.
 
 `summarizeBands.py` marks a comparison whose window `comparePhaseVI.py` recorded as
@@ -694,13 +755,17 @@ searched path when absent; a single file falls back to the in-file
 autocorrelation standard error of the per-revolution means), simulation
 averaging window (definition window against the windows starting 2 and 4
 revolutions later), and BEM-estimated blockage sensitivity for inflow +1 %/+2 %
-(`bemPhaseVI.py` at the measured rpm; one-sided bound; U^3/U^2 bound if the BEM
-is unusable). The verdict says "agrees within the combined numerical and
+(the OpenFAST AeroDyn BEM, `buildAeroDynCase.py --wake bem --inflow-scale` and
+`aerodyn_driver`, at fixed rpm; one-sided bound; U^3/U^2 bound if OpenFAST is
+unavailable). The OpenFAST install is `--openfast-env`, else `$OPENFAST_ENV`, else the
+double-precision build `/scratch/leahk/eduardo.donestevez/openfast-5.0.0-dp` (`openfast/build_openfast_dp.sh`); rotor speed and density are those of
+the measured point (`tsr U / R`, experiment row), the case is built in a scratch directory
+and removed. The repository has no other BEM (the in-house one was removed 2026-10-27). The verdict says "agrees within the combined numerical and
 experimental uncertainty" only inside the quadrature sum (`--coverage k`,
 default 1). Exit **1** for a non-conforming run unless `--allow-nonconforming`
 (output then tagged `[not of record]`), **2** for missing input.
 
-`config/model-definition.yaml` records v1.2 expected effective values and cited
+`config/model-definition.yaml` records v1.3 (of record) expected effective values and cited
 solver defaults. An absent key uses its solver default; absence without a known
 default is a mismatch. Point sampling (`velocitySampleRadius 0`) is frozen;
 `nVelocitySamples` is inert and not checked. The checker accepts `--definition PATH`
@@ -762,6 +827,69 @@ The S7 force-times-arm output is identical between reference directories; the
 frame residuals differ because archive `cn`/`ct` retain more digits than the
 workbook's four decimals (including `R_exp` 0.870 versus 0.871 at r/R 0.63).
 
+`tw_sim`/`dTw` come from the exact per-row inverse `phi = atan2(cl*ct + cd*cn, cl*cn - cd*ct)`
+averaged over the window with `phi - alpha_deg`, so at fixed geometry the twist does not depend on
+the polar (the old inversion of window averages did, by up to `2*atan(cd/cl)` in stall). `R`, `dR`
+and the force table are unchanged.
+
+### Resumed diagnostic windows and torque closure
+
+`compareElementStates.py`, `compareSectionLoads.py`, `compareInflowAngle.py`
+and `reconcileTorqueIntegral.py` join numeric resume segments via
+`comparePhaseVI` (later segments replace overlap, not duplicate it). Bounds are
+inclusive; rows after the requested end are excluded. Select `--speed` and
+`--sequence` explicitly for non-default operating points: TSR comes from
+`config/case.yaml`, not the U7 constant.
+
+```sh
+# U5/U6 Sequence S late window: use 16..24, not just segment 0.
+python3 scripts/compareElementStates.py runs/ALM-U5 --speed 5 --sequence S \
+    --discard-revolutions 16 --end-revolutions 24 --columns cl c_ref_t
+python3 scripts/reconcileTorqueIntegral.py --alm-dir runs/ALM-U5 --speed 5 \
+    --sequence S --revolutions 16 24
+# U7/U8: --revolutions 4 12; section and force-angle tools take the same bounds.
+```
+
+Element states retain their start-only API/default (no end unless supplied),
+and accept `--tsr` to override configuration explicitly. Section, force-angle
+and torque tools default to the configured rotor window (currently 4..12);
+`--revolutions DISCARD END` overrides with integer-truncated bounds, matching
+`comparePhaseVI`. Torque also retains `--discard-revs` and adds `--end-revs`
+(fractional start/end overrides preserved; do not mix with `--revolutions`).
+The torque default now uses the configured discard, not the former 1 revolution.
+Short windows / cp-cd drift refuse with exit 2; TSR mismatch exits 3;
+`--allow-drift` warns and continues for drift only.
+
+Torque closure uses the **written integrated element forces** `fx/fy/fz`:
+`mean(((position-origin) cross force) dot axis)`, then sums elements. This
+preserves position-force covariance. `actuatorLineElement::tangentialRefForce`
+writes `f_ref_t = 0.5 * chord * c_ref_t * |Urel|^2`, a **per-span kinematic
+force**, not an integrated force. Neither guessed neighbour widths nor a
+mean-coefficient times mean-speed-squared integral is used. Origin/axis and
+expected element counts are read from rendered `system/fvOptions` with the
+existing dictionary parser (`--origin` / `--axis` override the vectors).
+Absent columns, empty/mismatched rotor-element samples, missing terminal
+elements or surface elements fail explicitly (exit 1).
+
+The normalization is `0.5*pi*R^3*Uinf^2`, with configured R and selected speed;
+the rotor reference is mean **ct**, not a hardcoded `cp/TSR`. Forces/torques
+are kinematic N/rho and N.m/rho for incompressible Phase VI: no physical density
+multiplier. Each printed radial contribution is in N.m/rho and the bands sum
+to the scaled element torque (up to print rounding). The output reports the
+observed element/rotor ratio without claiming agreement. Blade files found and
+configured blade count are explicit: mean over written blades times N assumes
+axisymmetric whole-revolution averaging when blade2 is not written. It is not
+an independently measured two-blade closure. The straight radial ALM blade has
+zero shaft projection of section pitching moment; rotor torque may also include
+hub moments. This diagnostic is not for swept blades, surface-node moments or
+compressible forces, and does not establish the cause of an aerodynamic deficit.
+
+The force-angle table retains `atan2(mean tangential, mean axial)` and unchanged
+U7 numerical columns, but labels it a **force-direction proxy**, not independent
+flow/induction evidence. Drag affects that direction. `phi_geom` uses the
+selected sequence/speed TSR; no experimental alpha or velocity components are
+inferred from force pairs.
+
 `diagnoseElementResiduals.py` and `compareInflowAngle.py` also accept
 `--experiment-dir`, with their previous defaults unchanged. The latter reads
 `cth`/`ctq`: it compares a **force-direction proxy, not measured probe inflow**.
@@ -773,8 +901,12 @@ not part of this extraction. Details: [archive provenance](data/experiment/uae6-
 
 
 For the mesh-backed `asm-mesh` model the surface station table carries only the
-plane decomposition, so its chord columns are a declared open defect while its
-plane columns are exact.
+plane decomposition, so its chord columns are rebuilt per row from the
+`cl,cd,alpha_deg` of the element CSVs the run also writes (the station force is
+the element force by construction), exactly as for ALM/ASM; its plane columns come
+from the station table. `metrics.json` records `spanwise_frame` (`chord`, or
+`plane-fallback` for a run without element CSVs, whose chord slots then repeat the
+plane pair and are declared off the experiment's frame in the limitations).
 
 With `--asm-mesh-dir` the comparison is **three-way**: it additionally reads the
 window-filtered `postProcessing/bladeSurface/*.csv` station table (the
@@ -804,10 +936,15 @@ rho     = WTBARO / (287.058 * (WTATEMP + 273.15))   from the measured row
 EAEROTH pressure integration. `--rho auto|<kg/m³>` selects the measured-row ideal-gas density (default) or a
 user value.
 
-Bands (fixed in code and reported with every result): turbine
-power/torque/thrust ± 15 %; spanwise max(0.15, 20 % of measured). Claims are
+Acceptance criteria (selected with `--criteria`, reported on the `Bands` line of `report.txt` and in the
+`within_band` columns). **R3** (default, adopted 2026-10-30): turbine power/torque/thrust ± 10 %; spanwise
+`c_n` ± 10 % at r/R 0.30, 0.47, 0.63, 0.80 and 0.95 (the 0.95 station is banded because the structural torque and
+deformation peak there). A 0.30 failure is not exempted in code; it is documented from the results (the experiment's
+0.30 `c_n` carries a known normalisation offset of about 8.7 %, QNORM against 0.5 ρ W²). **R2** (frozen,
+`--criteria r2`): turbine ± 15 %; spanwise max(0.15, 20 % of measured), which is the earlier behaviour unchanged.
+Under R3 the spanwise `within_band` tests `c_n` only and `within_band_plane` tests CTH and CTQ at ± 10 %. Claims are
 limited to trend, stall onset and agreement within these bands; no sub-5 %
-agreement is promised a priori.
+agreement is promised a priori. See `odd/tasks/validation-model-definition.md`.
 
 Spanwise CM is **excluded**: the element CSV has no `cm` column (follow-up
 change adds `momentCoefficient_` to the element writer). The measured CM
@@ -822,6 +959,20 @@ The **sign gate** (`--sign-gate`, run on the Stage 0 D/32 7 m/s runs) requires
 the run TSR to match the configured value, `cp`/`cd` > 0, and positive
 `c_ref_n`/`c_ref_t` at all five stations. Production submission refuses without
 a passing `results/U7-H/sign_gate.json`.
+
+### Code-to-code arbiter: OpenFAST AeroDyn (BEM and OLAF)
+
+The v1.3 ALM is arbitrated by OpenFAST v5.0.0 on the same rigid, tower-less rotor with the same
+blade table (tip pitch reference), OSU total polar, rotor speed and density per measured point,
+in two wake models: AeroDyn BEMT and OLAF (free vortex wake). Pipeline, v5 option choices with
+reasons, template provenance and the 10-case run: [`openfast/README.md`](openfast/README.md);
+`scripts/buildAeroDynCase.py`, `scripts/compareAeroDyn.py`, `scripts/slurm/aerodyn.slurm`;
+tests in `tests/test_aerodyn_case.py`. Verification of this BEM against the OpenFAST r-test and against every
+Phase VI table on disk (S curve, pitch sweep, fixed yaw): `scripts/verifyAeroDyn.py`, results and rules in
+[`analysis/aerodyn-verification/README.md`](analysis/aerodyn-verification/README.md); tests in
+`tests/test_aerodyn_verification.py`. This is the repository's only BEM: whenever a BEM is needed
+(code-to-code checks, blockage and VTUN sensitivities in `quantifyUncertainty.py`) it is the AeroDyn
+BEM; `buildAeroDynCase.py --inflow-scale F` runs it at inflow x F with rpm and density fixed.
 
 ## Modelling limitations
 

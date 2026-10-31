@@ -30,6 +30,8 @@ License
 #include "PstreamReduceOps.H"
 #include "SVD.H"
 
+#include <chrono>
+
 // * * * * * * * * * * * * * Private Member Functions  * * * * * * * * * * * //
 
 namespace Foam
@@ -215,11 +217,83 @@ void Foam::fv::bladeSurfaceSampler::refreshNodeH()
     // on every rank and each node's containing cell lives on its owner, so the
     // per-node sentinel has to be reduced globally: a per-node reduce() would be
     // one collective per node (100 236 of them on the IEA 15 MW surface).
+    const std::chrono::steady_clock::time_point searchStart =
+        std::chrono::steady_clock::now();
+
+    // findCell() builds the face-diagonal decomposition on its first call, and
+    // that construction is collective. With the bounds prefilter below a rank
+    // may never call findCell(), so build it on every rank first (cached
+    // after the first call), or the ranks that do call it deadlock
+    (void)mesh_.tetBasePtIs();
+
+    // First refresh (from any caller), or a background mesh that moved or
+    // changed topology: rebuild the local bounds and drop the seeds, whose
+    // cell labels may no longer exist. moving()/topoChanging() are global
+    // flags, so every rank takes the same branch. Local (not globally
+    // reduced) point bounds, inflated so that round-off on the box faces can
+    // never drop a node findCell() would place
+    if
+    (
+        nodeCell_.size() != nNodes()
+     || mesh_.moving()
+     || mesh_.topoChanging()
+    )
+    {
+        localBounds_ = boundBox(mesh_.points(), false);
+        localBounds_.inflate(1e-6);
+
+        nodeCell_.setSize(nNodes());
+        nodeCell_ = -1;
+    }
+
     List<scalar> h(nNodes(), VGREAT);
 
     forAll(positions_, i)
     {
-        const label cellI = mesh_.findCell(positions_[i]);
+        // Exact prefilter: findCell() cannot succeed outside the local
+        // points, and it is far from free there (an octree descent plus
+        // tet tests of a boundary leaf)
+        const point& p = positions_[i];
+
+        if (!localBounds_.contains(p))
+        {
+            nodeCell_[i] = -1;
+            continue;
+        }
+
+        // Seeded search: the previous cell and its face neighbours, with the
+        // same CELL_TETS inside test findCell() applies to its octree leaf,
+        // then the octree search when the node left that neighbourhood
+        label cellI = -1;
+        const label seed = nodeCell_[i];
+
+        if (seed >= 0)
+        {
+            if (mesh_.pointInCell(p, seed, polyMesh::CELL_TETS))
+            {
+                cellI = seed;
+            }
+            else
+            {
+                const labelList& nbrs = mesh_.cellCells()[seed];
+
+                forAll(nbrs, k)
+                {
+                    if (mesh_.pointInCell(p, nbrs[k], polyMesh::CELL_TETS))
+                    {
+                        cellI = nbrs[k];
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (cellI < 0)
+        {
+            cellI = mesh_.findCell(p);
+        }
+
+        nodeCell_[i] = cellI;
 
         if (cellI >= 0)
         {
@@ -230,7 +304,18 @@ void Foam::fv::bladeSurfaceSampler::refreshNodeH()
     // One MPI_Allreduce on the whole list (UList::begin() is not a raw pointer
     // in v2506 and this overload's tag has no default, so the contiguous array
     // is taken as &h[0] with an explicit message tag)
+    const std::chrono::steady_clock::time_point reduceStart =
+        std::chrono::steady_clock::now();
+
     reduce(&h[0], int(h.size()), minOp<scalar>(), UPstream::msgType());
+
+    const std::chrono::steady_clock::time_point reduceEnd =
+        std::chrono::steady_clock::now();
+
+    refreshSearchSeconds_ +=
+        std::chrono::duration<scalar>(reduceStart - searchStart).count();
+    refreshReduceSeconds_ +=
+        std::chrono::duration<scalar>(reduceEnd - reduceStart).count();
 
     forAll(h, i)
     {
@@ -532,6 +617,10 @@ Foam::fv::bladeSurfaceSampler::bladeSurfaceSampler
     patch_(),
     patchAreaShare_(),
     nodeH_(),
+    refreshSearchSeconds_(0.0),
+    refreshReduceSeconds_(0.0),
+    localBounds_(),
+    nodeCell_(),
     nodeForces_(),
     forces_(),
     bins_(),

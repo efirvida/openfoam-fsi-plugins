@@ -64,9 +64,18 @@ ELEMENT_DIR = Path("postProcessing") / "actuatorLineElements" / "0"
 SURFACE_DIR = Path("postProcessing") / "bladeSurface"
 
 STATIONS = (0.30, 0.47, 0.63, 0.80, 0.95)
+# R2 (frozen) constants keep their names: compareAeroDyn.py imports them.
 TURBINE_BANDS = {"power": 0.15, "torque": 0.15, "thrust": 0.15}
 SPANWISE_BAND_MIN = 0.15
 SPANWISE_BAND_FRACTION = 0.20
+# R3 (default, owner 2026-10-30): P, T, Q and c_n all within 10 % of measured.
+R3_BAND = 0.10
+DEFAULT_CRITERIA = "r3"
+BANDS_LINE = {
+    "r2": "Bands: turbine power/torque/thrust +-15 %; spanwise max(0.15, 20 %).",
+    "r3": "Bands (R3): turbine power/torque/thrust +-10 %; spanwise c_n +-10 % "
+          "at r/R 0.30, 0.47, 0.63, 0.80 and 0.95.",
+}
 TSR_TOLERANCE = 1.0e-3
 DRIFT_TOLERANCE = 0.01
 ROOT_CUTOUT_RADIUS = 0.5083
@@ -119,9 +128,74 @@ LIMITATIONS = [
 ]
 
 
+#: Replaces the final LIMITATIONS item when an ASM-mesh run is compared: its spanwise
+#: CN/CT slots are chord-referenced like ALM/ASM when the run wrote element CSVs.
+ASM_MESH_CHORD_LIMITATION = (
+    "Spanwise CN/CT are CHORD-REFERENCED for every model, as the experiment reports them "
+    "(NREL/TP-500-29955 Figure 25). The ASM-mesh surface station CSV carries only the "
+    "PLANE-OF-ROTATION pair (`c_ref_n`/`c_ref_t`), so the ASM-mesh chord pair is rebuilt "
+    "per row from the `cl,cd,alpha_deg` of the element CSVs the run also writes (the "
+    "station force is the element force by construction); the plane pair stays in the "
+    "`*_plane` columns."
+)
+ASM_MESH_PLANE_FALLBACK_LIMITATION = (
+    "ASM-mesh run WITHOUT element CSVs (`writeElementPerf`): the surface station table has "
+    "no angle of attack, so the chord pair cannot be rebuilt and the chord slots repeat the "
+    "PLANE-OF-ROTATION pair. Those ASM-mesh spanwise rows are NOT on the experiment's frame "
+    "(`spanwise_frame` is `plane-fallback` in metrics.json)."
+)
+
+
+def limitations_for(results) -> list[str]:
+    """LIMITATIONS, with the ASM-mesh frame statement made true for the runs compared.
+
+    Reports without an ASM-mesh run keep the delivered list verbatim.
+    """
+    if "asm-mesh" not in results:
+        return list(LIMITATIONS)
+    frame = results["asm-mesh"]["metrics"].get("spanwise_frame")
+    last = (
+        ASM_MESH_PLANE_FALLBACK_LIMITATION
+        if frame == "plane-fallback" else ASM_MESH_CHORD_LIMITATION
+    )
+    return LIMITATIONS[:-1] + [last]
+
+
 def _exit(message: str, code: int) -> int:
     print(f"error: {message}", file=sys.stderr)
     return code
+
+
+def read_rows_resumed(path: Path) -> list[dict[str, float]]:
+    """Read `<object>/0/<file>` joined with its resume segments.
+
+    A run continued with resume-run.slurm writes `<object>/<resume time>/<file>`
+    next to segment 0. Segments are ordered by their numeric directory name and
+    each later segment replaces the earlier rows it overlaps.
+    """
+    rows = read_rows(path)
+    for segment, _ in sorted(
+        (
+            (d, float(d.name)) for d in path.parent.parent.iterdir()
+            if d.is_dir() and d != path.parent and _is_number(d.name)
+            and (d / path.name).is_file()
+            and float(d.name) > 0
+        ),
+        key=lambda item: item[1],
+    ):
+        later = read_rows(segment / path.name)
+        if later:
+            first = later[0]["time"]
+            rows = [row for row in rows if row["time"] < first] + later
+    return rows
+
+
+def _is_number(text: str) -> bool:
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
 
 
 def read_rows(path: Path) -> list[dict[str, float]]:
@@ -292,7 +366,7 @@ def read_elements(element_dir: Path):
         raise FileNotFoundError(str(element_dir / "*.csv"))
     elements = []
     for path in files:
-        rows = read_rows(path)
+        rows = read_rows_resumed(path)
         if not rows:
             raise MissingInput(f"{path}: no data rows")
         elements.append((path, rows))
@@ -563,7 +637,7 @@ def analyse_model(run_dir: Path, cfg, speed, sequence, rho, allow_short,
     if not surface and not element_dir.is_dir():
         raise FileNotFoundError(str(element_dir))
     start, end, period = window_bounds(cfg, speed, sequence)
-    rows = read_rows(turbine_path)
+    rows = read_rows_resumed(turbine_path)
     if not rows:
         raise MissingInput(f"{turbine_path}: no data rows")
     entry = select_speed(cfg, speed, sequence)
@@ -593,6 +667,7 @@ def analyse_model(run_dir: Path, cfg, speed, sequence, rho, allow_short,
             spanwise_profile(elements, start, end, allow_short, radius)
             if elements else []
         )
+        metrics_frame = "chord" if chord else "plane-fallback"
         if chord:
             # The plane pair is interpolated onto the element r/R grid; in a
             # real run both tables have one row per element at the same r/R,
@@ -614,6 +689,7 @@ def analyse_model(run_dir: Path, cfg, speed, sequence, rho, allow_short,
     metrics["run_dir"] = str(run_dir)
     metrics["element_profiles"] = len(elements)
     if surface:
+        metrics["spanwise_frame"] = metrics_frame
         metrics["surface_stations"] = len(stations)
         metrics.update(read_surface_audit(run_dir))
     if match_span:
@@ -649,7 +725,15 @@ def band_for(value, measured, relative):
     return abs(value - measured) / abs(measured) / relative
 
 
-def write_turbine_comparison(path, results, experiment, thrust_scope):
+def turbine_bands(criteria):
+    if criteria == "r2":
+        return TURBINE_BANDS
+    return {quantity: R3_BAND for quantity in TURBINE_BANDS}
+
+
+def write_turbine_comparison(path, results, experiment, thrust_scope,
+                             criteria=DEFAULT_CRITERIA):
+    bands = turbine_bands(criteria)
     measured = {
         "power": float(experiment["rotpow_kw"]),
         "torque": float(experiment["lsstqcor_nm"]),
@@ -670,7 +754,7 @@ def write_turbine_comparison(path, results, experiment, thrust_scope):
                 "thrust": metrics["thrust_n"],
             }
             for quantity in ("power", "torque", "thrust"):
-                band = TURBINE_BANDS[quantity]
+                band = bands[quantity]
                 fraction = band_for(sim[quantity], measured[quantity], band)
                 writer.writerow([
                     model,
@@ -685,7 +769,22 @@ def write_turbine_comparison(path, results, experiment, thrust_scope):
     return measured
 
 
-def spanwise_plane_cells(measured, c_ref_n_plane, c_ref_t_plane):
+def spanwise_within(criteria, pair, reference):
+    """Band verdict for a (c_n, c_t) pair against the measured pair.
+
+    R2: both inside max(0.15, 20 % of measured), absolute. R3: every given
+    value inside 10 % of its measured value (c_n alone for the chord pair, the
+    banded quantity; CTH and CTQ for the plane pair, the power comparison).
+    """
+    if criteria == "r2":
+        band_n = max(SPANWISE_BAND_MIN, SPANWISE_BAND_FRACTION * abs(reference[0]))
+        band_t = max(SPANWISE_BAND_MIN, SPANWISE_BAND_FRACTION * abs(reference[1]))
+        return abs(pair[0] - reference[0]) <= band_n and abs(pair[1] - reference[1]) <= band_t
+    return all(abs(value - ref) <= R3_BAND * abs(ref) for value, ref in zip(pair, reference))
+
+
+def spanwise_plane_cells(measured, c_ref_n_plane, c_ref_t_plane,
+                         criteria=DEFAULT_CRITERIA):
     """Appended plane-of-rotation cells, empty when either side is missing.
 
     The plane pair produces the rotor thrust and torque, so this is the POWER
@@ -699,11 +798,8 @@ def spanwise_plane_cells(measured, c_ref_n_plane, c_ref_t_plane):
     if (c_ref_n_plane is None or c_ref_t_plane is None
             or cth_exp is None or ctq_exp is None):
         return ["", "", "", "", "", "", ""]
-    band_n = max(SPANWISE_BAND_MIN, SPANWISE_BAND_FRACTION * abs(cth_exp))
-    band_t = max(SPANWISE_BAND_MIN, SPANWISE_BAND_FRACTION * abs(ctq_exp))
-    within = (
-        abs(c_ref_n_plane - cth_exp) <= band_n
-        and abs(c_ref_t_plane - ctq_exp) <= band_t
+    within = spanwise_within(
+        criteria, (c_ref_n_plane, c_ref_t_plane), (cth_exp, ctq_exp)
     )
     return [
         f"{c_ref_n_plane:.6g}",
@@ -716,7 +812,8 @@ def spanwise_plane_cells(measured, c_ref_n_plane, c_ref_t_plane):
     ]
 
 
-def write_spanwise_comparison(path, results, experiment_spanwise):
+def write_spanwise_comparison(path, results, experiment_spanwise,
+                              criteria=DEFAULT_CRITERIA):
     with path.open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
         writer.writerow([
@@ -741,18 +838,12 @@ def write_spanwise_comparison(path, results, experiment_spanwise):
                 # 5-tuple profile row lands at indices 2 and 3 here.
                 c_ref_n_plane = values[2] if len(values) > 3 else None
                 c_ref_t_plane = values[3] if len(values) > 3 else None
-                band_n = max(
-                    SPANWISE_BAND_MIN,
-                    SPANWISE_BAND_FRACTION * abs(measured["cn"]),
-                )
-                band_t = max(
-                    SPANWISE_BAND_MIN,
-                    SPANWISE_BAND_FRACTION * abs(measured["ct"]),
-                )
-                within = (
-                    abs(c_ref_n - measured["cn"]) <= band_n
-                    and abs(c_ref_t - measured["ct"]) <= band_t
-                )
+                if criteria == "r2":
+                    within = spanwise_within(
+                        criteria, (c_ref_n, c_ref_t), (measured["cn"], measured["ct"])
+                    )
+                else:
+                    within = spanwise_within(criteria, (c_ref_n,), (measured["cn"],))
                 writer.writerow([
                     model,
                     f"{station:.2f}",
@@ -764,7 +855,8 @@ def write_spanwise_comparison(path, results, experiment_spanwise):
                     f"{(c_ref_t - measured['ct']) / measured['ct']:.6g}",
                     f"{measured['cm']:.6g}",
                     "yes" if within else "no",
-                    *spanwise_plane_cells(measured, c_ref_n_plane, c_ref_t_plane),
+                    *spanwise_plane_cells(measured, c_ref_n_plane, c_ref_t_plane,
+                                      criteria),
                 ])
 
 
@@ -820,6 +912,10 @@ def main(argv: list[str] | None = None) -> int:
                         default="blade")
     parser.add_argument("--match-eaeroth-span", action="store_true",
                         help="restrict the blade thrust sum to r/R >= 0.25")
+    parser.add_argument("--criteria", choices=("r2", "r3"), default=DEFAULT_CRITERIA,
+                        help="acceptance criteria for the within_band columns and the "
+                             "Bands line: r3 uniform 10 %% (default), r2 the frozen "
+                             "+-15 %% / max(0.15, 20 %%) bands")
     parser.add_argument("--sign-gate", action="store_true")
     parser.add_argument("--allow-short-window", action="store_true")
     parser.add_argument("--out", type=Path, default=None)
@@ -886,10 +982,11 @@ def main(argv: list[str] | None = None) -> int:
 
     measured = write_turbine_comparison(
         out_dir / "turbine_comparison.csv", results, experiment,
-        args.thrust_scope,
+        args.thrust_scope, args.criteria,
     )
     write_spanwise_comparison(
-        out_dir / "spanwise_comparison.csv", results, experiment_spanwise
+        out_dir / "spanwise_comparison.csv", results, experiment_spanwise,
+        args.criteria,
     )
 
     definitions = {
@@ -909,8 +1006,9 @@ def main(argv: list[str] | None = None) -> int:
         definitions["surface_conversion"] = (
             "asm-mesh spanwise rows come from "
             "postProcessing/bladeSurface/*.csv and keep the element "
-            "c_ref_n/c_ref_t definitions with the element root_dist -> r/R "
-            "mapping"
+            "c_ref_n/c_ref_t definitions (plane of rotation) with the element "
+            "root_dist -> r/R mapping, in the *_plane columns; the chord-line "
+            "columns are rebuilt from the element CSVs"
         )
 
     metrics = {
@@ -930,8 +1028,9 @@ def main(argv: list[str] | None = None) -> int:
         },
         "definitions": definitions,
         "bands": {
-            "turbine_relative": TURBINE_BANDS,
-            "spanwise": "max(0.15, 20 % of measured)",
+            "turbine_relative": turbine_bands(args.criteria),
+            "spanwise": ("max(0.15, 20 % of measured)" if args.criteria == "r2"
+                         else "c_n within 10 % of measured"),
             "drift_flag": DRIFT_TOLERANCE,
         },
         "experiment": {
@@ -973,7 +1072,7 @@ def main(argv: list[str] | None = None) -> int:
                 for station in STATIONS
             },
         },
-        "limitations": LIMITATIONS,
+        "limitations": limitations_for(results),
     }
 
     (out_dir / "metrics.json").write_text(
@@ -1018,12 +1117,12 @@ def main(argv: list[str] | None = None) -> int:
         )
     lines += [
         "",
-        "Bands: turbine power/torque/thrust +-15 %; spanwise max(0.15, 20 %).",
+        BANDS_LINE[args.criteria],
         "Spanwise CM excluded (element CSV has no cm column).",
         "",
         "Limitations:",
     ]
-    lines += [f"  - {item}" for item in LIMITATIONS]
+    lines += [f"  - {item}" for item in limitations_for(results)]
     report = "\n".join(lines) + "\n"
     (out_dir / "report.txt").write_text(report, encoding="utf-8")
 

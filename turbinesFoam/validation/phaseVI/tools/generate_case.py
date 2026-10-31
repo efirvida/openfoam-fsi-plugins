@@ -47,7 +47,9 @@ from case_config import (
 )
 from element_data import (
     blade_element_count,
+    PITCH_REFERENCES,
     blade_element_profiles,
+    effective_pitch_deg,
     hub_element_rows,
     render_blade_element_data,
 )
@@ -642,7 +644,7 @@ def render_fv_options(
     renders no key, and the source refuses a root effect with no hub radius.
     `tip_correction` renders the Dag &
     Sorensen `tipCorrection` block beside `endEffects` and defaults to
-    `actuator.tip_correction.active` (off for the committed case).
+    `actuator.tip_correction.active` (on for the committed case, Model Definition v1.3).
 
     `velocity_sample_radius` and `n_velocity_samples` override the
     `actuator.velocity_sampling` block and render the two keys at the
@@ -657,9 +659,9 @@ def render_fv_options(
     actuator = cfg["actuator"]
     origin = turbine_origin(cfg)
     # `polar` selects another committed polar in data/polars/ (e.g. the v1.1
-    # S809_OSU_Re1M_total.dat or S809_CSU_Re0.65M_total.dat). Absent, Model
-    # Definition v1.2 applies: OSU Re = 1e6 with pressure drag (D3 diagnostic).
-    polar_name = polar or "S809_OSU_Re1M_pressure.dat"
+    # S809_OSU_Re1M_pressure.dat or S809_CSU_Re0.65M_total.dat). Absent, Model
+    # Definition v1.3 applies: OSU Re = 1e6 with total drag (v1.2: pressure drag).
+    polar_name = polar or "S809_OSU_Re1M_total.dat"
     polars = os.path.relpath(POLARS_DIR / polar_name, case_dir / "system")
     sampling = actuator.get("velocity_sampling") or {}
     sample_radius = (
@@ -758,7 +760,7 @@ def render_fv_options(
             constants = (f"            a {float(augmentation['a']):.8g};\n"
                          f"            h {float(augmentation['h']):.8g};\n"
                          f"            n {float(augmentation['n']):.8g};\n"
-                         f"            pitchOffset {-float(turbine['pitch_deg']):.8g};\n")
+                         f"            pitchOffset {-effective_pitch_deg(cfg):.8g};\n")
         else:
             constants = (f"            a {float(augmentation['a']):.8g};\n"
                          f"            b {float(augmentation['b']):.8g};\n"
@@ -1212,9 +1214,9 @@ def main(argv: list[str] | None = None) -> int:
         "--polar",
         default=None,
         metavar="FILE",
-        help="override the data/polars/ polar file (e.g. the v1.1 "
-             "S809_OSU_Re1M_total.dat). Absent, the Model Definition v1.2 "
-             "S809_OSU_Re1M_pressure.dat (pressure drag) is used",
+        help="override the data/polars/ polar file (e.g. the v1.2 "
+             "S809_OSU_Re1M_pressure.dat). Absent, the Model Definition v1.3 "
+             "S809_OSU_Re1M_total.dat (total drag) is used",
     )
     parser.add_argument(
         "--div-phi-u",
@@ -1354,6 +1356,17 @@ def main(argv: list[str] | None = None) -> int:
              "the committed 26-station table governs and the render is unchanged",
     )
     parser.add_argument(
+        "--pitch-reference",
+        choices=PITCH_REFERENCES,
+        default="tip",
+        help="where the collective pitch is measured. tip (default, Model "
+             "Definition v1.3) measures it at the tip chord as NREL/TP-500-29955 "
+             "p.20 defines it: mounting = -(twist - twist_tip + pitch), tip mounting "
+             "-pitch; the Chaviaropoulos-Hansen pitchOffset follows. twist-zero adds "
+             "it to the report twist, zero at the 75%% span station (Model "
+             "Definition v1.2)",
+    )
+    parser.add_argument(
         "--nacelle",
         choices=("on", "off"),
         default="off",
@@ -1404,6 +1417,7 @@ def main(argv: list[str] | None = None) -> int:
             cfg["turbine"]["gaussian_mesh_factor"] = float(args.mesh_factor)
         if args.blade_dz is not None:
             cfg["turbine"]["blade_dz"] = float(args.blade_dz)
+        cfg["turbine"]["pitch_reference"] = args.pitch_reference
         if args.refine_level:
             cfg["turbine"]["gaussian_mesh_factor"] = float(
                 cfg["turbine"]["gaussian_mesh_factor"]

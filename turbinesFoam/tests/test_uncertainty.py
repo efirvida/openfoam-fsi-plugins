@@ -206,14 +206,82 @@ def test_repeatability_not_available_names_the_searched_path(tmp_path):
     assert str(tmp_path / "missing") in result["power"]["method"]
 
 
-def test_blockage_sensitivity_is_bem_estimate_with_ordered_increments():
-    result = qu.blockage_sensitivity(rpm=71.88, rho=1.2337, speed=7.0, pitch=3.0)
+def fake_driver(case_dir):
+    """Stands in for aerodyn_driver: power ~ U^3, thrust ~ U^2, c_n ~ U, from the case's own HWindSpeed."""
+    import test_aerodyn_case as helpers
+
+    wind = next(float(line.split()[0]) for line in (case_dir / "ad_driver.dvr").read_text().splitlines()
+                if line.split()[1:2] == ["HWindSpeed"])
+    ratio = wind / 7.0
+    helpers.write_synthetic_output(
+        case_dir, power_w=6000.0 * ratio**3, thrust_n=1200.0 * ratio**2,
+        cn_of_r=lambda x: (0.5 + x) * ratio, alpha_of_r=lambda x: 20.0 - 10.0 * x)
+
+
+def test_blockage_sensitivity_is_aerodyn_bem_estimate_with_ordered_increments():
+    result = qu.blockage_sensitivity("H", 7.0, runner=fake_driver)
     assert result["label"] == "BEM-estimated blockage sensitivity"
     one, two = result["relative"][0.01], result["relative"][0.02]
+    assert one["power"] == pytest.approx(1.01**3 - 1.0, rel=1e-6)
+    assert two["power"] == pytest.approx(1.02**3 - 1.0, rel=1e-6)
+    assert two["thrust"] == pytest.approx(1.02**2 - 1.0, rel=1e-6)
     assert 0.0 < one["power"] < two["power"]
-    assert 0.0 < one["thrust"] < two["thrust"]
-    assert two["power"] < 1.03**3 - 1.0 and two["power"] > 0.02
+    assert two["cn0.95"] == pytest.approx(0.02, rel=1e-6)
     assert set(f"cn{s}" for s in ("0.30", "0.47", "0.63", "0.80", "0.95")) <= set(two)
+
+
+def test_blockage_sensitivity_runs_each_inflow_in_its_own_case():
+    seen = []
+
+    def spying_driver(case_dir):
+        seen.append(case_dir)
+        fake_driver(case_dir)
+
+    qu.blockage_sensitivity("H", 7.0, increments=(0.01,), runner=spying_driver)
+    assert len(seen) == 2 and len(set(seen)) == 2  # base + raised
+    assert not any(path.exists() for path in seen)  # scratch removed
+
+
+def test_openfast_driver_is_discovered_from_option_then_environment(tmp_path, monkeypatch):
+    env = tmp_path / "env"
+    (env / "bin").mkdir(parents=True)
+    exe = env / "bin" / "aerodyn_driver"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    monkeypatch.delenv("OPENFAST_ENV", raising=False)
+    assert qu.aerodyn_driver(env) == exe
+    monkeypatch.setenv("OPENFAST_ENV", str(env))
+    assert qu.aerodyn_driver(None) == exe
+    monkeypatch.setenv("OPENFAST_ENV", str(tmp_path / "nowhere"))
+    with pytest.raises(OSError, match="aerodyn_driver"):
+        qu.aerodyn_driver(None)
+
+
+def test_missing_openfast_falls_back_to_the_bound_and_says_so(tmp_path, capsys, monkeypatch):
+    synthetic_run(tmp_path)
+    monkeypatch.setattr(qu, "check_run", lambda run, definition: [])
+    args = ["--run-dir", str(tmp_path), "--sequence", "H", "--speed", "7",
+            "--archive-dir", str(tmp_path / "no-archive"), "--openfast-env", str(tmp_path / "nowhere")]
+    assert qu.main(args) == 0
+    out = capsys.readouterr().out
+    assert qu.BLOCKAGE_BOUND_LABEL in out
+    assert "AeroDyn BEM unusable" in out
+
+
+def _openfast_installed():
+    try:
+        qu.aerodyn_driver(None)
+    except OSError:
+        return False
+    return True
+
+
+@pytest.mark.skipif(not _openfast_installed(), reason="OpenFAST aerodyn_driver not installed")
+def test_real_aerodyn_driver_blockage_is_monotone_and_below_the_cube_bound():
+    result = qu.blockage_sensitivity("H", 7.0, increments=(0.01, 0.02))
+    one, two = result["relative"][0.01], result["relative"][0.02]
+    assert 0.0 < one["power"] < two["power"] < 1.02**3 - 1.0 + 0.02
+    assert 0.0 < one["thrust"] < two["thrust"]
 
 
 def test_blockage_bound_fallback_is_u3_and_u2():
@@ -237,6 +305,7 @@ def test_nonconforming_run_is_refused_unless_allowed(tmp_path, capsys):
 def test_report_for_run_with_allow_nonconforming(tmp_path, capsys, monkeypatch):
     synthetic_run(tmp_path)
     monkeypatch.setattr(qu, "check_run", lambda run, definition: ["polar=x (expected y)"])
+    monkeypatch.setattr(qu, "AERODYN_RUNNER", fake_driver)
     args = ["--run-dir", str(tmp_path), "--sequence", "H", "--speed", "7",
             "--archive-dir", str(tmp_path / "no-archive"), "--allow-nonconforming"]
     assert qu.main(args) == 0
@@ -272,8 +341,8 @@ def test_vtun_correction_scales_the_simulation_by_the_bem_response(monkeypatch):
     the BEM response at fixed rpm to U x VTUN/U_nominal, reported beside the raw value."""
     seen = {}
 
-    def fake_sensitivity(rpm, rho, speed, pitch, increments):
-        seen["call"] = (rpm, rho, speed, pitch, tuple(increments))
+    def fake_sensitivity(sequence, speed, increments, openfast_env=None):
+        seen["call"] = (sequence, speed, tuple(increments))
         return {"relative": {increments[0]: {q: 0.02 for q in qu.QUANTITIES}}}
 
     monkeypatch.setattr(qu, "blockage_sensitivity", fake_sensitivity)
@@ -281,12 +350,12 @@ def test_vtun_correction_scales_the_simulation_by_the_bem_response(monkeypatch):
     exp = {q: 1.05 for q in qu.QUANTITIES}
     rows = {q: {"combined": 0.04} for q in qu.QUANTITIES}
     repeatability = {"power": {"vtun": {"s0700000": 7.07, "s0700001": 9.0}}}
-    result = qu.vtun_correction(repeatability, "s0700000", 7.0, 71.9, 1.25, 3.0,
+    result = qu.vtun_correction(repeatability, "s0700000", "H", 7.0,
                                 sim, exp, rows, 1.0)
     assert result["available"] is True
     assert result["vtun"] == 7.07
     assert result["increment"] == pytest.approx(0.01)
-    assert seen["call"] == (71.9, 1.25, 7.0, 3.0, (pytest.approx(0.01),))
+    assert seen["call"] == ("H", 7.0, (pytest.approx(0.01),))
     power = result["rows"]["power"]
     assert power["corrected"] == pytest.approx(1.02)
     assert power["difference"] == pytest.approx(1.02 - 1.05)
@@ -295,18 +364,19 @@ def test_vtun_correction_scales_the_simulation_by_the_bem_response(monkeypatch):
 
 def test_vtun_correction_not_available_without_the_row_file():
     repeatability = {"power": {"vtun": {}}}
-    result = qu.vtun_correction(repeatability, "s0700000", 7.0, 71.9, 1.25, 3.0,
+    result = qu.vtun_correction(repeatability, "s0700000", "H", 7.0,
                                 {}, {}, {}, 1.0)
     assert result["available"] is False
     assert "s0700000" in result["reason"]
 
 
-def test_vtun_correction_raises_power_for_a_faster_tunnel():
+def test_vtun_correction_raises_power_for_a_faster_tunnel(monkeypatch):
+    monkeypatch.setattr(qu, "AERODYN_RUNNER", fake_driver)
     sim = {q: 1.0 for q in qu.QUANTITIES}
     rows = {q: {"combined": 0.04} for q in qu.QUANTITIES}
-    result = qu.vtun_correction({"power": {"vtun": {"h0700000": 7.049}}}, "h0700000", 7.0,
-                                71.88, 1.2337, 3.0, sim, sim, rows, 1.0)
-    assert 0.0 < result["rows"]["power"]["corrected"] - 1.0 < 1.007**3 - 1.0
+    result = qu.vtun_correction({"power": {"vtun": {"h0700000": 7.049}}}, "h0700000", "H", 7.0,
+                                sim, sim, rows, 1.0)
+    assert result["rows"]["power"]["corrected"] == pytest.approx(1.007**3, rel=1e-5)  # fake driver: P ~ U^3
 
 
 def test_report_states_vtun_correction_unavailable_without_archive(tmp_path, capsys, monkeypatch):

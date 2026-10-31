@@ -1,0 +1,10 @@
+case,status,channels,failing_channels,samples,max_rel_err,max_rel_err_channel,max_norm_over_range,wall_s,note
+ad_BAR_CombinedCases,PASS,215,0,102,0,,0,1.41049,
+ad_BAR_RNAMotion,PASS,123,0,100,0,,0,0.476001,
+ad_BAR_SineMotion,PASS,127,0,70,0,,0,0.370036,
+ad_BAR_SineMotion_UA4_DBEMT3,PASS,127,0,188,0,,0,0.658042,
+ad_MHK_RM1_Fixed,PASS,54,0,600,0.000186472,Wave1Elev,1.53162e-05,6.29559,
+ad_MHK_RM1_Fixed_IfW,PASS,56,0,600,0,,0,0.977539,
+ad_MHK_RM1_Floating,PASS,54,0,600,0.000186472,Wave1Elev,1.53162e-05,5.95315,
+ad_MultipleHAWT,PASS,426,0,3,3.62291e-08,AB1N011Vindy,2.52803e-08,0.298804,
+ad_timeseries_shutdown,PASS,22,0,9000,0.00506255,RtAeroCt,0.00030518,8.26354,

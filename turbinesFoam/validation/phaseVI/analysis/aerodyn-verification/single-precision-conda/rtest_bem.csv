@@ -1,0 +1,10 @@
+case,status,channels,failing_channels,samples,max_rel_err,max_rel_err_channel,max_norm_over_range,wall_s,note
+ad_BAR_CombinedCases,PASS,215,0,102,0.00133958,RtAeroFyh,0.0136781,1.26872,
+ad_BAR_RNAMotion,FAIL,123,19,100,3.65252,AB1N019Fx,0.0612888,0.43909,"RtAeroCt,RtAeroMyh,AB1N019Fx,AB1N023Fx,AB1N024Fx"
+ad_BAR_SineMotion,FAIL,127,31,70,87.4059,RtAeroCp,1.33622,0.401408,"RtAeroCp,RtAeroCq,RtAeroCt,RtAeroFxh,RtAeroFyh"
+ad_BAR_SineMotion_UA4_DBEMT3,FAIL,127,31,188,102.302,RtAeroMyh,1.5617,0.613495,"RtAeroCp,RtAeroCq,RtAeroCt,RtAeroFxh,RtAeroFyh"
+ad_MHK_RM1_Fixed,FAIL,54,2,600,0.157782,B2N4Fbn,2.38379,5.88976,"HbFbx,HbMbx"
+ad_MHK_RM1_Fixed_IfW,FAIL,56,2,600,0.157782,B2N4Fbn,2.38379,1.00839,"HbFbx,HbMbx"
+ad_MHK_RM1_Floating,FAIL,54,4,600,3.66759,B2N4Fbn,3.01683,5.88566,"TwN4Fbz,B2N4Fbn,B1N6Mbs,HbMbx"
+ad_MultipleHAWT,PASS,426,0,3,0.000531609,AB1N028Vindx,0.50093,0.344173,
+ad_timeseries_shutdown,FAIL,22,1,9000,0.17262,RtAeroCt,0.0117041,6.69422,RtAeroCt
