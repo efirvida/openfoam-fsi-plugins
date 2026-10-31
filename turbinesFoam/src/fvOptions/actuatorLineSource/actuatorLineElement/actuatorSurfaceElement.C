@@ -96,6 +96,8 @@ Foam::scalar Foam::fv::actuatorSurfaceElement::calcProjectionEpsilon()
         Info<< "    epsilon (mesh-based): " << epsilon << endl;
     }
 
+    projectionEpsilon_ = epsilon;
+
     return epsilon;
 }
 

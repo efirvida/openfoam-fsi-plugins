@@ -186,6 +186,21 @@ station carries the largest structural moment arm for the FSI loads; `comparePha
 A 0.30 failure is documented and justified from results, not exempted in code. `--criteria r2` reproduces
 the R2 verdicts byte-identically; `comparePhaseVI.py` prints the selected criteria.
 
+#### Actuator surface element: Dag & Sorensen tip correction was inert (`epsilon 0`)
+
+**Files:** `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineElement/actuatorSurfaceElement.C`,
+`turbinesFoam/tests/{test_asm_tip_epsilon.py,asmTipEpsilon/}`, `turbinesFoam/README.md`.
+
+**Problem:** `actuatorSurfaceElement::calcProjectionEpsilon()` returned its mesh-based epsilon without
+storing it in `projectionEpsilon_` (only the line element did), so the member stayed at `-VGREAT`. The
+tip correction with `epsilon 0` reads `e.projectionEpsilon()`: the circulation smoothing flattened and every
+wake station was rejected (`epsV >= 0`), so the correction was exactly zero for ASM and ASM+mesh.
+
+**Fix:** the surface element stores `projectionEpsilon_` as the line element does. The ALM element CSVs
+and tip-correction dump are byte-identical to the pre-fix build. `test_asm_tip_epsilon.py` (RED before the fix: epsilon
+`-1e+300`, `maxCorr=0`) asserts a positive epsilon and a non-zero correction through the solver log
+(`odd/tasks/v13-adoption-asm.md` T16). ASM results produced before this fix carry no tip correction.
+
 #### Blade surface (ASM+mesh): cell search per node no longer dominates the step
 
 **Files:** `turbinesFoam/src/fvOptions/bladeSurface/{bladeSurfaceSampler.C,bladeSurfaceSampler.H,bladeSurfaceSource.C}`,

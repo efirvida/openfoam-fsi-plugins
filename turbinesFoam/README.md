@@ -179,6 +179,10 @@ runtime, while the ALM tutorial defaults to `0.5`.
 - **Turbulence injection:** only the momentum/force path uses the
   strip-wise spreading; turbulence injection (`addTurbulence`) keeps the
   inherited single-point kernel.
+- **Tip correction:** the surface element stores its mesh-based projection
+  epsilon, so `tipCorrection { epsilon 0; }` (Dag & Sorensen) works on
+  surface elements. Before this fix the stored width stayed at `-VGREAT` and
+  the correction was silently zero for ASM and ASM+mesh.
 - **HAWT-only:** the surface element is turbine-agnostic in principle, but
   only the axial-flow HAWT path is tested here. CFTAL/VAWT usage is
   untested.
