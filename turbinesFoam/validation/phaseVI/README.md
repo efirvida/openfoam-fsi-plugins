@@ -40,7 +40,7 @@ case/                     committed generated skeleton (ALM/ASM/ASM-MESH twins)
 data/                     geometry, polars, experiment, s809 + PROVENANCE per dir
 scripts/                  runners, mesh/stage tooling, comparison
   checkModelDefinition.py effective-value v1.3 (record) conformance gate; --variant v1.2 for the frozen base
-  summarizeBands.py      pre-registered bands; refuses non-conforming evidence
+  summarizeBands.py      acceptance criteria (R3 default, --criteria r2); refuses non-conforming evidence
   slurm/stage0.slurm      authorized development-queue job
   slurm/production.slurm  prepared-only long-queue array (do not submit)
   slurm/stage3.slurm      prepared-only IDDES + nChordwise array (do not submit)
@@ -695,7 +695,8 @@ arm must still be identifiable. No checker or summary writes run data.
 ```sh
 python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-seqS-var-tip-pitch-dag-sorensen-total   # CONFORMS v1.3
 python3 scripts/checkModelDefinition.py --variant v1.2 runs/alm-U7-coarse-seqS-v12                    # CONFORMS v1.2
-python3 scripts/summarizeBands.py results/U7-H
+python3 scripts/summarizeBands.py results/U7-H                  # R3: P, T, c_n all within 10 % (r/R 0.30-0.95)
+python3 scripts/summarizeBands.py results/U7-H --criteria r2    # frozen R2 verdicts (P 10, T 15, c_n 15/10, 0.95 report)
 ```
 
 With no `--variant` the checker judges against the record (`CONFORMS v1.3` / `NON-CONFORMING v1.3: ...`).
@@ -935,10 +936,15 @@ rho     = WTBARO / (287.058 * (WTATEMP + 273.15))   from the measured row
 EAEROTH pressure integration. `--rho auto|<kg/m³>` selects the measured-row ideal-gas density (default) or a
 user value.
 
-Bands (fixed in code and reported with every result): turbine
-power/torque/thrust ± 15 %; spanwise max(0.15, 20 % of measured). Claims are
+Acceptance criteria (selected with `--criteria`, reported on the `Bands` line of `report.txt` and in the
+`within_band` columns). **R3** (default, adopted 2026-10-30): turbine power/torque/thrust ± 10 %; spanwise
+`c_n` ± 10 % at r/R 0.30, 0.47, 0.63, 0.80 and 0.95 (the 0.95 station is banded because the structural torque and
+deformation peak there). A 0.30 failure is not exempted in code; it is documented from the results (the experiment's
+0.30 `c_n` carries a known normalisation offset of about 8.7 %, QNORM against 0.5 ρ W²). **R2** (frozen,
+`--criteria r2`): turbine ± 15 %; spanwise max(0.15, 20 % of measured), which is the earlier behaviour unchanged.
+Under R3 the spanwise `within_band` tests `c_n` only and `within_band_plane` tests CTH and CTQ at ± 10 %. Claims are
 limited to trend, stall onset and agreement within these bands; no sub-5 %
-agreement is promised a priori.
+agreement is promised a priori. See `odd/tasks/validation-model-definition.md`.
 
 Spanwise CM is **excluded**: the element CSV has no `cm` column (follow-up
 change adds `momentCoefficient_` to the element writer). The measured CM

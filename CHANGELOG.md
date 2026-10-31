@@ -172,6 +172,20 @@ files regenerate byte-identical.
 
 ### Fixes
 
+#### Phase VI acceptance criteria R3: uniform 10 % including the tip station
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/{summarizeBands.py,comparePhaseVI.py}`,
+`turbinesFoam/tests/{test_summarize_bands.py,test_phasevi_compare.py}`, `odd/tasks/validation-model-definition.md`,
+`turbinesFoam/validation/phaseVI/README.md`.
+
+**Problem:** R2 accepted thrust and c_n at r/R 0.30 within 15 % and left r/R 0.95 unbanded, although the tip
+station carries the largest structural moment arm for the FSI loads; `comparePhaseVI.py` printed a stale
+`+-15 %; spanwise max(0.15, 20 %)` band line.
+
+**Fix:** R3 (owner, 2026-10-30) is the default: P, T and c_n at r/R 0.30, 0.47, 0.63, 0.80 and 0.95 within 10 %.
+A 0.30 failure is documented and justified from results, not exempted in code. `--criteria r2` reproduces
+the R2 verdicts byte-identically; `comparePhaseVI.py` prints the selected criteria.
+
 #### Blade surface (ASM+mesh): cell search per node no longer dominates the step
 
 **Files:** `turbinesFoam/src/fvOptions/bladeSurface/{bladeSurfaceSampler.C,bladeSurfaceSampler.H,bladeSurfaceSource.C}`,

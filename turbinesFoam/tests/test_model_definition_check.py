@@ -203,7 +203,9 @@ def test_summary_gate_and_preserved_output(tmp_path, bad, allow):
     run = make_run(tmp_path, old="tipEffects off;",
                    new="tipEffects on;" if bad else "tipEffects off;")
     cmp = make_comparison(tmp_path, [run])
-    result = invoke(SUMMARY, cmp, *(["--allow-nonconforming"] if allow else []))
+    # R2 is no longer the default (R3, 2026-10-30); --criteria r2 must keep its exact output
+    result = invoke(SUMMARY, cmp, "--criteria", "r2",
+                    *(["--allow-nonconforming"] if allow else []))
     line = ("definition v1.3: NON-CONFORMING (tipEffects=on (expected off)) -> NOT OF RECORD"
             if bad else "definition v1.3: CONFORMS")
     suffix = " [not of record]" if bad else ""
@@ -238,7 +240,8 @@ def test_summary_drifting_window_is_not_of_record(tmp_path, flag, allow):
     (cmp / "metrics.json").write_text(json.dumps({"models": {
         "alm": {"run_dir": str(run), "drift": drift}}}))
     before = (cmp / "metrics.json").read_bytes()
-    result = invoke(SUMMARY, cmp, *(["--allow-nonconforming"] if allow else []))
+    result = invoke(SUMMARY, cmp, "--criteria", "r2",
+                    *(["--allow-nonconforming"] if allow else []))
     header = ["== cmp", "  definition v1.3: CONFORMS"]
     if flag:
         header.append("  window: DRIFT (alm: cp variation 2.90 %, cd variation 1.69 %; "

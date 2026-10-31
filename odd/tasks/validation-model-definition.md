@@ -101,6 +101,28 @@ results. They are frozen except the IEA cp centre.
 | IEA | `abs(cp_ASM - cp_ALM) / cp_ALM` | <= 3 % | chord is only about 2.7 cells there, so the surface and the line resolve differently; the previous-platform +7.05 % is explained by P3.4 and the band stands |
 | Both | ASM+mesh against ALM | same band as the ASM of its pillar | the mesh is a different realisation of the same loading |
 
+### Acceptance criteria R3 (2026-10-30, supersedes the Phase VI rows above for new verdicts)
+
+The Phase VI rows above are criteria **R2** (P 10 %, T 15 %, c_n 15 % at r/R 0.30 and 10 % at 0.47-0.80, 0.95 reported only). R2 is frozen and stays
+reproducible: `summarizeBands.py --criteria r2` and `comparePhaseVI.py --criteria r2` give the earlier verdicts unchanged.
+The owner adopted **R3** on 2026-10-30; it is the default of both scripts.
+
+| Pillar | Quantity | R3 band |
+| --- | --- | --- |
+| Phase VI | `abs(%P)`, `abs(%T)` (and torque `Q` in the `within_band` column) | <= 10 % |
+| Phase VI | spanwise `c_n` at r/R 0.30, 0.47, 0.63, 0.80 **and 0.95** | within +-10 % of the experiment (35 bands per model over the five gate points) |
+
+Owner's reasons (S11, S12, verbatim): "si vamos a adoptar el 10%, y si la diferencia al 30% no la pasa, la documentamos y justificamos en
+dependencia de los resultados. Al 95% si hay que establecer un criterio ya que es el punto donde comienza a ser maximo el torque
+estructural y la deformacion tener las fuerzas arodinamicas ahi debe ser de ala precision, o por lo menos una precision aceptable y
+justificable" and "a modo general apretar la precision nos va a obligar a tener modelos mas presicos fisicamente".
+
+- r/R 0.95 is banded because the structural torque and the deformation peak there, so the aerodynamic loads must be accurate (or at least acceptable and justifiable) at that station.
+- The 0.30 station is **not exempted in code**. A 0.30 failure is documented and justified from the results. Known context for that justification: the experiment's 0.30
+  `c_n` carries a normalisation offset of about 8.7 % (the measured QNORM against 0.5 rho W^2), so part of a 0.30 miss is in the reference, not the model.
+- Tightening is deliberate: it requires physically more accurate models rather than retuned coefficients (S5 stays).
+- Stricter than R2 on thrust (15 -> 10 %) and at 0.30 (15 -> 10 %); the IEA rows are unchanged.
+
 ## Open items
 
 - **D&S asymptote on the IEA rotor (P0.4) -- measured, and it fails the proposed

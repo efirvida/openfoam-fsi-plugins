@@ -584,3 +584,46 @@ def test_alm_asm_only_report_keeps_the_delivered_limitations(tmp_path):
     assert metrics["limitations"] == compare.LIMITATIONS
     assert "spanwise_frame" not in metrics["models"]["alm"]["metrics"]
     assert "surface_conversion" not in metrics["definitions"]
+
+
+def _write_comparison_csvs(tmp_path, criteria=None):
+    out = tmp_path / "csv"
+    out.mkdir()
+    kwargs = {} if criteria is None else {"criteria": criteria}
+    sim = {"power_kw": 108.0, "torque_nm": 91.0, "thrust_n": 112.0}
+    results = {"alm": {"metrics": sim, "spanwise": {
+        f"{s:.2f}": (1.12, 0.5) for s in compare.STATIONS}}}
+    experiment = {"rotpow_kw": "100", "lsstqcor_nm": "100", "eaeroth_n": "100"}
+    compare.write_turbine_comparison(out / "t.csv", results, experiment, "blade", **kwargs)
+    spanwise = {s: {"cn": 1.0, "ct": 0.5, "cm": 0.0} for s in compare.STATIONS}
+    compare.write_spanwise_comparison(out / "s.csv", results, spanwise, **kwargs)
+    turbine = {r["quantity"]: r["within_band"] for r in csv.DictReader((out / "t.csv").open())}
+    stations = [r["within_band"] for r in csv.DictReader((out / "s.csv").open())]
+    return turbine, stations
+
+
+def test_r3_is_the_default_within_band_rule(tmp_path):
+    turbine, stations = _write_comparison_csvs(tmp_path)
+    # 8 % P, -9 % Q pass; +12 % T fails; c_n +12 % fails at every station
+    assert turbine == {"power": "yes", "torque": "yes", "thrust": "no"}
+    assert stations == ["no"] * len(compare.STATIONS)
+
+
+def test_r2_within_band_rule_is_the_legacy_one(tmp_path):
+    turbine, stations = _write_comparison_csvs(tmp_path, "r2")
+    # R2: turbine +-15 %; spanwise max(0.15, 20 %) absolute: c_n +0.12 passes
+    assert turbine == {"power": "yes", "torque": "yes", "thrust": "yes"}
+    assert stations == ["yes"] * len(compare.STATIONS)
+
+
+def test_report_bands_line_names_the_selected_criteria(tmp_path):
+    run = write_run(tmp_path / "a")
+    for flag, expected in ((None, compare.BANDS_LINE["r3"]), ("r2", compare.BANDS_LINE["r2"])):
+        out = tmp_path / f"out-{flag}"
+        extra = [] if flag is None else ["--criteria", flag]
+        rc = compare.main(["--run-dir", str(run), "--out", str(out), "--allow-short-window",
+                           "--revolutions", "0", "1", *extra])
+        assert rc == compare.EXIT_OK
+        assert expected in (out / "report.txt").read_text(encoding="utf-8").splitlines()
+    assert compare.BANDS_LINE["r2"] == "Bands: turbine power/torque/thrust +-15 %; spanwise max(0.15, 20 %)."
+    assert "10 %" in compare.BANDS_LINE["r3"] and "0.95" in compare.BANDS_LINE["r3"]

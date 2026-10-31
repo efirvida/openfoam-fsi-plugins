@@ -64,9 +64,18 @@ ELEMENT_DIR = Path("postProcessing") / "actuatorLineElements" / "0"
 SURFACE_DIR = Path("postProcessing") / "bladeSurface"
 
 STATIONS = (0.30, 0.47, 0.63, 0.80, 0.95)
+# R2 (frozen) constants keep their names: compareAeroDyn.py imports them.
 TURBINE_BANDS = {"power": 0.15, "torque": 0.15, "thrust": 0.15}
 SPANWISE_BAND_MIN = 0.15
 SPANWISE_BAND_FRACTION = 0.20
+# R3 (default, owner 2026-10-30): P, T, Q and c_n all within 10 % of measured.
+R3_BAND = 0.10
+DEFAULT_CRITERIA = "r3"
+BANDS_LINE = {
+    "r2": "Bands: turbine power/torque/thrust +-15 %; spanwise max(0.15, 20 %).",
+    "r3": "Bands (R3): turbine power/torque/thrust +-10 %; spanwise c_n +-10 % "
+          "at r/R 0.30, 0.47, 0.63, 0.80 and 0.95.",
+}
 TSR_TOLERANCE = 1.0e-3
 DRIFT_TOLERANCE = 0.01
 ROOT_CUTOUT_RADIUS = 0.5083
@@ -716,7 +725,15 @@ def band_for(value, measured, relative):
     return abs(value - measured) / abs(measured) / relative
 
 
-def write_turbine_comparison(path, results, experiment, thrust_scope):
+def turbine_bands(criteria):
+    if criteria == "r2":
+        return TURBINE_BANDS
+    return {quantity: R3_BAND for quantity in TURBINE_BANDS}
+
+
+def write_turbine_comparison(path, results, experiment, thrust_scope,
+                             criteria=DEFAULT_CRITERIA):
+    bands = turbine_bands(criteria)
     measured = {
         "power": float(experiment["rotpow_kw"]),
         "torque": float(experiment["lsstqcor_nm"]),
@@ -737,7 +754,7 @@ def write_turbine_comparison(path, results, experiment, thrust_scope):
                 "thrust": metrics["thrust_n"],
             }
             for quantity in ("power", "torque", "thrust"):
-                band = TURBINE_BANDS[quantity]
+                band = bands[quantity]
                 fraction = band_for(sim[quantity], measured[quantity], band)
                 writer.writerow([
                     model,
@@ -752,7 +769,22 @@ def write_turbine_comparison(path, results, experiment, thrust_scope):
     return measured
 
 
-def spanwise_plane_cells(measured, c_ref_n_plane, c_ref_t_plane):
+def spanwise_within(criteria, pair, reference):
+    """Band verdict for a (c_n, c_t) pair against the measured pair.
+
+    R2: both inside max(0.15, 20 % of measured), absolute. R3: every given
+    value inside 10 % of its measured value (c_n alone for the chord pair, the
+    banded quantity; CTH and CTQ for the plane pair, the power comparison).
+    """
+    if criteria == "r2":
+        band_n = max(SPANWISE_BAND_MIN, SPANWISE_BAND_FRACTION * abs(reference[0]))
+        band_t = max(SPANWISE_BAND_MIN, SPANWISE_BAND_FRACTION * abs(reference[1]))
+        return abs(pair[0] - reference[0]) <= band_n and abs(pair[1] - reference[1]) <= band_t
+    return all(abs(value - ref) <= R3_BAND * abs(ref) for value, ref in zip(pair, reference))
+
+
+def spanwise_plane_cells(measured, c_ref_n_plane, c_ref_t_plane,
+                         criteria=DEFAULT_CRITERIA):
     """Appended plane-of-rotation cells, empty when either side is missing.
 
     The plane pair produces the rotor thrust and torque, so this is the POWER
@@ -766,11 +798,8 @@ def spanwise_plane_cells(measured, c_ref_n_plane, c_ref_t_plane):
     if (c_ref_n_plane is None or c_ref_t_plane is None
             or cth_exp is None or ctq_exp is None):
         return ["", "", "", "", "", "", ""]
-    band_n = max(SPANWISE_BAND_MIN, SPANWISE_BAND_FRACTION * abs(cth_exp))
-    band_t = max(SPANWISE_BAND_MIN, SPANWISE_BAND_FRACTION * abs(ctq_exp))
-    within = (
-        abs(c_ref_n_plane - cth_exp) <= band_n
-        and abs(c_ref_t_plane - ctq_exp) <= band_t
+    within = spanwise_within(
+        criteria, (c_ref_n_plane, c_ref_t_plane), (cth_exp, ctq_exp)
     )
     return [
         f"{c_ref_n_plane:.6g}",
@@ -783,7 +812,8 @@ def spanwise_plane_cells(measured, c_ref_n_plane, c_ref_t_plane):
     ]
 
 
-def write_spanwise_comparison(path, results, experiment_spanwise):
+def write_spanwise_comparison(path, results, experiment_spanwise,
+                              criteria=DEFAULT_CRITERIA):
     with path.open("w", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
         writer.writerow([
@@ -808,18 +838,12 @@ def write_spanwise_comparison(path, results, experiment_spanwise):
                 # 5-tuple profile row lands at indices 2 and 3 here.
                 c_ref_n_plane = values[2] if len(values) > 3 else None
                 c_ref_t_plane = values[3] if len(values) > 3 else None
-                band_n = max(
-                    SPANWISE_BAND_MIN,
-                    SPANWISE_BAND_FRACTION * abs(measured["cn"]),
-                )
-                band_t = max(
-                    SPANWISE_BAND_MIN,
-                    SPANWISE_BAND_FRACTION * abs(measured["ct"]),
-                )
-                within = (
-                    abs(c_ref_n - measured["cn"]) <= band_n
-                    and abs(c_ref_t - measured["ct"]) <= band_t
-                )
+                if criteria == "r2":
+                    within = spanwise_within(
+                        criteria, (c_ref_n, c_ref_t), (measured["cn"], measured["ct"])
+                    )
+                else:
+                    within = spanwise_within(criteria, (c_ref_n,), (measured["cn"],))
                 writer.writerow([
                     model,
                     f"{station:.2f}",
@@ -831,7 +855,8 @@ def write_spanwise_comparison(path, results, experiment_spanwise):
                     f"{(c_ref_t - measured['ct']) / measured['ct']:.6g}",
                     f"{measured['cm']:.6g}",
                     "yes" if within else "no",
-                    *spanwise_plane_cells(measured, c_ref_n_plane, c_ref_t_plane),
+                    *spanwise_plane_cells(measured, c_ref_n_plane, c_ref_t_plane,
+                                      criteria),
                 ])
 
 
@@ -887,6 +912,10 @@ def main(argv: list[str] | None = None) -> int:
                         default="blade")
     parser.add_argument("--match-eaeroth-span", action="store_true",
                         help="restrict the blade thrust sum to r/R >= 0.25")
+    parser.add_argument("--criteria", choices=("r2", "r3"), default=DEFAULT_CRITERIA,
+                        help="acceptance criteria for the within_band columns and the "
+                             "Bands line: r3 uniform 10 %% (default), r2 the frozen "
+                             "+-15 %% / max(0.15, 20 %%) bands")
     parser.add_argument("--sign-gate", action="store_true")
     parser.add_argument("--allow-short-window", action="store_true")
     parser.add_argument("--out", type=Path, default=None)
@@ -953,10 +982,11 @@ def main(argv: list[str] | None = None) -> int:
 
     measured = write_turbine_comparison(
         out_dir / "turbine_comparison.csv", results, experiment,
-        args.thrust_scope,
+        args.thrust_scope, args.criteria,
     )
     write_spanwise_comparison(
-        out_dir / "spanwise_comparison.csv", results, experiment_spanwise
+        out_dir / "spanwise_comparison.csv", results, experiment_spanwise,
+        args.criteria,
     )
 
     definitions = {
@@ -998,8 +1028,9 @@ def main(argv: list[str] | None = None) -> int:
         },
         "definitions": definitions,
         "bands": {
-            "turbine_relative": TURBINE_BANDS,
-            "spanwise": "max(0.15, 20 % of measured)",
+            "turbine_relative": turbine_bands(args.criteria),
+            "spanwise": ("max(0.15, 20 % of measured)" if args.criteria == "r2"
+                         else "c_n within 10 % of measured"),
             "drift_flag": DRIFT_TOLERANCE,
         },
         "experiment": {
@@ -1086,7 +1117,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     lines += [
         "",
-        "Bands: turbine power/torque/thrust +-15 %; spanwise max(0.15, 20 %).",
+        BANDS_LINE[args.criteria],
         "Spanwise CM excluded (element CSV has no cm column).",
         "",
         "Limitations:",
