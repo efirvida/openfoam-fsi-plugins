@@ -25,8 +25,13 @@ collective pitch ``4.127462 deg`` (peak-shaved above the optimum pitch, see
 PROVENANCE.md); TSR = ``Omega*R/V = 9.153`` = the reference design TSR.
 
 Precone: ``elementData`` radius is the along-blade radius (``HubRad + BlSpn``,
-tip 142.0 m) and the rotor is rendered with ``coneAngle 4``. Shaft tilt (6 deg)
-is not applied to the rotor axis (as in IEA-15, it only tilts the nacelle body).
+tip 142.0 m) and the rotor is rendered with ``coneAngle 4`` (blade geometry, kept).
+No shaft tilt anywhere (owner decision 2026-11-02): the rotor axis is horizontal
+and the optional nacelle body is horizontal too; ``--shaft-tilt on`` opts into the
+6 deg WindIO uptilt for the nacelle STL only.
+
+Mesh proportions: the castellated extents, the tower box and the near-ground cell
+are the IEA-15 constants times ``R22/R15`` (identical in units of R), see README.
 
 Usage: same flags as ``iea15mw/tools/generate_case.py`` (``--help``); defaults
 are the IEA-22 values. ``--check`` re-renders in memory and fails when a file on
@@ -61,19 +66,26 @@ RATED_RPM = 6.853997
 RATED_PITCH_DEG = 4.127462
 #: 59 stations -> 58 segments; 174 = 3 elements per segment.
 N_ELEMENTS = 174
-#: castellated-mesh extents: the IEA-15 absolute extents scaled by R22/R15
-#: (142/120.675 = 1.177), rounded; the tower box follows the 170 m hub height.
-SNAPPY = {
-    "SNAPPY_DISK_RADIUS": 175.0,
-    "SNAPPY_DISK_HALF_THICKNESS": 12.0,
-    "SNAPPY_WAKE_RADIUS": 200.0,
-    "SNAPPY_WAKE_UPSTREAM": 24.0,
-    "SNAPPY_WAKE_DOWNSTREAM": 550.0,
-    "SNAPPY_TOWER_UPSTREAM": 24.0,
-    "SNAPPY_TOWER_DOWNSTREAM": 550.0,
-    "SNAPPY_TOWER_Z_MIN": -(blade_geometry.HUB_HEIGHT + 20.0),
-    "SNAPPY_TOWER_Z_MAX": 12.0,
-}
+#: Mesh proportions (owner decision 2026-11-02): every castellated extent and the
+#: near-ground cell are the IEA-15 values multiplied by ``R22/R15``, i.e. identical
+#: in rotor-radius units. They are computed from the IEA-15 generator constants in
+#: ``_build_module`` (single source of truth, nothing re-typed); the domain
+#: extents, base cell (``D/32``) and time step already scale with R / D.
+SNAPPY_SCALED = (
+    "SNAPPY_DISK_RADIUS",
+    "SNAPPY_DISK_HALF_THICKNESS",
+    "SNAPPY_WAKE_RADIUS",
+    "SNAPPY_WAKE_UPSTREAM",
+    "SNAPPY_WAKE_DOWNSTREAM",
+    "SNAPPY_TOWER_UPSTREAM",
+    "SNAPPY_TOWER_DOWNSTREAM",
+    "SNAPPY_TOWER_Z_MIN",
+    "SNAPPY_TOWER_Z_MAX",
+    "Z_GROUND_CELL",
+    "ASM_TOWER_LATERAL_FACTOR",
+)
+#: Shaft tilt is off by default (owner decision); ``--shaft-tilt on`` opts in.
+DEFAULT_SHAFT_TILT = "off"
 
 
 def _build_module():
@@ -104,8 +116,14 @@ def _build_module():
     module.Z_HUB_CELL = module.ROTOR_DIAMETER / 32.0
     module.SURFACE_GEOMETRY = "constant/triSurface/iea22mw_blade.stl"
     module.NACELLE_STL = "constant/triSurface/iea22mw_nacelle.stl"
-    for key, value in SNAPPY.items():
-        setattr(module, key, value)
+    # R-proportional extents: IEA-15 value / R15 * R22 (read before any patching).
+    iea15_geometry = _load_module(
+        "_iea15mw_blade_geometry_ref", _IEA15_GENERATOR.parent / "blade_geometry.py"
+    )
+    scale = module.ROTOR_RADIUS / iea15_geometry.ROTOR_RADIUS_PUBLISHED
+    for key in SNAPPY_SCALED:
+        setattr(module, key, getattr(module, key) * scale)
+    module.DEFAULT_SHAFT_TILT = DEFAULT_SHAFT_TILT
     module.EXPECTED_CELL_COUNT = module.cell_count()
     return module
 
@@ -130,6 +148,9 @@ def outputs(*args, **kwargs):
     kwargs.setdefault("case_dir", PACKAGE / "case")
     kwargs.setdefault("n_elements", N_ELEMENTS)
     kwargs.setdefault("cone_angle", blade_geometry.PRECONE_DEG)
+    for key in SNAPPY_SCALED[:9]:  # IEA-15 defaults are bound at definition time
+        kwargs.setdefault(key.lower(), getattr(_impl, key))
+    kwargs.setdefault("snappy_tower_lateral_factor", _impl.ASM_TOWER_LATERAL_FACTOR)
     return _impl.outputs(**kwargs)
 
 

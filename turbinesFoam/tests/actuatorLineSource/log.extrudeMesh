@@ -1,0 +1,80 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2506                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _615aae61d7-20250627 OPENFOAM=2506 version=v2506
+Arch   : "LSB;label=64;scalar=64"
+Exec   : extrudeMesh
+Date   : Oct 28 2026
+Time   : 14:55:21
+Host   : sdumont17
+PID    : 3732972
+I/O    : uncollated
+Case   : /scratch/leahk/eduardo.donestevez/simulations/tmp/of-plugins/.worktrees/tip-pitch/turbinesFoam/tests/actuatorLineSource
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Overriding DebugSwitches according to controlDict
+    actuatorLineSource 1;
+
+    actuatorLineElement 1;
+
+    LeishmanBeddoes 1;
+
+    LeishmanBeddoes3G 1;
+
+    LeishmanBeddoesSGC 1;
+
+--> FOAM Warning : 
+    From static Foam::IOstreamOption::compressionType Foam::IOstreamOption::compressionEnum(const Foam::word&, Foam::IOstreamOption::compressionType)
+    in file db/options/IOstreamOption.C at line 189
+    Unknown compression specifier 'uncompressed' using compression off
+Create mesh for time = 0
+
+Selecting extrudeModel linearDirection
+Selected extrudeModel for linearDirection using coeffs 
+{
+    direction       ( 0 0 -1 );
+    thickness       0.1;
+}
+
+Extruding from patch using model linearDirection
+Flipping normals before extruding
+Not collapsing any edges after extrusion
+
+Extruding patches 1(front) on mesh "/scratch/leahk/eduardo.donestevez/simulations/tmp/of-plugins/.worktrees/tip-pitch/turbinesFoam/tests/actuatorLineSource/"
+
+Overriding DebugSwitches according to controlDict
+    actuatorLineSource 1;
+
+    actuatorLineElement 1;
+
+    LeishmanBeddoes 1;
+
+    LeishmanBeddoes3G 1;
+
+    LeishmanBeddoesSGC 1;
+
+--> FOAM Warning : 
+    From static Foam::IOstreamOption::compressionType Foam::IOstreamOption::compressionEnum(const Foam::word&, Foam::IOstreamOption::compressionType)
+    in file db/options/IOstreamOption.C at line 189
+    Unknown compression specifier 'uncompressed' using compression off
+Create mesh for time = 0
+
+Adding overall 0 processor patches.
+Mesh bounding box : (-1.5 -1.83 -0.05) (2.16 1.83 0.05)
+        with span : (3.66 3.66 0.1)
+Merge distance    : 0
+
+Writing mesh to "/scratch/leahk/eduardo.donestevez/simulations/tmp/of-plugins/.worktrees/tip-pitch/turbinesFoam/tests/actuatorLineSource/constant/region0"
+
+End
+

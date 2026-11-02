@@ -9,7 +9,7 @@ Templates: ``data/openfast-v5-templates`` (built by ``build_openfast_templates.p
 
     openfast_iea22.py setup  OUTDIR --wake bem|olaf [--speed U --rpm N --pitch P]
                              [--revs 4] [--olaf-panels N --olaf-free N]
-                             [--tower on|off] [--no-tilt] [--name NAME]
+                             [--tower on|off] [--tilt] [--name NAME]
     openfast_iea22.py sweep  OUTDIR --wake bem|olaf [--xlsx FILE] [--speeds U ...]
     openfast_iea22.py run    CASEDIR [--openfast BIN]        (run + extract)
     openfast_iea22.py extract CASEDIR [--revs N]             (metrics.json + spanwise.csv)
@@ -89,7 +89,7 @@ def stage_inputs(case_dir: Path, source_root: Path) -> None:
 
 # --- case construction ------------------------------------------------------------
 def make_case(wake: str, speed: float, rpm: float, pitch: float, *, revs: float = 4.0, tower: bool = True,
-              tilt: bool = True, olaf_panels: int | None = None, olaf_free: int | None = None,
+              tilt: bool = False, olaf_panels: int | None = None, olaf_free: int | None = None,
               name: str | None = None) -> dict:
     """Pure description of one case (everything ``write_case`` needs); no file access."""
     if wake not in ("bem", "olaf"):
@@ -126,8 +126,9 @@ def write_case(case: dict, out: Path, *, stage: bool = True, source_root: Path =
     text = tpl.set_value(ed.read_text(), "RotSpeed", f"{case['rpm']:.6f}")
     for blade in (1, 2, 3):
         text = tpl.set_value(text, f"BlPitch({blade})", f"{case['pitch']:.6f}")
-    if not case["tilt"]:
-        text = tpl.set_value(text, "ShftTilt", "0.0")
+    if case["tilt"]:  # opt-in: the real 6 deg tilted shaft (templates are tilt 0)
+        for key, value in tpl.TILTED_ED.items():
+            text = tpl.set_value(text, key, value)
     ed.write_text(text)
     inflow = directory / f"{ROOT}_InflowFile.dat"
     inflow.write_text(tpl.set_value(inflow.read_text(), "HWindSpeed", f"{case['U']:.6f}"))
@@ -259,7 +260,7 @@ def run_case(case_dir: Path, binary: str, revs: float | None) -> dict:
 
 # --- command line -----------------------------------------------------------------
 def _case_kwargs(args) -> dict:
-    return {"revs": args.revs, "tower": args.tower == "on", "tilt": not args.no_tilt,
+    return {"revs": args.revs, "tower": args.tower == "on", "tilt": args.tilt,
             "olaf_panels": args.olaf_panels, "olaf_free": args.olaf_free}
 
 
@@ -301,7 +302,7 @@ def main(argv=None) -> int:
         p.add_argument("--olaf-panels", type=int, default=None, help="near-wake panels (default: guideline, >= 4 D and >= 10 rev)")
         p.add_argument("--olaf-free", type=int, default=None)
         p.add_argument("--tower", choices=("on", "off"), default="on")
-        p.add_argument("--no-tilt", action="store_true", help="ShftTilt = 0 (horizontal rotor axis, as the OpenFOAM case)")
+        p.add_argument("--tilt", action="store_true", help="opt in to the real 6 deg shaft tilt (default: ShftTilt = 0, horizontal rotor axis, as the OpenFOAM case)")
         p.add_argument("--source-root", type=Path, default=DEFAULT_SOURCE)
 
     setup = sub.add_parser("setup", help="one case, default the rated point")

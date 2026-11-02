@@ -11,7 +11,7 @@ recipe `phaseVI/openfast/build_openfast_dp.sh`, build tree `/scratch/leahk/eduar
 | Tool (`../scripts/`) | Role |
 |---|---|
 | `build_openfast_templates.py [--check]` | `data/openfast-v5-templates` from the IEA-15 layout and the IEA-22 monopile values |
-| `openfast_iea22.py setup OUT --wake bem\|olaf` | one case (default: rated 11.134927 m/s, 6.853997 rpm, pitch 4.127462 deg); stages and hash-checks the source files, writes `case.json` |
+| `openfast_iea22.py setup OUT --wake bem\|olaf` | one case (default and only documented point: rated 11.134927 m/s, 6.853997 rpm, pitch 4.127462 deg, **no shaft tilt**, tower on; `--tilt` opts into the real 6 deg); stages and hash-checks the source files, writes `case.json` |
 | `openfast_iea22.py sweep OUT --wake ...` | one case per wind speed from the WISDEM rows of the tabular workbook; writes `run_all.sh` (not submitted) |
 | `openfast_iea22.py run CASE` / `extract CASE` | run OpenFAST, then `metrics.json` (P, T, Q, Cp, Ct, Cq, TSR, convergence) and `spanwise.csv` (`node,r_over_R,radius_m,Alpha,Cn,Ct,...`) |
 | `rated_table_check.py CASE [--xlsx FILE]` | plausibility of `metrics.json` against `IEA-22-280-RWT_Cp_Ct_Cq.txt` and the WISDEM rated row |

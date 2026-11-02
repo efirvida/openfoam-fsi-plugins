@@ -10,14 +10,14 @@ checking their sha256 (ElastoDyn blade file `0b7fb7f5e4d19bab0ede1f8a2ef80afbf7b
 | Option | Value | Reason |
 |---|---|---|
 | Rotor | rigid (blade, tower, platform, generator DOF all `False`), fixed `RotSpeed`/`BlPitch`, `CompServo=0` | the ALM/ASM blades are rigid; isolates the aerodynamics (IEA-15 template had flexible blades) |
-| `TipRad`, `HubRad`, `PreCone`, `ShftTilt`, `OverHang` | 142.0, 4.2, -4.0, -6.0, -14.077 | ElastoDyn monopile (PROVENANCE radius decision: R = TipRad, not projected) |
+| `TipRad`, `HubRad`, `PreCone`, `ShftTilt`, `OverHang` | 142.0, 4.2, -4.0, 0.0, -14.0 | ElastoDyn monopile (PROVENANCE radius decision: R = TipRad, not projected); tilt and overhang follow the no-tilt decision, precone is blade geometry and is kept |
 | `Wake_Mod` | 1 (BEMT) / 3 (OLAF), rewritten by `setup` | |
 | `BEM_Mod` | 2 (polar) | IEA-22 source value; the IEA-15 template had 1 (legacy), which ignores the 7 m prebend and the cone in the BEM projection (+0.5 % Cp here) |
 | `UA_Mod`, `AoA34` | 0, False | quasi-steady airfoils, as the ALM/ASM; the IEA-22 source file uses `UA_Mod=4` (the IEA-15 template used 3) |
 | `DBEMT_Mod` | 0 | steady points |
 | `AFTabMod` | 1 | first table only, like `liftReCorrExp 0` |
 | Tower | `TwrPotent=1`, `TwrShadow=1`, `TwrAero=True`, 31 nodes of the IEA-22 monopile table | OpenFAST-faithful default of the IEA-15 comparison; `setup --tower off` switches all three off |
-| Shaft tilt | -6 deg kept | the real turbine; the OpenFOAM case axis is horizontal, `setup --no-tilt` gives the like-for-like variant |
+| Shaft tilt | 0 (owner decision 2026-11-02, no inclinations); `Twr2Shft` 5.614 m and `OverHang` -14.0 m keep the hub at 170 m and the 14 m horizontal overhang; tower kept | the OpenFOAM case axis is horizontal; `setup --tilt` restores the real -6 deg / -14.0771 m / 4.1425 m |
 | Air | 1.225 kg/m^3, `KinVisc` 1.4776e-5, `SpdSound` 340 | IEA-22 AeroDyn file (viscosity and sound speed are inert with one table and no UA) |
 | Inflow | uniform 11.134927 m/s, `PLexp 0`, `RefHt 170` | rated row, no shear |
 | OLAF | IEA-15 template values (`DiffusionMethod 0`, `RegDeterMethod 3`, factors 0.6, `VelocityMethod 2`) | mirrors the IEA-15 OLAF reference; sizing below |

@@ -41,6 +41,15 @@ RATED_RPM = 6.853997
 RATED_PITCH = 4.127462
 HUB_HEIGHT = 170.0
 ROTOR_RADIUS = 142.0
+#: Horizontal hub-to-yaw-axis distance [m] (windIO ``overhang``); the tilt-0 ``OverHang``.
+OVERHANG_HORIZONTAL = 14.0
+#: ElastoDyn values of the real 6 deg tilted turbine (source file), restored by
+#: ``openfast_iea22.py setup --tilt``; checked against the source in the tests.
+TILTED_ED = {
+    "ShftTilt": "-6.000000000000001",
+    "OverHang": "-14.07711591388923",
+    "Twr2Shft": "4.142540706280534",
+}
 N_STATIONS = 59
 
 #: ElastoDyn keys whose value is the IEA-22 monopile value (geometry, mass, drivetrain).
@@ -90,6 +99,13 @@ def build_elastodyn(base: str, src: str) -> str:
         text = set_value(text, f"BlPitch({blade})", f"{RATED_PITCH}")
     for key in ED_SOURCE_KEYS:
         text = set_value(text, key, get_value(src, key))
+    # No shaft tilt (owner decision 2026-11-02): horizontal shaft, hub kept at 170 m and
+    # the horizontal overhang at the WindIO 14 m (the source file's -14.0771 m is the
+    # along-shaft length of a 6 deg tilted shaft). Precone stays (blade geometry).
+    tower_ht = float(get_value(src, "TowerHt"))
+    text = set_value(text, "ShftTilt", "0.0")
+    text = set_value(text, "OverHang", f"{-OVERHANG_HORIZONTAL}")
+    text = set_value(text, "Twr2Shft", f"{round(HUB_HEIGHT - tower_ht, 6)}")
     # Rigid-rotor reference (the turbinesFoam ALM/ASM blades are rigid): no structural DOF.
     for dof in ("FlapDOF1", "FlapDOF2", "EdgeDOF"):
         text = set_value(text, dof, "False")

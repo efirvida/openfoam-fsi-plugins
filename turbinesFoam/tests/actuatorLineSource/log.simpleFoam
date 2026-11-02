@@ -1,0 +1,2401 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2506                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _615aae61d7-20250627 OPENFOAM=2506 version=v2506
+Arch   : "LSB;label=64;scalar=64"
+Exec   : simpleFoam
+Date   : Oct 28 2026
+Time   : 14:55:22
+Host   : sdumont17
+PID    : 3733025
+I/O    : uncollated
+Case   : /scratch/leahk/eduardo.donestevez/simulations/tmp/of-plugins/.worktrees/tip-pitch/turbinesFoam/tests/actuatorLineSource
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Overriding DebugSwitches according to controlDict
+    actuatorLineSource 1;
+
+    actuatorLineElement 1;
+
+    LeishmanBeddoes 1;
+
+    LeishmanBeddoes3G 1;
+
+    LeishmanBeddoesSGC 1;
+
+--> FOAM Warning : 
+    From static Foam::IOstreamOption::compressionType Foam::IOstreamOption::compressionEnum(const Foam::word&, Foam::IOstreamOption::compressionType)
+    in file db/options/IOstreamOption.C at line 189
+    Unknown compression specifier 'uncompressed' using compression off
+Create mesh for time = 0
+
+
+SIMPLE: convergence criteria
+    field p	 tolerance 0.001
+    field U	 tolerance 0.0001
+    field "(k|epsilon)"	 tolerance 0.0001
+
+Reading field p
+
+Reading field U
+
+Reading/calculating face flux field phi
+
+Selecting incompressible transport model Newtonian
+Selecting turbulence model type RAS
+Selecting RAS turbulence model kEpsilon
+RAS
+{
+    RASModel        kEpsilon;
+    turbulence      on;
+    printCoeffs     on;
+    Cmu             0.09;
+    C1              1.44;
+    C2              1.92;
+    C3              0;
+    sigmak          1;
+    sigmaEps        1.3;
+}
+
+No MRF models present
+
+Creating finite volume options from "system/fvOptions"
+
+Selecting finite volume options type actuatorLineSource
+    Source: foil
+    State: active
+    - selecting cells using cellSet foil
+    - selected 16 cell(s) with volume 0.0059536
+Debugging for actuatorLineSource on
+Actuator line properties:
+Profile data:
+
+{
+    profile0
+    {
+        Re              90000;
+        data            ( ( -90 -1.45 0.21 ) ( -18 -1.45 0.21 ) ( -16 -1.3 0.165 ) ( -14 -1.1 0.125 ) ( -12 -0.95 0.092 ) ( -10 -0.8 0.07 ) ( -8 -0.64 0.05 ) ( -6 -0.5 0.04 ) ( -4 -0.32 0.028 ) ( -2 -0.18 0.022 ) ( 0 0 0.02 ) ( 2 0.18 0.022 ) ( 4 0.32 0.028 ) ( 6 0.5 0.04 ) ( 8 0.64 0.05 ) ( 10 0.8 0.07 ) ( 12 0.95 0.092 ) ( 14 1.1 0.125 ) ( 16 1.3 0.165 ) ( 18 1.45 0.21 ) ( 90 1.45 0.21 ) );
+    }
+}
+
+First item of element geometry:
+
+6
+(
+3(0 0 -0.05)
+3(0 0 1)
+1(0.1)
+3(-1 0 0)
+1(0.25)
+1(10)
+)
+
+Total length: 0.1
+Elements per geometry segment: 1
+Points:
+2((0 0 -0.05) (0 0 0.05))
+Span directions:
+2{(0 0 1)}
+Span lengths: 
+1(0.1)
+Chord lengths:
+2{0.1}
+Pitches:
+2{10}
+Root location: (0 0 -0.05)
+Tip location: (0 0 0.05)
+Creating actuatorLineElement: foil.element0
+Geometry segment index: 0
+Position: (0 0 0)
+Chord length: 0.1
+Chord direction (before pitching): (-1 0 0)
+Pitch (degrees): 10
+Span length: 0.1
+Span direction: (0 0 1)
+Profile name index: 0
+Profile name: profile0
+writePerf: 1
+Root distance (nondimensional): 0.5
+actuatorLineElement properties:
+Position: (0 0 0)
+chordLength: 0.1
+chordDirection: (-1 0 0)
+spanLength: 0.1
+spanDirection: (0 0 1)
+writePerf: 1
+Rotating actuatorLineElement: foil.element0
+Rotation point: (0 0 0)
+Rotation axis: (0 0 1)
+Rotation angle (radians): 0.174532925199
+Rotation matrix:
+(0.984807753012 -0.173648177667 0 0.173648177667 0.984807753012 0 0 0 1)
+Initial position: (0 0 0)
+Initial chordDirection: (-1 0 0)
+Initial spanDirection: (0 0 1)
+Initial velocity: (0 0 0)
+Final position: (0 0 0)
+Final chordDirection: (-0.984807753012 -0.173648177667 0)
+Final chordRefDirection: (-1 0 0)
+Final spanDirection: (0 0 1)
+Final velocity: (0 0 0)
+
+Changing velocity of foil.element0 from (0 0 0) to (0 0 0)
+
+
+Starting time loop
+
+Time = 1
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 100000
+    ReRef: 90000
+    f(Re): 0.00173674256443
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02548421423
+    n: 0.23
+    K (lift): 1.02452892195
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195029818328
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48556693682
+    inflowVelocity: (1 0 0)
+    relativeVelocity: (1 0 0)
+    Reynolds number: 100000
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 10
+    Angle of attack (corrected, degrees): 10
+    liftDirection: (0 -1 0)
+    dragDirection: (1 0 0)
+    force (per unit density): (0.000341302182075 -0.004 0)
+Force (per unit density) on foil: 
+(0.000341302182075 -0.004 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 1, Final residual = 0.0832434317927, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 1, Final residual = 0.0832434317648, No Iterations 6
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.0471382859144, No Iterations 4
+time step continuity errors : sum local = 1.54422408071e-05, global = -4.27261160618e-07, cumulative = -4.27261160618e-07
+smoothSolver:  Solving for epsilon, Initial residual = 0.324041756166, Final residual = 0.0234491414441, No Iterations 6
+smoothSolver:  Solving for k, Initial residual = 0.999999999999, Final residual = 0.0805841261527, No Iterations 6
+ExecutionTime = 0.03 s  ClockTime = 0 s
+
+Time = 2
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99976.8892117
+    ReRef: 90000
+    f(Re): 0.00173683799028
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02542787179
+    n: 0.23
+    K (lift): 1.02447445846
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195040534301
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48548796476
+    inflowVelocity: (0.999765352309 0.00266044467861 0)
+    relativeVelocity: (0.999765352309 0.00266044467861 0)
+    Reynolds number: 99976.8892117
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.84753233191
+    Angle of attack (corrected, degrees): 9.84753233191
+    liftDirection: (0.00266105967048 -0.999996459374 0)
+    dragDirection: (0.999996459374 0.00266105967048 0)
+    force (per unit density): (0.000344210188889 -0.00393703641279 0)
+Force (per unit density) on foil: 
+(0.000344210188889 -0.00393703641279 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.556877840926, Final residual = 0.049581390737, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.207973234746, Final residual = 0.0194798728265, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.566379798031, Final residual = 0.0250635516933, No Iterations 4
+time step continuity errors : sum local = 1.33719837999e-05, global = -4.81436211187e-07, cumulative = -9.08697371805e-07
+smoothSolver:  Solving for epsilon, Initial residual = 0.295563005665, Final residual = 0.0210436680778, No Iterations 6
+smoothSolver:  Solving for k, Initial residual = 0.725400025503, Final residual = 0.0573150918343, No Iterations 6
+ExecutionTime = 0.03 s  ClockTime = 0 s
+
+Time = 3
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99965.0479456
+    ReRef: 90000
+    f(Re): 0.00173688689493
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02539899933
+    n: 0.23
+    K (lift): 1.02444654926
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195046026114
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48544749643
+    inflowVelocity: (0.99964501018 0.00330676565098 0)
+    relativeVelocity: (0.99964501018 0.00330676565098 0)
+    Reynolds number: 99965.0479456
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.81046969409
+    Angle of attack (corrected, degrees): 9.81046969409
+    liftDirection: (0.00330792183762 -0.999994528812 0)
+    dragDirection: (0.999994528812 0.00330792183762 0)
+    force (per unit density): (0.000344829741072 -0.00392125199727 0)
+Force (per unit density) on foil: 
+(0.000344829741072 -0.00392125199727 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.347523397989, Final residual = 0.0298040319975, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.153336966793, Final residual = 0.014198024162, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.298500215364, Final residual = 0.0171755234729, No Iterations 3
+time step continuity errors : sum local = 9.03280422997e-06, global = -6.29341963588e-07, cumulative = -1.53803933539e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.259140240555, Final residual = 0.0181802568773, No Iterations 6
+smoothSolver:  Solving for k, Initial residual = 0.523080627988, Final residual = 0.0405787678396, No Iterations 6
+ExecutionTime = 0.03 s  ClockTime = 0 s
+
+Time = 4
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99958.8578562
+    ReRef: 90000
+    f(Re): 0.00173691246318
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02538390492
+    n: 0.23
+    K (lift): 1.02443195856
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195048897335
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48542633991
+    inflowVelocity: (0.999584632603 0.00280867507673 0)
+    relativeVelocity: (0.999584632603 0.00280867507673 0)
+    Reynolds number: 99958.8578562
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.8390083249
+    Angle of attack (corrected, degrees): 9.8390083249
+    liftDirection: (0.00280983110148 -0.999996052417 0)
+    dragDirection: (0.999996052417 0.00280983110148 0)
+    force (per unit density): (0.000344261085048 -0.00393219984136 0)
+Force (per unit density) on foil: 
+(0.000344261085048 -0.00393219984136 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.196312357001, Final residual = 0.0157633617433, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.122564973194, Final residual = 0.0109282664077, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.454585416217, Final residual = 0.0281546255874, No Iterations 3
+time step continuity errors : sum local = 1.49175428824e-05, global = 3.96601049267e-07, cumulative = -1.14143828613e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.207865222627, Final residual = 0.0143908845294, No Iterations 6
+smoothSolver:  Solving for k, Initial residual = 0.389204014378, Final residual = 0.0296885890043, No Iterations 6
+ExecutionTime = 0.04 s  ClockTime = 0 s
+
+Time = 5
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99955.1862476
+    ReRef: 90000
+    f(Re): 0.00173692762981
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02537495141
+    n: 0.23
+    K (lift): 1.02442330385
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195050600491
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48541379059
+    inflowVelocity: (0.999549586007 0.0021332825247 0)
+    relativeVelocity: (0.999549586007 0.0021332825247 0)
+    Reynolds number: 99955.1862476
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.87771702244
+    Angle of attack (corrected, degrees): 9.87771702244
+    liftDirection: (0.00213423895726 -0.999997722509 0)
+    dragDirection: (0.999997722509 0.00213423895726 0)
+    force (per unit density): (0.000343500705001 -0.0039474189952 0)
+Force (per unit density) on foil: 
+(0.000343500705001 -0.0039474189952 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0982563128124, Final residual = 0.00684077707842, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.0939446376547, Final residual = 0.00857834696013, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.435436925855, Final residual = 0.0337124626624, No Iterations 3
+time step continuity errors : sum local = 1.54457971016e-05, global = 3.60756680245e-07, cumulative = -7.80681605881e-07
+smoothSolver:  Solving for epsilon, Initial residual = 0.165642344325, Final residual = 0.0113198014245, No Iterations 6
+smoothSolver:  Solving for k, Initial residual = 0.290666049691, Final residual = 0.0218130602363, No Iterations 6
+ExecutionTime = 0.04 s  ClockTime = 0 s
+
+Time = 6
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99952.797592
+    ReRef: 90000
+    f(Re): 0.00173693749722
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02536912632
+    n: 0.23
+    K (lift): 1.02441767319
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195051708566
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48540562613
+    inflowVelocity: (0.999526511318 0.00171108724666 0)
+    relativeVelocity: (0.999526511318 0.00171108724666 0)
+    Reynolds number: 99952.797592
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.90191557629
+    Angle of attack (corrected, degrees): 9.90191557629
+    liftDirection: (0.00171189530246 -0.999998534706 0)
+    dragDirection: (0.999998534706 0.00171189530246 0)
+    force (per unit density): (0.000343014298887 -0.00395692509901 0)
+Force (per unit density) on foil: 
+(0.000343014298887 -0.00395692509901 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0554751787774, Final residual = 0.00360283398454, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.0851560003437, Final residual = 0.00773841240869, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.445523657027, Final residual = 0.0203064932876, No Iterations 3
+time step continuity errors : sum local = 7.71824651776e-06, global = 2.84485149185e-07, cumulative = -4.96196456695e-07
+smoothSolver:  Solving for epsilon, Initial residual = 0.131319784621, Final residual = 0.00884147943003, No Iterations 6
+smoothSolver:  Solving for k, Initial residual = 0.219166086492, Final residual = 0.0161576948209, No Iterations 6
+ExecutionTime = 0.04 s  ClockTime = 0 s
+
+Time = 7
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99950.8131659
+    ReRef: 90000
+    f(Re): 0.00173694569503
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02536428692
+    n: 0.23
+    K (lift): 1.02441299532
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195052629149
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48539884322
+    inflowVelocity: (0.999506942631 0.00154171504483 0)
+    relativeVelocity: (0.999506942631 0.00154171504483 0)
+    Reynolds number: 99950.8131659
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.91162272971
+    Angle of attack (corrected, degrees): 9.91162272971
+    liftDirection: (0.00154247373883 -0.999998810387 0)
+    dragDirection: (0.999998810387 0.00154247373883 0)
+    force (per unit density): (0.000342810693612 -0.00396065690187 0)
+Force (per unit density) on foil: 
+(0.000342810693612 -0.00396065690187 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0546474929257, Final residual = 0.00423060811393, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.0773931999361, Final residual = 0.00644938046783, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.486015673497, Final residual = 0.022184093714, No Iterations 3
+time step continuity errors : sum local = 9.51522238748e-06, global = -2.2826314802e-07, cumulative = -7.24459604715e-07
+smoothSolver:  Solving for epsilon, Initial residual = 0.103775537315, Final residual = 0.00685272130187, No Iterations 6
+smoothSolver:  Solving for k, Initial residual = 0.167026039904, Final residual = 0.0120493218808, No Iterations 6
+ExecutionTime = 0.04 s  ClockTime = 0 s
+
+Time = 8
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99948.4892127
+    ReRef: 90000
+    f(Re): 0.00173695529572
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02535861942
+    n: 0.23
+    K (lift): 1.024407517
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195053707271
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48539089964
+    inflowVelocity: (0.999483832737 0.0014552276067 0)
+    relativeVelocity: (0.999483832737 0.0014552276067 0)
+    Reynolds number: 99948.4892127
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.91657859943
+    Angle of attack (corrected, degrees): 9.91657859943
+    liftDirection: (0.00145597759222 -0.999998940064 0)
+    dragDirection: (0.999998940064 0.00145597759222 0)
+    force (per unit density): (0.000342698310097 -0.00396245804742 0)
+Force (per unit density) on foil: 
+(0.000342698310097 -0.00396245804742 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0551539807266, Final residual = 0.00448658965409, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.058965661379, Final residual = 0.00402886989869, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.372082235284, Final residual = 0.0194134477544, No Iterations 3
+time step continuity errors : sum local = 8.9716990858e-06, global = -4.33604005881e-07, cumulative = -1.1580636106e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.0816995741557, Final residual = 0.00525594408134, No Iterations 6
+smoothSolver:  Solving for k, Initial residual = 0.128313557594, Final residual = 0.00900131681123, No Iterations 6
+ExecutionTime = 0.05 s  ClockTime = 0 s
+
+Time = 9
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99945.7761529
+    ReRef: 90000
+    f(Re): 0.00173696650425
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02535200284
+    n: 0.23
+    K (lift): 1.02440112129
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195054965949
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48538162588
+    inflowVelocity: (0.999456887403 0.00132185611393 0)
+    relativeVelocity: (0.999456887403 0.00132185611393 0)
+    Reynolds number: 99945.7761529
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.92422211178
+    Angle of attack (corrected, degrees): 9.92422211178
+    liftDirection: (0.00132257326403 -0.9999991254 0)
+    dragDirection: (0.9999991254 0.00132257326403 0)
+    force (per unit density): (0.000342529607372 -0.00396530483557 0)
+Force (per unit density) on foil: 
+(0.000342529607372 -0.00396530483557 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0477727200979, Final residual = 0.00400191628073, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.0521329828515, Final residual = 0.00333664192317, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.295709798592, Final residual = 0.0291753402296, No Iterations 2
+time step continuity errors : sum local = 1.40283051796e-05, global = -4.9289413412e-07, cumulative = -1.65095774472e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.0640452857109, Final residual = 0.00638027444186, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 0.0990041809231, Final residual = 0.00669804286805, No Iterations 6
+ExecutionTime = 0.05 s  ClockTime = 0 s
+
+Time = 10
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99943.1522071
+    ReRef: 90000
+    f(Re): 0.00173697734502
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534560345
+    n: 0.23
+    K (lift): 1.02439493554
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056183326
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537265653
+    inflowVelocity: (0.999430886047 0.00112752996513 0)
+    relativeVelocity: (0.999430886047 0.00112752996513 0)
+    Reynolds number: 99943.1522071
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.93536053191
+    Angle of attack (corrected, degrees): 9.93536053191
+    liftDirection: (0.00112817130562 -0.999999363615 0)
+    dragDirection: (0.999999363615 0.00112817130562 0)
+    force (per unit density): (0.000342290393705 -0.00396955845117 0)
+Force (per unit density) on foil: 
+(0.000342290393705 -0.00396955845117 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0360516314754, Final residual = 0.00319954151134, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.042309426674, Final residual = 0.00418522814903, No Iterations 5
+GAMG:  Solving for p, Initial residual = 0.324139210435, Final residual = 0.0109273039187, No Iterations 3
+time step continuity errors : sum local = 5.55284360859e-06, global = -4.96809832398e-07, cumulative = -2.14776757711e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.0505487402574, Final residual = 0.00488168697931, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 0.0763802675787, Final residual = 0.00494116855428, No Iterations 6
+ExecutionTime = 0.06 s  ClockTime = 0 s
+
+Time = 11
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99941.5161522
+    ReRef: 90000
+    f(Re): 0.00173698410452
+    f(ReRef): 0.00178100208401
+    K (drag): 1.0253416133
+    n: 0.23
+    K (lift): 1.0243910786
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056942394
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48536706397
+    inflowVelocity: (0.999414737951 0.00092013383976 0)
+    relativeVelocity: (0.999414737951 0.00092013383976 0)
+    Reynolds number: 99941.5161522
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.94724935634
+    Angle of attack (corrected, degrees): 9.94724935634
+    liftDirection: (0.000920672284338 -0.999999576181 0)
+    dragDirection: (0.999999576181 0.000920672284338 0)
+    force (per unit density): (0.000342040232603 -0.00397419088161 0)
+Force (per unit density) on foil: 
+(0.000342040232603 -0.00397419088161 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0263835460622, Final residual = 0.00202116572758, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.0371308840951, Final residual = 0.00262729202394, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.298880583477, Final residual = 0.0110789242324, No Iterations 3
+time step continuity errors : sum local = 5.41788010461e-06, global = 1.77196934799e-07, cumulative = -1.97057064232e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.0396891576008, Final residual = 0.00369078779011, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 0.0589759170879, Final residual = 0.00584470690614, No Iterations 5
+ExecutionTime = 0.06 s  ClockTime = 0 s
+
+Time = 12
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99941.1559172
+    ReRef: 90000
+    f(Re): 0.00173698559289
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534073472
+    n: 0.23
+    K (lift): 1.02439022935
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195057109532
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48536583256
+    inflowVelocity: (0.99941128007 0.000746909892339 0)
+    relativeVelocity: (0.99941128007 0.000746909892339 0)
+    Reynolds number: 99941.1559172
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95718001448
+    Angle of attack (corrected, degrees): 9.95718001448
+    liftDirection: (0.000747349663394 -0.999999720734 0)
+    dragDirection: (0.999999720734 0.000747349663394 0)
+    force (per unit density): (0.000341835859716 -0.00397814028805 0)
+Force (per unit density) on foil: 
+(0.000341835859716 -0.00397814028805 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0243693289012, Final residual = 0.00145223113398, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.0328455440105, Final residual = 0.00260345725593, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.27587874426, Final residual = 0.0267483764301, No Iterations 2
+time step continuity errors : sum local = 1.19713292858e-05, global = 3.47202714718e-07, cumulative = -1.6233679276e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.0308751265854, Final residual = 0.00274765518352, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 0.046006921098, Final residual = 0.00435815392439, No Iterations 5
+ExecutionTime = 0.08 s  ClockTime = 0 s
+
+Time = 13
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99941.7943405
+    ReRef: 90000
+    f(Re): 0.00173698295515
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534229177
+    n: 0.23
+    K (lift): 1.02439173442
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056813324
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48536801491
+    inflowVelocity: (0.999417735791 0.000644194516877 0)
+    relativeVelocity: (0.999417735791 0.000644194516877 0)
+    Reynolds number: 99941.7943405
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.96306887444
+    Angle of attack (corrected, degrees): 9.96306887444
+    liftDirection: (0.000644569692918 -0.999999792265 0)
+    dragDirection: (0.999999792265 0.000644569692918 0)
+    force (per unit density): (0.000341719161525 -0.00398055016223 0)
+Force (per unit density) on foil: 
+(0.000341719161525 -0.00398055016223 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0296263460933, Final residual = 0.00183655978299, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.0232216476419, Final residual = 0.00201934081842, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.2991794977, Final residual = 0.0277463598047, No Iterations 2
+time step continuity errors : sum local = 1.16826589146e-05, global = 3.82106348255e-07, cumulative = -1.24126157934e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.0238429745534, Final residual = 0.00201937482474, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 0.035803578445, Final residual = 0.00322493116064, No Iterations 5
+ExecutionTime = 0.08 s  ClockTime = 0 s
+
+Time = 14
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.7768105
+    ReRef: 90000
+    f(Re): 0.00173697889599
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534468791
+    n: 0.23
+    K (lift): 1.02439405056
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056357495
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537137331
+    inflowVelocity: (0.999427579482 0.000614026660901 0)
+    relativeVelocity: (0.999427579482 0.000614026660901 0)
+    Reynolds number: 99942.7768105
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.96479871831
+    Angle of attack (corrected, degrees): 9.96479871831
+    liftDirection: (0.000614378227719 -0.99999981127 0)
+    dragDirection: (0.99999981127 0.000614378227719 0)
+    force (per unit density): (0.000341689583464 -0.00398132142062 0)
+Force (per unit density) on foil: 
+(0.000341689583464 -0.00398132142062 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0326814301996, Final residual = 0.00220996467656, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.0139017963251, Final residual = 0.00125350419794, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.274348633965, Final residual = 0.0271879112686, No Iterations 2
+time step continuity errors : sum local = 1.11116145374e-05, global = 3.61324162377e-07, cumulative = -8.79937416965e-07
+smoothSolver:  Solving for epsilon, Initial residual = 0.018241698591, Final residual = 0.00146369071712, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 0.0277094490374, Final residual = 0.0023627004803, No Iterations 5
+ExecutionTime = 0.08 s  ClockTime = 0 s
+
+Time = 15
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99943.5588795
+    ReRef: 90000
+    f(Re): 0.00173697566483
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534659527
+    n: 0.23
+    K (lift): 1.02439589425
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195055994648
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537404666
+    inflowVelocity: (0.999435386623 0.000635700146894 0)
+    relativeVelocity: (0.999435386623 0.000635700146894 0)
+    Reynolds number: 99943.5588795
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.96355649297
+    Angle of attack (corrected, degrees): 9.96355649297
+    liftDirection: (0.000636059145804 -0.999999797714 0)
+    dragDirection: (0.999999797714 0.000636059145804 0)
+    force (per unit density): (0.000341719800619 -0.00398088609743 0)
+Force (per unit density) on foil: 
+(0.000341719800619 -0.00398088609743 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0289084915841, Final residual = 0.00200735648671, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.0153331577256, Final residual = 0.00121094316745, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.229230426596, Final residual = 0.0204580872637, No Iterations 2
+time step continuity errors : sum local = 8.22316756362e-06, global = -8.36835264977e-08, cumulative = -9.63620943462e-07
+smoothSolver:  Solving for epsilon, Initial residual = 0.0138035328722, Final residual = 0.00104562930204, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 0.0213080339138, Final residual = 0.00171372646224, No Iterations 5
+ExecutionTime = 0.09 s  ClockTime = 0 s
+
+Time = 16
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99943.7674146
+    ReRef: 90000
+    f(Re): 0.00173697480327
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534710386
+    n: 0.23
+    K (lift): 1.02439638586
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195055897897
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537475949
+    inflowVelocity: (0.999437444168 0.000678010149741 0)
+    relativeVelocity: (0.999437444168 0.000678010149741 0)
+    Reynolds number: 99943.7674146
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.96113101994
+    Angle of attack (corrected, degrees): 9.96113101994
+    liftDirection: (0.000678391626892 -0.999999769892 0)
+    dragDirection: (0.999999769892 0.000678391626892 0)
+    force (per unit density): (0.000341770787511 -0.00397993104736 0)
+Force (per unit density) on foil: 
+(0.000341770787511 -0.00397993104736 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0217389567644, Final residual = 0.00146596756585, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.0173304471159, Final residual = 0.00135627517145, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.212321524151, Final residual = 0.014729840106, No Iterations 2
+time step continuity errors : sum local = 5.9732622841e-06, global = -2.78039172243e-07, cumulative = -1.24166011571e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.010321614912, Final residual = 0.000736297738298, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 0.0162412698147, Final residual = 0.00122866306011, No Iterations 5
+ExecutionTime = 0.09 s  ClockTime = 0 s
+
+Time = 17
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99943.3605315
+    ReRef: 90000
+    f(Re): 0.00173697648432
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534611153
+    n: 0.23
+    K (lift): 1.02439542665
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056086673
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537336865
+    inflowVelocity: (0.999433347731 0.000717548230897 0)
+    relativeVelocity: (0.999433347731 0.000717548230897 0)
+    Reynolds number: 99943.3605315
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95886421215
+    Angle of attack (corrected, degrees): 9.95886421215
+    liftDirection: (0.000717954876723 -0.99999974227 0)
+    dragDirection: (0.99999974227 0.000717954876723 0)
+    force (per unit density): (0.000341814734605 -0.00397899054026 0)
+Force (per unit density) on foil: 
+(0.000341814734605 -0.00397899054026 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0149205210848, Final residual = 0.00140606398146, No Iterations 5
+smoothSolver:  Solving for Uy, Initial residual = 0.0167107295473, Final residual = 0.0012594064882, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.189284434458, Final residual = 0.0171174586803, No Iterations 2
+time step continuity errors : sum local = 7.05912932432e-06, global = -3.52197967422e-07, cumulative = -1.59385808313e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.00761786701832, Final residual = 0.000510824821549, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 0.0122424700435, Final residual = 0.000869311503793, No Iterations 5
+ExecutionTime = 0.09 s  ClockTime = 0 s
+
+Time = 18
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.6371681
+    ReRef: 90000
+    f(Re): 0.00173697947293
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534434734
+    n: 0.23
+    K (lift): 1.02439372136
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056422283
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537089597
+    inflowVelocity: (0.99942609663 0.000741476018797 0)
+    relativeVelocity: (0.99942609663 0.000741476018797 0)
+    Reynolds number: 99942.6371681
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95749216592
+    Angle of attack (corrected, degrees): 9.95749216592
+    liftDirection: (0.000741901594561 -0.999999724791 0)
+    dragDirection: (0.999999724791 0.000741901594561 0)
+    force (per unit density): (0.0003418384206 -0.00397838328879 0)
+Force (per unit density) on foil: 
+(0.0003418384206 -0.00397838328879 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0119680239713, Final residual = 0.00102049044348, No Iterations 5
+smoothSolver:  Solving for Uy, Initial residual = 0.0135114686308, Final residual = 0.000914895499166, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.162486816918, Final residual = 0.0151283497016, No Iterations 2
+time step continuity errors : sum local = 6.27136910266e-06, global = -4.0840043085e-07, cumulative = -2.00225851398e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.00554419244666, Final residual = 0.000349010832401, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 0.00911687037153, Final residual = 0.000606675914681, No Iterations 5
+ExecutionTime = 0.09 s  ClockTime = 0 s
+
+Time = 19
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.0489442
+    ReRef: 90000
+    f(Re): 0.00173698190323
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534291273
+    n: 0.23
+    K (lift): 1.02439233464
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056695197
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48536888523
+    inflowVelocity: (0.999420209875 0.000747536086407 0)
+    relativeVelocity: (0.999420209875 0.000747536086407 0)
+    Reynolds number: 99942.0489442
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95714449801
+    Angle of attack (corrected, degrees): 9.95714449801
+    liftDirection: (0.000747969542654 -0.999999720271 0)
+    dragDirection: (0.999999720271 0.000747969542654 0)
+    force (per unit density): (0.000341841974512 -0.00397819717282 0)
+Force (per unit density) on foil: 
+(0.000341841974512 -0.00397819717282 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0120154978837, Final residual = 0.00116531555139, No Iterations 5
+smoothSolver:  Solving for Uy, Initial residual = 0.0116575115116, Final residual = 0.000743100495922, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.152625783027, Final residual = 0.0113611239319, No Iterations 2
+time step continuity errors : sum local = 4.59185152924e-06, global = -4.51462534998e-08, cumulative = -2.04740476748e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.00397663765977, Final residual = 0.000234792334963, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 0.00670237955099, Final residual = 0.000417511572433, No Iterations 5
+ExecutionTime = 0.1 s  ClockTime = 0 s
+
+Time = 20
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99941.8793437
+    ReRef: 90000
+    f(Re): 0.00173698260395
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534249909
+    n: 0.23
+    K (lift): 1.02439193481
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056773886
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48536830548
+    inflowVelocity: (0.999418518038 0.000741941271722 0)
+    relativeVelocity: (0.999418518038 0.000741941271722 0)
+    Reynolds number: 99941.8793437
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95746517106
+    Angle of attack (corrected, degrees): 9.95746517106
+    liftDirection: (0.000742372743633 -0.999999724441 0)
+    dragDirection: (0.999999724441 0.000742372743633 0)
+    force (per unit density): (0.000341834399044 -0.00397831212653 0)
+Force (per unit density) on foil: 
+(0.000341834399044 -0.00397831212653 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0105651772732, Final residual = 0.000745162957131, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.0113841684532, Final residual = 0.000788223011712, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.143452452507, Final residual = 0.00895468533417, No Iterations 2
+time step continuity errors : sum local = 3.50780255334e-06, global = 1.67991408222e-07, cumulative = -1.87941335926e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.00281107469697, Final residual = 0.000155651619759, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 0.00486159914583, Final residual = 0.000283414174913, No Iterations 5
+ExecutionTime = 0.11 s  ClockTime = 0 s
+
+Time = 21
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.1389503
+    ReRef: 90000
+    f(Re): 0.00173698153136
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534313224
+    n: 0.23
+    K (lift): 1.02439254683
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056653437
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.4853691929
+    inflowVelocity: (0.999421120552 0.000733205548549 0)
+    relativeVelocity: (0.999421120552 0.000733205548549 0)
+    Reynolds number: 99942.1389503
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95796609152
+    Angle of attack (corrected, degrees): 9.95796609152
+    liftDirection: (0.000733630034588 -0.999999730893 0)
+    dragDirection: (0.999999730893 0.000733630034588 0)
+    force (per unit density): (0.000341825727978 -0.00397853346578 0)
+Force (per unit density) on foil: 
+(0.000341825727978 -0.00397853346578 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00798576881686, Final residual = 0.000614587854729, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00886934167675, Final residual = 0.000664022852179, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.1255032411, Final residual = 0.0105997915398, No Iterations 2
+time step continuity errors : sum local = 4.02741422484e-06, global = 3.01620728891e-07, cumulative = -1.57779263036e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.00195837291551, Final residual = 0.000187708731497, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 0.00348199160558, Final residual = 0.000347417554832, No Iterations 4
+ExecutionTime = 0.11 s  ClockTime = 0 s
+
+Time = 22
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.6106962
+    ReRef: 90000
+    f(Re): 0.0017369795823
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534428278
+    n: 0.23
+    K (lift): 1.02439365895
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056434565
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537080548
+    inflowVelocity: (0.999425842155 0.000727536831616 0)
+    relativeVelocity: (0.999425842155 0.000727536831616 0)
+    Reynolds number: 99942.6106962
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95829127008
+    Angle of attack (corrected, degrees): 9.95829127008
+    liftDirection: (0.000727954599692 -0.999999735041 0)
+    dragDirection: (0.999999735041 0.000727954599692 0)
+    force (per unit density): (0.000341821926803 -0.00397870130029 0)
+Force (per unit density) on foil: 
+(0.000341821926803 -0.00397870130029 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00619788422495, Final residual = 0.000516930503587, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00629160774321, Final residual = 0.000412922420584, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.111974600044, Final residual = 0.00942937402793, No Iterations 2
+time step continuity errors : sum local = 3.49064843303e-06, global = 2.34476298037e-07, cumulative = -1.34331633233e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.00137475071285, Final residual = 0.00012530563197, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 0.00250683375624, Final residual = 0.000237513170674, No Iterations 4
+ExecutionTime = 0.11 s  ClockTime = 0 s
+
+Time = 23
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.9807582
+    ReRef: 90000
+    f(Re): 0.00173697805337
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534518531
+    n: 0.23
+    K (lift): 1.02439453136
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056262871
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537207047
+    inflowVelocity: (0.999429542764 0.00072755409769 0)
+    relativeVelocity: (0.999429542764 0.00072755409769 0)
+    Reynolds number: 99942.9807582
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95829043468
+    Angle of attack (corrected, degrees): 9.95829043468
+    liftDirection: (0.000727969180197 -0.99999973503 0)
+    dragDirection: (0.99999973503 0.000727969180197 0)
+    force (per unit density): (0.000341824176919 -0.0039787304374 0)
+Force (per unit density) on foil: 
+(0.000341824176919 -0.0039787304374 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00527416726496, Final residual = 0.000481362334432, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00617891180258, Final residual = 0.000400699086706, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.106614089197, Final residual = 0.00721306731286, No Iterations 2
+time step continuity errors : sum local = 2.61126055435e-06, global = -3.1567252497e-08, cumulative = -1.37488358482e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.000950902101377, Final residual = 8.23574282257e-05, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 0.00177895619095, Final residual = 0.000159963367811, No Iterations 4
+ExecutionTime = 0.11 s  ClockTime = 0 s
+
+Time = 24
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99943.0421051
+    ReRef: 90000
+    f(Re): 0.00173697779991
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534533493
+    n: 0.23
+    K (lift): 1.02439467598
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056234409
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537228017
+    inflowVelocity: (0.999430153043 0.000731921401174 0)
+    relativeVelocity: (0.999430153043 0.000731921401174 0)
+    Reynolds number: 99943.0421051
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95804008955
+    Angle of attack (corrected, degrees): 9.95804008955
+    liftDirection: (0.000732338525782 -0.99999973184 0)
+    dragDirection: (0.99999973184 0.000732338525782 0)
+    force (per unit density): (0.000341829665274 -0.00397863503446 0)
+Force (per unit density) on foil: 
+(0.000341829665274 -0.00397863503446 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00472584565599, Final residual = 0.000422446339845, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00636164227856, Final residual = 0.000488076619009, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0956912432586, Final residual = 0.00519900899938, No Iterations 2
+time step continuity errors : sum local = 1.87740990436e-06, global = -2.16014992546e-07, cumulative = -1.59089857737e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.000648564487354, Final residual = 5.33829049519e-05, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 0.00124479368947, Final residual = 0.00010624845039, No Iterations 4
+ExecutionTime = 0.11 s  ClockTime = 0 s
+
+Time = 25
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.8200593
+    ReRef: 90000
+    f(Re): 0.0017369787173
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534479339
+    n: 0.23
+    K (lift): 1.02439415252
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056337429
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537152115
+    inflowVelocity: (0.999427928719 0.000737182591892 0)
+    relativeVelocity: (0.999427928719 0.000737182591892 0)
+    Reynolds number: 99942.8200593
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95773837975
+    Angle of attack (corrected, degrees): 9.95773837975
+    liftDirection: (0.000737604353623 -0.99999972797 0)
+    dragDirection: (0.99999972797 0.000737604353623 0)
+    force (per unit density): (0.000341834492478 -0.00397849648629 0)
+Force (per unit density) on foil: 
+(0.000341834492478 -0.00397849648629 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00426782553241, Final residual = 0.000338778937826, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00477270025977, Final residual = 0.000414786105528, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0801228531461, Final residual = 0.00614734602367, No Iterations 2
+time step continuity errors : sum local = 2.22688232626e-06, global = -2.42768528599e-07, cumulative = -1.83366710597e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.000436576334456, Final residual = 3.42008861758e-05, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 0.000859284102042, Final residual = 6.96996746788e-05, No Iterations 4
+ExecutionTime = 0.12 s  ClockTime = 0 s
+
+Time = 26
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.4990148
+    ReRef: 90000
+    f(Re): 0.00173698004372
+    f(ReRef): 0.00178100208401
+    K (drag): 1.0253440104
+    n: 0.23
+    K (lift): 1.02439339567
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056486381
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537042372
+    inflowVelocity: (0.999424715674 0.0007406974214 0)
+    relativeVelocity: (0.999424715674 0.0007406974214 0)
+    Reynolds number: 99942.4990148
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95753674318
+    Angle of attack (corrected, degrees): 9.95753674318
+    liftDirection: (0.000741123574757 -0.999999725368 0)
+    dragDirection: (0.999999725368 0.000741123574757 0)
+    force (per unit density): (0.000341836675953 -0.00397839014462 0)
+Force (per unit density) on foil: 
+(0.000341836675953 -0.00397839014462 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00415880142836, Final residual = 0.000329597619438, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00334517300774, Final residual = 0.000244735357134, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0648947667572, Final residual = 0.0055345796276, No Iterations 2
+time step continuity errors : sum local = 2.02220128562e-06, global = -1.58907681413e-07, cumulative = -1.99257478738e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.000289614737414, Final residual = 2.15685017737e-05, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 0.000584554950427, Final residual = 4.50242623185e-05, No Iterations 4
+ExecutionTime = 0.12 s  ClockTime = 0 s
+
+Time = 27
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.2949141
+    ReRef: 90000
+    f(Re): 0.00173698088698
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534351262
+    n: 0.23
+    K (lift): 1.02439291451
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056581076
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48536972604
+    inflowVelocity: (0.999422674269 0.000741233258574 0)
+    relativeVelocity: (0.999422674269 0.000741233258574 0)
+    Reynolds number: 99942.2949141
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95750593752
+    Angle of attack (corrected, degrees): 9.95750593752
+    liftDirection: (0.000741661234826 -0.999999724969 0)
+    dragDirection: (0.999999724969 0.000741661234826 0)
+    force (per unit density): (0.000341836073805 -0.00397836155064 0)
+Force (per unit density) on foil: 
+(0.000341836073805 -0.00397836155064 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00372716279735, Final residual = 0.000329752597294, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00324292372137, Final residual = 0.000201995121928, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0589291613691, Final residual = 0.00378754926009, No Iterations 2
+time step continuity errors : sum local = 1.37732967442e-06, global = 1.3312484187e-07, cumulative = -1.85944994551e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.000189330297038, Final residual = 1.33776953095e-05, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 0.000391868026947, Final residual = 2.86178980843e-05, No Iterations 4
+ExecutionTime = 0.12 s  ClockTime = 0 s
+
+Time = 28
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.3201003
+    ReRef: 90000
+    f(Re): 0.00173698078292
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534357405
+    n: 0.23
+    K (lift): 1.02439297388
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056569391
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48536981213
+    inflowVelocity: (0.999422927529 0.000739345927217 0)
+    relativeVelocity: (0.999422927529 0.000739345927217 0)
+    Reynolds number: 99942.3201003
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95761414679
+    Angle of attack (corrected, degrees): 9.95761414679
+    liftDirection: (0.000739772627326 -0.999999726368 0)
+    dragDirection: (0.999999726368 0.000739772627326 0)
+    force (per unit density): (0.000341834014463 -0.00397840690448 0)
+Force (per unit density) on foil: 
+(0.000341834014463 -0.00397840690448 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00294842633908, Final residual = 0.000286541548141, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.0036349489008, Final residual = 0.000271769123506, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0534043191357, Final residual = 0.00222900194828, No Iterations 2
+time step continuity errors : sum local = 7.96376226324e-07, global = 2.46354839286e-07, cumulative = -1.61309510623e-06
+smoothSolver:  Solving for epsilon, Initial residual = 0.000122179300061, Final residual = 8.19761625884e-06, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 0.000259169636835, Final residual = 1.79537709717e-05, No Iterations 4
+ExecutionTime = 0.12 s  ClockTime = 0 s
+
+Time = 29
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.521014
+    ReRef: 90000
+    f(Re): 0.00173697995283
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534406405
+    n: 0.23
+    K (lift): 1.02439344753
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056476174
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537049892
+    inflowVelocity: (0.999424938567 0.000736773238192 0)
+    relativeVelocity: (0.999424938567 0.000736773238192 0)
+    Reynolds number: 99942.521014
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95776172104
+    Angle of attack (corrected, degrees): 9.95776172104
+    liftDirection: (0.000737196971535 -0.99999972827 0)
+    dragDirection: (0.99999972827 0.000737196971535 0)
+    force (per unit density): (0.000341832210828 -0.00397848202202 0)
+Force (per unit density) on foil: 
+(0.000341832210828 -0.00397848202202 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.0023873552569, Final residual = 0.000211357128966, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00273974112456, Final residual = 0.000234681095732, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0468570308253, Final residual = 0.00331276958794, No Iterations 2
+time step continuity errors : sum local = 1.1526037717e-06, global = 2.07342410878e-07, cumulative = -1.40575269535e-06
+smoothSolver:  Solving for epsilon, Initial residual = 7.80928301624e-05, Final residual = 5.01847879003e-06, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 0.000169502831526, Final residual = 1.1205733766e-05, No Iterations 4
+ExecutionTime = 0.13 s  ClockTime = 0 s
+
+Time = 30
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.7397362
+    ReRef: 90000
+    f(Re): 0.00173697904916
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534459749
+    n: 0.23
+    K (lift): 1.02439396316
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056374696
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537124658
+    inflowVelocity: (0.999427127157 0.000734915127038 0)
+    relativeVelocity: (0.999427127157 0.000734915127038 0)
+    Reynolds number: 99942.7397362
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95786833642
+    Angle of attack (corrected, degrees): 9.95786833642
+    liftDirection: (0.000735336182476 -0.99999972964 0)
+    dragDirection: (0.99999972964 0.000735336182476 0)
+    force (per unit density): (0.000341831351545 -0.00397854215019 0)
+Force (per unit density) on foil: 
+(0.000341831351545 -0.00397854215019 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00239402283599, Final residual = 0.000205399603746, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00188960565138, Final residual = 0.000147028605909, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0396254958347, Final residual = 0.00335969969493, No Iterations 2
+time step continuity errors : sum local = 1.14444244898e-06, global = 1.12491434392e-07, cumulative = -1.29326126095e-06
+smoothSolver:  Solving for epsilon, Initial residual = 4.92060426539e-05, Final residual = 3.02493644675e-06, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 0.00010927007749, Final residual = 6.88633126554e-06, No Iterations 4
+ExecutionTime = 0.14 s  ClockTime = 0 s
+
+Time = 31
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.8318909
+    ReRef: 90000
+    f(Re): 0.00173697866842
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534482224
+    n: 0.23
+    K (lift): 1.02439418041
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.019505633194
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537156159
+    inflowVelocity: (0.999428049075 0.00073441074972 0)
+    relativeVelocity: (0.999428049075 0.00073441074972 0)
+    Reynolds number: 99942.8318909
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.9578972905
+    Angle of attack (corrected, degrees): 9.9578972905
+    liftDirection: (0.000734830838615 -0.999999730012 0)
+    dragDirection: (0.999999730012 0.000734830838615 0)
+    force (per unit density): (0.000341831315813 -0.0039785610881 0)
+Force (per unit density) on foil: 
+(0.000341831315813 -0.0039785610881 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00219203106033, Final residual = 0.000200723025509, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00180822140377, Final residual = 0.000119780167323, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0342391710553, Final residual = 0.00201886256212, No Iterations 2
+time step continuity errors : sum local = 6.84538592857e-07, global = -1.20529143683e-07, cumulative = -1.41379040464e-06
+smoothSolver:  Solving for epsilon, Initial residual = 3.05193916491e-05, Final residual = 1.78036126872e-06, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 6.93558034749e-05, Final residual = 4.14308036708e-06, No Iterations 4
+ExecutionTime = 0.14 s  ClockTime = 0 s
+
+Time = 32
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.7581613
+    ReRef: 90000
+    f(Re): 0.00173697897304
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534464242
+    n: 0.23
+    K (lift): 1.02439400659
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056366147
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537130956
+    inflowVelocity: (0.999427311353 0.000734990483742 0)
+    relativeVelocity: (0.999427311353 0.000734990483742 0)
+    Reynolds number: 99942.7581613
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.9578640241
+    Angle of attack (corrected, degrees): 9.9578640241
+    liftDirection: (0.000735411446776 -0.999999729585 0)
+    dragDirection: (0.999999729585 0.000735411446776 0)
+    force (per unit density): (0.000341831550875 -0.00397854188999 0)
+Force (per unit density) on foil: 
+(0.000341831550875 -0.00397854188999 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00184142430091, Final residual = 0.000175822262707, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00205396728331, Final residual = 0.000152980491629, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0298350121365, Final residual = 0.000981600802608, No Iterations 2
+time step continuity errors : sum local = 3.35388006491e-07, global = -1.58938094378e-07, cumulative = -1.57272849902e-06
+smoothSolver:  Solving for epsilon, Initial residual = 1.8773303946e-05, Final residual = 1.05148073575e-06, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 4.35765160776e-05, Final residual = 2.49120858063e-06, No Iterations 4
+ExecutionTime = 0.14 s  ClockTime = 0 s
+
+Time = 33
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.587247
+    ReRef: 90000
+    f(Re): 0.00173697967918
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534422559
+    n: 0.23
+    K (lift): 1.02439360367
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056445445
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537072532
+    inflowVelocity: (0.999425601521 0.000735925530197 0)
+    relativeVelocity: (0.999425601521 0.000735925530197 0)
+    Reynolds number: 99942.587247
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95781034703
+    Angle of attack (corrected, degrees): 9.95781034703
+    liftDirection: (0.000736348288021 -0.999999728896 0)
+    dragDirection: (0.999999728896 0.000736348288021 0)
+    force (per unit density): (0.000341831616645 -0.00397850677601 0)
+Force (per unit density) on foil: 
+(0.000341831616645 -0.00397850677601 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00149992171512, Final residual = 0.000135782260452, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00156743841073, Final residual = 0.000131245466888, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0258425766149, Final residual = 0.00183671963951, No Iterations 2
+time step continuity errors : sum local = 6.37902713157e-07, global = -1.33223939175e-07, cumulative = -1.70595243819e-06
+smoothSolver:  Solving for epsilon, Initial residual = 1.15175589327e-05, Final residual = 6.37571274813e-07, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 2.71942800889e-05, Final residual = 1.51825800929e-06, No Iterations 4
+ExecutionTime = 0.14 s  ClockTime = 0 s
+
+Time = 34
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.4483569
+    ReRef: 90000
+    f(Re): 0.00173698025302
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534388685
+    n: 0.23
+    K (lift): 1.02439327624
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056509884
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537025055
+    inflowVelocity: (0.999424212166 0.000736541926646 0)
+    relativeVelocity: (0.999424212166 0.000736541926646 0)
+    Reynolds number: 99942.4483569
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95777495114
+    Angle of attack (corrected, degrees): 9.95777495114
+    liftDirection: (0.000736966062723 -0.99999972844 0)
+    dragDirection: (0.99999972844 0.000736966062723 0)
+    force (per unit density): (0.000341831501975 -0.00397848153585 0)
+Force (per unit density) on foil: 
+(0.000341831501975 -0.00397848153585 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00145809732, Final residual = 0.000133058484524, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00099629059666, Final residual = 8.3825753987e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.022177910988, Final residual = 0.0017595831607, No Iterations 2
+time step continuity errors : sum local = 6.14956708515e-07, global = 2.03521005984e-08, cumulative = -1.68560033759e-06
+smoothSolver:  Solving for epsilon, Initial residual = 6.96100812501e-06, Final residual = 3.8032757139e-07, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 1.67222286466e-05, Final residual = 9.10051865626e-07, No Iterations 4
+ExecutionTime = 0.15 s  ClockTime = 0 s
+
+Time = 35
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.4235334
+    ReRef: 90000
+    f(Re): 0.00173698035558
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534382631
+    n: 0.23
+    K (lift): 1.02439321772
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056521402
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.4853701657
+    inflowVelocity: (0.999423963885 0.000736604047951 0)
+    relativeVelocity: (0.999423963885 0.000736604047951 0)
+    Reynolds number: 99942.4235334
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95777137931
+    Angle of attack (corrected, degrees): 9.95777137931
+    liftDirection: (0.000737028402863 -0.999999728395 0)
+    dragDirection: (0.999999728395 0.000737028402863 0)
+    force (per unit density): (0.000341831425181 -0.00397847812814 0)
+Force (per unit density) on foil: 
+(0.000341831425181 -0.00397847812814 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00131542094796, Final residual = 0.000125087674422, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00100190166993, Final residual = 7.49121790584e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0179124291502, Final residual = 0.000965376298859, No Iterations 2
+time step continuity errors : sum local = 3.3530503496e-07, global = 3.53171738026e-08, cumulative = -1.65028316379e-06
+smoothSolver:  Solving for epsilon, Initial residual = 4.11689468638e-06, Final residual = 2.1591368347e-07, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 1.00995590732e-05, Final residual = 5.26323877439e-07, No Iterations 4
+ExecutionTime = 0.15 s  ClockTime = 0 s
+
+Time = 36
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.5084839
+    ReRef: 90000
+    f(Re): 0.0017369800046
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534403349
+    n: 0.23
+    K (lift): 1.02439341799
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056481988
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537045609
+    inflowVelocity: (0.999424813642 0.000736263085357 0)
+    relativeVelocity: (0.999424813642 0.000736263085357 0)
+    Reynolds number: 99942.5084839
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95779096217
+    Angle of attack (corrected, degrees): 9.95779096217
+    liftDirection: (0.000736686617662 -0.999999728646 0)
+    dragDirection: (0.999999728646 0.000736686617662 0)
+    force (per unit density): (0.000341831537562 -0.00397849273809 0)
+Force (per unit density) on foil: 
+(0.000341831537562 -0.00397849273809 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00109932551776, Final residual = 0.000100662156455, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00112673358518, Final residual = 8.72816542678e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0153408361487, Final residual = 0.000595292183353, No Iterations 2
+time step continuity errors : sum local = 2.02655190154e-07, global = 7.12305624065e-08, cumulative = -1.57905260138e-06
+smoothSolver:  Solving for epsilon, Initial residual = 2.49446586214e-06, Final residual = 1.36727639267e-07, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 6.17786278625e-06, Final residual = 3.27961349885e-07, No Iterations 4
+ExecutionTime = 0.15 s  ClockTime = 0 s
+
+Time = 37
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.6268362
+    ReRef: 90000
+    f(Re): 0.00173697951562
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534432214
+    n: 0.23
+    K (lift): 1.024393697
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056427077
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537086065
+    inflowVelocity: (0.999425997485 0.000735828395148 0)
+    relativeVelocity: (0.999425997485 0.000735828395148 0)
+    Reynolds number: 99942.6268362
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95781593237
+    Angle of attack (corrected, degrees): 9.95781593237
+    liftDirection: (0.000736250805529 -0.999999728967 0)
+    dragDirection: (0.999999728967 0.000736250805529 0)
+    force (per unit density): (0.000341831741384 -0.00397851216622 0)
+Force (per unit density) on foil: 
+(0.000341831741384 -0.00397851216622 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00092484044111, Final residual = 8.45141608535e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.000869068745232, Final residual = 7.08589568546e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0144747481736, Final residual = 0.00111477513842, No Iterations 2
+time step continuity errors : sum local = 3.73539921858e-07, global = 5.00171346247e-08, cumulative = -1.52903546676e-06
+smoothSolver:  Solving for epsilon, Initial residual = 1.54692812571e-06, Final residual = 9.64191641689e-08, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 3.82196511966e-06, Final residual = 2.21025101205e-07, No Iterations 4
+ExecutionTime = 0.15 s  ClockTime = 0 s
+
+Time = 38
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.697935
+    ReRef: 90000
+    f(Re): 0.00173697922187
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534449554
+    n: 0.23
+    K (lift): 1.02439386461
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.019505639409
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537110369
+    inflowVelocity: (0.999426708604 0.000735650235459 0)
+    relativeVelocity: (0.999426708604 0.000735650235459 0)
+    Reynolds number: 99942.697935
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95782617603
+    Angle of attack (corrected, degrees): 9.95782617603
+    liftDirection: (0.000736072019926 -0.999999729099 0)
+    dragDirection: (0.999999729099 0.000736072019926 0)
+    force (per unit density): (0.000341831961052 -0.00397852193188 0)
+Force (per unit density) on foil: 
+(0.000341831961052 -0.00397852193188 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.000885500175408, Final residual = 8.46432948631e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.000509000296441, Final residual = 4.48581514458e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0131063406154, Final residual = 0.000983580562688, No Iterations 2
+time step continuity errors : sum local = 3.29515481835e-07, global = -5.08938046387e-09, cumulative = -1.53412484722e-06
+smoothSolver:  Solving for epsilon, Initial residual = 9.32331602358e-07, Final residual = 6.10481428441e-08, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 2.3018361862e-06, Final residual = 1.3603630951e-07, No Iterations 4
+ExecutionTime = 0.16 s  ClockTime = 0 s
+
+Time = 39
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.6915852
+    ReRef: 90000
+    f(Re): 0.0017369792481
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534448005
+    n: 0.23
+    K (lift): 1.02439384964
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056397036
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537108198
+    inflowVelocity: (0.999426645026 0.000735758058339 0)
+    relativeVelocity: (0.999426645026 0.000735758058339 0)
+    Reynolds number: 99942.6915852
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95781999201
+    Angle of attack (corrected, degrees): 9.95781999201
+    liftDirection: (0.0007361799514 -0.99999972902 0)
+    dragDirection: (0.99999972902 0.0007361799514 0)
+    force (per unit density): (0.000341832049132 -0.00397851894889 0)
+Force (per unit density) on foil: 
+(0.000341832049132 -0.00397851894889 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00079254592112, Final residual = 7.29814250977e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.000585510213472, Final residual = 4.91135610544e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0101949459045, Final residual = 0.000559567502148, No Iterations 2
+time step continuity errors : sum local = 1.8916559211e-07, global = 5.60359924907e-09, cumulative = -1.52852124797e-06
+smoothSolver:  Solving for epsilon, Initial residual = 5.58512988845e-07, Final residual = 3.86444966162e-08, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 1.37728465452e-06, Final residual = 8.4897753884e-08, No Iterations 4
+ExecutionTime = 0.16 s  ClockTime = 0 s
+
+Time = 40
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.6257846
+    ReRef: 90000
+    f(Re): 0.00173697951996
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534431957
+    n: 0.23
+    K (lift): 1.02439369452
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056427565
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537085706
+    inflowVelocity: (0.999425986806 0.000736049275934 0)
+    relativeVelocity: (0.999425986806 0.000736049275934 0)
+    Reynolds number: 99942.6257846
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95780326912
+    Angle of attack (corrected, degrees): 9.95780326912
+    liftDirection: (0.000736471820863 -0.999999728805 0)
+    dragDirection: (0.999999728805 0.000736471820863 0)
+    force (per unit density): (0.000341831993866 -0.00397850700961 0)
+Force (per unit density) on foil: 
+(0.000341831993866 -0.00397850700961 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00068154922224, Final residual = 5.66551913841e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.000609379197707, Final residual = 4.87483505943e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.00820727997335, Final residual = 0.000449916651742, No Iterations 2
+time step continuity errors : sum local = 1.54228471181e-07, global = -4.08443386695e-08, cumulative = -1.56936558664e-06
+smoothSolver:  Solving for epsilon, Initial residual = 3.55451340927e-07, Final residual = 3.05163254308e-08, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 8.51544691586e-07, Final residual = 6.28670249465e-08, No Iterations 4
+ExecutionTime = 0.18 s  ClockTime = 0 s
+
+Time = 41
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.5572129
+    ReRef: 90000
+    f(Re): 0.00173697980327
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534415234
+    n: 0.23
+    K (lift): 1.02439353287
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056459379
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537062266
+    inflowVelocity: (0.999425300922 0.000736276724659 0)
+    relativeVelocity: (0.999425300922 0.000736276724659 0)
+    Reynolds number: 99942.5572129
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95779020082
+    Angle of attack (corrected, degrees): 9.95779020082
+    liftDirection: (0.000736699905617 -0.999999728637 0)
+    dragDirection: (0.999999728637 0.000736699905617 0)
+    force (per unit density): (0.000341831847177 -0.00397849631369 0)
+Force (per unit density) on foil: 
+(0.000341831847177 -0.00397849631369 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.000584375134746, Final residual = 5.38932782575e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.000452798823974, Final residual = 3.66627693936e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.00783136497509, Final residual = 0.000593925553336, No Iterations 2
+time step continuity errors : sum local = 2.04323401695e-07, global = 9.21803139919e-10, cumulative = -1.5684437835e-06
+smoothSolver:  Solving for epsilon, Initial residual = 2.35541187222e-07, Final residual = 1.59627465589e-08, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 5.45574158809e-07, Final residual = 5.08892207573e-08, No Iterations 4
+ExecutionTime = 0.18 s  ClockTime = 0 s
+
+Time = 42
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.5250471
+    ReRef: 90000
+    f(Re): 0.00173697993617
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534407389
+    n: 0.23
+    K (lift): 1.02439345704
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056474303
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.4853705127
+    inflowVelocity: (0.99942497925 0.000736295107879 0)
+    relativeVelocity: (0.99942497925 0.000736295107879 0)
+    Reynolds number: 99942.5250471
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95778913335
+    Angle of attack (corrected, degrees): 9.95778913335
+    liftDirection: (0.000736718536511 -0.999999728623 0)
+    dragDirection: (0.999999728623 0.000736718536511 0)
+    force (per unit density): (0.000341831674891 -0.0039784933245 0)
+Force (per unit density) on foil: 
+(0.000341831674891 -0.0039784933245 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.000535736043559, Final residual = 5.06852766001e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.00029441178188, Final residual = 2.6366199482e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.00712046353655, Final residual = 0.000488485788844, No Iterations 2
+time step continuity errors : sum local = 1.67309531593e-07, global = -1.69265345429e-08, cumulative = -1.58537031805e-06
+smoothSolver:  Solving for epsilon, Initial residual = 1.46849964197e-07, Final residual = 1.08863856013e-08, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 3.36268086963e-07, Final residual = 2.17379003078e-08, No Iterations 5
+ExecutionTime = 0.18 s  ClockTime = 0 s
+
+Time = 43
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.5405912
+    ReRef: 90000
+    f(Re): 0.00173697987194
+    f(ReRef): 0.00178100208401
+    K (drag): 1.0253441118
+    n: 0.23
+    K (lift): 1.02439349368
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056467091
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537056584
+    inflowVelocity: (0.99942513481 0.00073613276577 0)
+    relativeVelocity: (0.99942513481 0.00073613276577 0)
+    Reynolds number: 99942.5405912
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95779844678
+    Angle of attack (corrected, degrees): 9.95779844678
+    liftDirection: (0.000736555986486 -0.999999728743 0)
+    dragDirection: (0.999999728743 0.000736555986486 0)
+    force (per unit density): (0.000341831578334 -0.00397849829331 0)
+Force (per unit density) on foil: 
+(0.000341831578334 -0.00397849829331 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.000477892455111, Final residual = 3.83378756382e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.000345141582127, Final residual = 3.08954863292e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.00574607819224, Final residual = 0.000252484249112, No Iterations 2
+time step continuity errors : sum local = 8.55126359657e-08, global = 7.73453749958e-09, cumulative = -1.57763578055e-06
+smoothSolver:  Solving for epsilon, Initial residual = 9.49251890804e-08, Final residual = 7.75636140946e-09, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 2.09747392508e-07, Final residual = 1.51610476085e-08, No Iterations 5
+ExecutionTime = 0.18 s  ClockTime = 0 s
+
+Time = 44
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.581911
+    ReRef: 90000
+    f(Re): 0.00173697970123
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534421257
+    n: 0.23
+    K (lift): 1.02439359109
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.019505644792
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537070708
+    inflowVelocity: (0.999425548164 0.00073592183656 0)
+    relativeVelocity: (0.999425548164 0.00073592183656 0)
+    Reynolds number: 99942.581911
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95781055653
+    Angle of attack (corrected, degrees): 9.95781055653
+    liftDirection: (0.000736344631576 -0.999999728898 0)
+    dragDirection: (0.999999728898 0.000736344631576 0)
+    force (per unit density): (0.000341831580163 -0.003978506435 0)
+Force (per unit density) on foil: 
+(0.000341831580163 -0.003978506435 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.000430514294493, Final residual = 3.3749584729e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.000319487560313, Final residual = 2.65096137111e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.00488745882755, Final residual = 0.000328004029796, No Iterations 2
+time step continuity errors : sum local = 1.10246727077e-07, global = 5.30251439412e-09, cumulative = -1.57233326615e-06
+smoothSolver:  Solving for epsilon, Initial residual = 8.88670035745e-08, Final residual = 8.80616010426e-09, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 1.82193321827e-07, Final residual = 1.6813663724e-08, No Iterations 5
+ExecutionTime = 0.19 s  ClockTime = 0 s
+
+Time = 45
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.6184537
+    ReRef: 90000
+    f(Re): 0.00173697955025
+    f(ReRef): 0.00178100208401
+    K (drag): 1.0253443017
+    n: 0.23
+    K (lift): 1.02439367724
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056430966
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.485370832
+    inflowVelocity: (0.999425913664 0.000735823890305 0)
+    relativeVelocity: (0.999425913664 0.000735823890305 0)
+    Reynolds number: 99942.6184537
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95781618709
+    Angle of attack (corrected, degrees): 9.95781618709
+    liftDirection: (0.000736246359851 -0.999999728971 0)
+    dragDirection: (0.999999728971 0.000736246359851 0)
+    force (per unit density): (0.000341831685594 -0.00397851160072 0)
+Force (per unit density) on foil: 
+(0.000341831685594 -0.00397851160072 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.000358569014104, Final residual = 3.31159345807e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.000233216265598, Final residual = 1.93014818142e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.00455909899751, Final residual = 0.000320268878396, No Iterations 2
+time step continuity errors : sum local = 1.07651189089e-07, global = 1.05670167996e-09, cumulative = -1.57127656447e-06
+smoothSolver:  Solving for epsilon, Initial residual = 6.8249070174e-08, Final residual = 6.83035315859e-09, No Iterations 5
+smoothSolver:  Solving for k, Initial residual = 1.35466386318e-07, Final residual = 1.29752004126e-08, No Iterations 5
+ExecutionTime = 0.19 s  ClockTime = 0 s
+
+Time = 46
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.6302257
+    ReRef: 90000
+    f(Re): 0.00173697950161
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534433041
+    n: 0.23
+    K (lift): 1.02439370499
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056425504
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537087224
+    inflowVelocity: (0.99942603135 0.000735868840085 0)
+    relativeVelocity: (0.99942603135 0.000735868840085 0)
+    Reynolds number: 99942.6302257
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95781361514
+    Angle of attack (corrected, degrees): 9.95781361514
+    liftDirection: (0.000736291248712 -0.999999728938 0)
+    dragDirection: (0.999999728938 0.000736291248712 0)
+    force (per unit density): (0.000341831809201 -0.00397851150788 0)
+Force (per unit density) on foil: 
+(0.000341831809201 -0.00397851150788 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.000313349150856, Final residual = 2.68362071276e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.000204321260235, Final residual = 1.84986449973e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0039667787968, Final residual = 0.000263884967014, No Iterations 2
+time step continuity errors : sum local = 8.91962131668e-08, global = 1.51888267255e-08, cumulative = -1.55608773775e-06
+smoothSolver:  Solving for epsilon, Initial residual = 4.96379101231e-08, Final residual = 7.55624901776e-09, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 9.60951448735e-08, Final residual = 9.26889975338e-09, No Iterations 5
+ExecutionTime = 0.19 s  ClockTime = 0 s
+
+Time = 47
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.6156176
+    ReRef: 90000
+    f(Re): 0.00173697956197
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534429478
+    n: 0.23
+    K (lift): 1.02439367055
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056432282
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.4853708223
+    inflowVelocity: (0.999425885158 0.00073601985373 0)
+    relativeVelocity: (0.999425885158 0.00073601985373 0)
+    Reynolds number: 99942.6156176
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95780495156
+    Angle of attack (corrected, degrees): 9.95780495156
+    liftDirection: (0.000736442456685 -0.999999728826 0)
+    dragDirection: (0.999999728826 0.000736442456685 0)
+    force (per unit density): (0.000341831898126 -0.00397850687393 0)
+Force (per unit density) on foil: 
+(0.000341831898126 -0.00397850687393 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.000298503755704, Final residual = 2.10789395874e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.000200787755758, Final residual = 1.81472910915e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.00328242302543, Final residual = 0.000155591840821, No Iterations 2
+time step continuity errors : sum local = 5.29574975722e-08, global = -1.37606693621e-08, cumulative = -1.56984840711e-06
+smoothSolver:  Solving for epsilon, Initial residual = 4.18909377445e-08, Final residual = 7.14012508142e-09, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 7.45178030406e-08, Final residual = 8.41239680931e-09, No Iterations 5
+ExecutionTime = 0.19 s  ClockTime = 0 s
+
+Time = 48
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.5911221
+    ReRef: 90000
+    f(Re): 0.00173697966317
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534423504
+    n: 0.23
+    K (lift): 1.02439361281
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056443647
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537073857
+    inflowVelocity: (0.999425640102 0.00073615549319 0)
+    relativeVelocity: (0.999425640102 0.00073615549319 0)
+    Reynolds number: 99942.5911221
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95779716519
+    Angle of attack (corrected, degrees): 9.95779716519
+    liftDirection: (0.000736578354558 -0.999999728726 0)
+    dragDirection: (0.999999728726 0.000736578354558 0)
+    force (per unit density): (0.000341831909456 -0.00397850180399 0)
+Force (per unit density) on foil: 
+(0.000341831909456 -0.00397850180399 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.000248976710385, Final residual = 1.94781145771e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.000169763397652, Final residual = 1.46642963037e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.00292503220742, Final residual = 0.000198184584597, No Iterations 2
+time step continuity errors : sum local = 6.7575813337e-08, global = 4.43230995544e-09, cumulative = -1.56541609715e-06
+smoothSolver:  Solving for epsilon, Initial residual = 4.13524010158e-08, Final residual = 7.37822316122e-09, No Iterations 4
+smoothSolver:  Solving for k, Initial residual = 7.64080310087e-08, Final residual = 9.24245725797e-09, No Iterations 5
+ExecutionTime = 0.2 s  ClockTime = 0 s
+
+Time = 49
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.5733116
+    ReRef: 90000
+    f(Re): 0.00173697973676
+    f(ReRef): 0.00178100208401
+    K (drag): 1.0253441916
+    n: 0.23
+    K (lift): 1.02439357082
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.019505645191
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537067769
+    inflowVelocity: (0.99942546197 0.000736193089193 0)
+    relativeVelocity: (0.99942546197 0.000736193089193 0)
+    Reynolds number: 99942.5733116
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95779500234
+    Angle of attack (corrected, degrees): 9.95779500234
+    liftDirection: (0.000736616103428 -0.999999728698 0)
+    dragDirection: (0.999999728698 0.000736616103428 0)
+    force (per unit density): (0.000341831846186 -0.0039784995192 0)
+Force (per unit density) on foil: 
+(0.000341831846186 -0.0039784995192 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.000212191447969, Final residual = 1.87351648079e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.000131596238684, Final residual = 1.13078654722e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.00254684158477, Final residual = 0.000187810399699, No Iterations 2
+time step continuity errors : sum local = 6.39352800528e-08, global = -5.87548055814e-09, cumulative = -1.57129157771e-06
+smoothSolver:  Solving for epsilon, Initial residual = 3.39093409828e-08, Final residual = 8.89867137544e-09, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 6.01419617331e-08, Final residual = 6.90170272408e-09, No Iterations 5
+ExecutionTime = 0.2 s  ClockTime = 0 s
+
+Time = 50
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.5718295
+    ReRef: 90000
+    f(Re): 0.00173697974288
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534418798
+    n: 0.23
+    K (lift): 1.02439356733
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056452598
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537067262
+    inflowVelocity: (0.999425447195 0.000736130720526 0)
+    relativeVelocity: (0.999425447195 0.000736130720526 0)
+    Reynolds number: 99942.5718295
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95779857723
+    Angle of attack (corrected, degrees): 9.95779857723
+    liftDirection: (0.000736553709846 -0.999999728744 0)
+    dragDirection: (0.999999728744 0.000736553709846 0)
+    force (per unit density): (0.000341831764174 -0.00397850083326 0)
+Force (per unit density) on foil: 
+(0.000341831764174 -0.00397850083326 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.000188070349876, Final residual = 1.40556385931e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.000135832569641, Final residual = 1.22468383024e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.00216523993215, Final residual = 0.000131757547255, No Iterations 2
+time step continuity errors : sum local = 4.46546277123e-08, global = -4.44784102789e-09, cumulative = -1.57573941874e-06
+smoothSolver:  Solving for epsilon, Initial residual = 2.64716570375e-08, Final residual = 7.06550384995e-09, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 4.25094749263e-08, Final residual = 7.79372069934e-09, No Iterations 4
+ExecutionTime = 0.21 s  ClockTime = 0 s
+
+Time = 51
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.583121
+    ReRef: 90000
+    f(Re): 0.00173697969623
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534421552
+    n: 0.23
+    K (lift): 1.02439359394
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056447359
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537071122
+    inflowVelocity: (0.999425560191 0.000736019737159 0)
+    relativeVelocity: (0.999425560191 0.000736019737159 0)
+    Reynolds number: 99942.583121
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95780494453
+    Angle of attack (corrected, degrees): 9.95780494453
+    liftDirection: (0.000736442579504 -0.999999728826 0)
+    dragDirection: (0.999999728826 0.000736442579504 0)
+    force (per unit density): (0.00034183170217 -0.0039785042832 0)
+Force (per unit density) on foil: 
+(0.00034183170217 -0.0039785042832 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.000174968420584, Final residual = 1.19371430354e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 0.000120516339113, Final residual = 1.05276960087e-05, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.0018882435882, Final residual = 0.000121783432202, No Iterations 2
+time step continuity errors : sum local = 4.11364659128e-08, global = 2.4893473101e-09, cumulative = -1.57325007143e-06
+smoothSolver:  Solving for epsilon, Initial residual = 2.93821103849e-08, Final residual = 8.22579017312e-09, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 4.85853483085e-08, Final residual = 9.11123883682e-09, No Iterations 4
+ExecutionTime = 0.22 s  ClockTime = 0 s
+
+Time = 52
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.5971334
+    ReRef: 90000
+    f(Re): 0.00173697963834
+    f(ReRef): 0.00178100208401
+    K (drag): 1.0253442497
+    n: 0.23
+    K (lift): 1.02439362698
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056440858
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537075912
+    inflowVelocity: (0.999425700374 0.000735941720415 0)
+    relativeVelocity: (0.999425700374 0.000735941720415 0)
+    Reynolds number: 99942.5971334
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95780942304
+    Angle of attack (corrected, degrees): 9.95780942304
+    liftDirection: (0.000736364414697 -0.999999728884 0)
+    dragDirection: (0.999999728884 0.000736364414697 0)
+    force (per unit density): (0.00034183169519 -0.00397850719318 0)
+Force (per unit density) on foil: 
+(0.00034183169519 -0.00397850719318 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.00014355851443, Final residual = 1.14436158361e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 9.61904269132e-05, Final residual = 8.34303368407e-06, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.00174229779852, Final residual = 0.000126780239568, No Iterations 2
+time step continuity errors : sum local = 4.28168366582e-08, global = -2.54316531589e-09, cumulative = -1.57579323675e-06
+smoothSolver:  Solving for epsilon, Initial residual = 2.61162588447e-08, Final residual = 7.18954972132e-09, No Iterations 3
+smoothSolver:  Solving for k, Initial residual = 4.51443329189e-08, Final residual = 8.10563794944e-09, No Iterations 4
+ExecutionTime = 0.22 s  ClockTime = 0 s
+
+Time = 53
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.6047514
+    ReRef: 90000
+    f(Re): 0.00173697960686
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534426828
+    n: 0.23
+    K (lift): 1.02439364494
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056437323
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537078516
+    inflowVelocity: (0.999425776561 0.000735930813516 0)
+    relativeVelocity: (0.999425776561 0.000735930813516 0)
+    Reynolds number: 99942.6047514
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95781005154
+    Angle of attack (corrected, degrees): 9.95781005154
+    liftDirection: (0.000736353445407 -0.999999728892 0)
+    dragDirection: (0.999999728892 0.000736353445407 0)
+    force (per unit density): (0.000341831728314 -0.00397850805162 0)
+Force (per unit density) on foil: 
+(0.000341831728314 -0.00397850805162 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.000123305147438, Final residual = 1.01242477267e-05, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 8.14977557997e-05, Final residual = 7.2440335929e-06, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.00146705485156, Final residual = 0.00011813737747, No Iterations 2
+time step continuity errors : sum local = 3.9967831484e-08, global = 5.77792645856e-09, cumulative = -1.57001531029e-06
+smoothSolver:  Solving for epsilon, Initial residual = 2.16482187596e-08, Final residual = 8.83635054841e-09, No Iterations 2
+smoothSolver:  Solving for k, Initial residual = 3.82202651695e-08, Final residual = 9.9648249316e-09, No Iterations 3
+ExecutionTime = 0.22 s  ClockTime = 0 s
+
+Time = 54
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.6024865
+    ReRef: 90000
+    f(Re): 0.00173697961622
+    f(ReRef): 0.00178100208401
+    K (drag): 1.02534426275
+    n: 0.23
+    K (lift): 1.0243936396
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056438374
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537077742
+    inflowVelocity: (0.999425753874 0.000735983912218 0)
+    relativeVelocity: (0.999425753874 0.000735983912218 0)
+    Reynolds number: 99942.6024865
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.9578070065
+    Angle of attack (corrected, degrees): 9.9578070065
+    liftDirection: (0.00073640659129 -0.999999728853 0)
+    dragDirection: (0.999999728853 0.00073640659129 0)
+    force (per unit density): (0.000341831776886 -0.00397850665142 0)
+Force (per unit density) on foil: 
+(0.000341831776886 -0.00397850665142 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 0.000110508380008, Final residual = 7.48819296235e-06, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 8.44691960498e-05, Final residual = 7.61138395264e-06, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.00118257448309, Final residual = 6.64869611282e-05, No Iterations 2
+time step continuity errors : sum local = 2.25528855061e-08, global = -2.29560380602e-09, cumulative = -1.57231091409e-06
+smoothSolver:  Solving for epsilon, Initial residual = 1.80685233465e-08, Final residual = 7.4792621169e-09, No Iterations 2
+smoothSolver:  Solving for k, Initial residual = 2.94358056072e-08, Final residual = 8.13765230809e-09, No Iterations 3
+ExecutionTime = 0.22 s  ClockTime = 0 s
+
+Time = 55
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.5942634
+    ReRef: 90000
+    f(Re): 0.00173697965019
+    f(ReRef): 0.00178100208401
+    K (drag): 1.0253442427
+    n: 0.23
+    K (lift): 1.02439362021
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.0195056442189
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537074931
+    inflowVelocity: (0.99942567159 0.000736055200755 0)
+    relativeVelocity: (0.99942567159 0.000736055200755 0)
+    Reynolds number: 99942.5942634
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95780291615
+    Angle of attack (corrected, degrees): 9.95780291615
+    liftDirection: (0.000736477981365 -0.9999997288 0)
+    dragDirection: (0.9999997288 0.000736477981365 0)
+    force (per unit density): (0.000341831810867 -0.00397850435798 0)
+Force (per unit density) on foil: 
+(0.000341831810867 -0.00397850435798 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 9.65149524479e-05, Final residual = 6.72363959676e-06, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 7.21211269344e-05, Final residual = 6.13491464878e-06, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.00103223197096, Final residual = 7.56795001662e-05, No Iterations 2
+time step continuity errors : sum local = 2.56994146783e-08, global = 2.12274658539e-09, cumulative = -1.57018816751e-06
+smoothSolver:  Solving for epsilon, Initial residual = 2.00287365251e-08, Final residual = 8.44350866109e-09, No Iterations 2
+smoothSolver:  Solving for k, Initial residual = 3.27460007592e-08, Final residual = 9.34687635778e-09, No Iterations 3
+ExecutionTime = 0.23 s  ClockTime = 0 s
+
+Time = 56
+
+Calculating force contribution from actuatorLineElement foil.element0
+    position: (0 0 0)
+    chordDirection: (-0.984807753012 -0.173648177667 0)
+    spanDirection: (0 0 1)
+    elementVelocity: (0 0 0)
+    planformNormal: (0.173648177667 -0.984807753012 0)
+Correcting profile0 profile data for Reynolds number effects
+    Re: 99942.5863512
+    ReRef: 90000
+    f(Re): 0.00173697968288
+    f(ReRef): 0.00178100208401
+    K (drag): 1.0253442234
+    n: 0.23
+    K (lift): 1.02439360156
+    Initial minimum drag coefficient: 0.02
+    Corrected minimum drag coefficient: 0.019505644586
+    Initial maximum lift coefficient: 1.45
+    Corrected maximum lift coefficient: 1.48537072226
+    inflowVelocity: (0.999425592437 0.000736095929047 0)
+    relativeVelocity: (0.999425592437 0.000736095929047 0)
+    Reynolds number: 99942.5863512
+    Geometric angle of attack (degrees): 10
+    Angle of attack (uncorrected, degrees): 9.95780057791
+    Angle of attack (corrected, degrees): 9.95780057791
+    liftDirection: (0.000736518791359 -0.99999972877 0)
+    dragDirection: (0.99999972877 0.000736518791359 0)
+    force (per unit density): (0.000341831810913 -0.00397850279118 0)
+Force (per unit density) on foil: 
+(0.000341831810913 -0.00397850279118 0)
+
+smoothSolver:  Solving for Ux, Initial residual = 8.4141050805e-05, Final residual = 6.79289126349e-06, No Iterations 6
+smoothSolver:  Solving for Uy, Initial residual = 5.68854279443e-05, Final residual = 4.78774766565e-06, No Iterations 6
+GAMG:  Solving for p, Initial residual = 0.000975090546655, Final residual = 7.85891319074e-05, No Iterations 2
+time step continuity errors : sum local = 2.66802787172e-08, global = 5.84832885554e-10, cumulative = -1.56960333462e-06
+smoothSolver:  Solving for epsilon, Initial residual = 1.75547356323e-08, Final residual = 7.2026290601e-09, No Iterations 2
+smoothSolver:  Solving for k, Initial residual = 2.88423844026e-08, Final residual = 7.92204155102e-09, No Iterations 3
+ExecutionTime = 0.23 s  ClockTime = 0 s
+
+
+SIMPLE solution converged in 56 iterations
+
+End
+

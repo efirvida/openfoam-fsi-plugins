@@ -11,6 +11,7 @@ from __future__ import annotations
 import csv
 import importlib.util
 import json
+import math
 import re
 import subprocess
 import sys
@@ -83,7 +84,10 @@ def test_elastodyn_template_is_the_rigid_iea22_rotor_at_the_rated_point():
     assert float(builder.get_value(text, "TipRad")) == 142.0
     assert float(builder.get_value(text, "HubRad")) == 4.2
     assert [float(builder.get_value(text, f"PreCone({i})")) for i in (1, 2, 3)] == [-4.0] * 3
-    assert float(builder.get_value(text, "ShftTilt")) == pytest.approx(-6.0)
+    # no shaft tilt (owner decision 2026-11-02); hub stays at 170 m, overhang 14 m horizontal
+    assert float(builder.get_value(text, "ShftTilt")) == 0.0
+    assert float(builder.get_value(text, "OverHang")) == pytest.approx(-14.0)
+    assert float(builder.get_value(text, "TowerHt")) + float(builder.get_value(text, "Twr2Shft")) == pytest.approx(170.0)
     assert float(builder.get_value(text, "RotSpeed")) == 6.853997
     assert [float(builder.get_value(text, f"BlPitch({i})")) for i in (1, 2, 3)] == [4.127462] * 3
     assert builder.get_value(text, "NumBl") == "3"
@@ -156,9 +160,12 @@ def test_write_case_rewrites_the_operating_point_and_options(tmp_path):
     assert json.loads((directory / "case.json").read_text())["wake"] == "olaf"
 
 
-def test_write_case_default_keeps_tilt_tower_and_bem(tmp_path):
+def test_write_case_default_has_no_tilt_keeps_tower_and_bem(tmp_path):
     directory = runner.write_case(runner.make_case("bem", 11.134927, 6.853997, 4.127462, name="d"), tmp_path, stage=False)
-    assert float(builder.get_value((directory / f"{ROOT}_ElastoDyn.dat").read_text(), "ShftTilt")) == pytest.approx(-6.0)
+    ed = (directory / f"{ROOT}_ElastoDyn.dat").read_text()
+    assert float(builder.get_value(ed, "ShftTilt")) == 0.0
+    assert float(builder.get_value(ed, "OverHang")) == pytest.approx(-14.0)
+    assert json.loads((directory / "case.json").read_text())["tilt"] is False
     ad = (directory / f"{ROOT}_AeroDyn15.dat").read_text()
     assert (builder.get_value(ad, "Wake_Mod"), builder.get_value(ad, "TwrAero")) == ("1", "True")
 
@@ -350,3 +357,27 @@ def test_importer_does_not_change_the_iea15_importer_constants(tmp_path):
 def test_help_exits_zero(script):
     result = subprocess.run([sys.executable, "-I", str(SCRIPTS / script), "--help"], capture_output=True, text=True)
     assert result.returncode == 0 and "usage" in result.stdout.lower()
+
+
+def test_tilt_is_an_explicit_opt_in_with_consistent_hub_geometry(tmp_path):
+    case = runner.make_case("bem", 11.134927, 6.853997, 4.127462, tilt=True, name="t")
+    ed = (runner.write_case(case, tmp_path, stage=False) / f"{ROOT}_ElastoDyn.dat").read_text()
+    tilt = float(builder.get_value(ed, "ShftTilt"))
+    overhang = float(builder.get_value(ed, "OverHang"))
+    assert tilt == pytest.approx(-6.0)
+    assert float(builder.get_value(ed, "TowerHt")) + float(builder.get_value(ed, "Twr2Shft")) + abs(overhang) * math.sin(math.radians(6.0)) == pytest.approx(170.0, abs=1e-3)
+    assert overhang * math.cos(math.radians(6.0)) == pytest.approx(-14.0, abs=1e-3)
+
+
+def test_cli_tilt_flag(tmp_path):
+    assert runner.main(["setup", str(tmp_path), "--wake", "bem", "--name", "a"]) == 0
+    assert runner.main(["setup", str(tmp_path), "--wake", "bem", "--tilt", "--name", "b"]) == 0
+    tilt = lambda n: float(builder.get_value((tmp_path / n / f"{ROOT}_ElastoDyn.dat").read_text(), "ShftTilt"))
+    assert (tilt("a"), tilt("b")) == (0.0, pytest.approx(-6.0))
+
+
+@pytest.mark.skipif(not (builder.DEFAULT_SOURCE / "OpenFAST").exists(), reason="IEA-22 source repository not available")
+def test_tilted_opt_in_values_are_the_source_values():
+    src = (builder.DEFAULT_SOURCE / "OpenFAST/IEA-22-280-RWT-Monopile/IEA-22-280-RWT_ElastoDyn.dat").read_text()
+    for key, value in builder.TILTED_ED.items():
+        assert float(builder.get_value(src, key)) == pytest.approx(float(value), rel=1e-12), key

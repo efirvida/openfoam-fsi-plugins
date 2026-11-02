@@ -15,6 +15,7 @@ are in [`PROVENANCE.md`](PROVENANCE.md). Task: `odd/tasks/iea22-case-readiness.m
 tools/blade_geometry.py     decode + emit the geometry table; tested loader (59 stations)
 scripts/buildPolars.py      AirfoilInfo -> profileData converter, with --check
 tools/generate_case.py      render case/ from the committed data, with --check
+tools/mesh_proportions.py   R-unit table IEA-15 vs IEA-22 mesh quantities (exit 1 if not proportional)
 data/iea22mw_blade.csv      committed geometry table (59 stations)
 data/polars/polar_NN.dat    committed profileData polars (NN = 00..58, BlAFID = NN+1)
 case/                       generated OpenFOAM skeleton (system/, constant/, 0.org/)
@@ -44,8 +45,8 @@ python -m pytest turbinesFoam/tests/test_iea22mw_case.py -q
 | Blade stations / polars | 50 / 50 | **59 / 59** |
 | Prebend at tip | 4 m | **7 m** |
 | `r_over_R` | `radius_m*cos(precone)/R` | `radius_m/R` |
-| Hub height / overhang / shaft tilt | 150 m / 12.03 m / 6 deg | 170 m / 14 m / 6 deg (tilt only on the nacelle) |
-| Operating point | 10.659 m/s, 7.518 rpm, pitch 0 | 11.134927 m/s, 6.853997 rpm, pitch 4.127462 (WISDEM rated row) |
+| Hub height / overhang / shaft tilt | 150 m / 12.03 m / 6 deg (nacelle STL) | 170 m / 14 m / **none** (owner decision 2026-11-02; `--shaft-tilt on` opts in; precone 4 deg kept) |
+| Operating point | 10.659 m/s, 7.518 rpm, pitch 0 | 11.134927 m/s, 6.853997 rpm, pitch 4.127462 (WISDEM rated row; the only documented point) |
 | Elements per blade | 147 | 174 (3 per segment) |
 
 ## How the generator is shared
@@ -62,9 +63,15 @@ IEA-15 side only gained backward-compatible parameters (`n_stations`, default
 `blade_profile_names()` counts the stations of the geometry CSV.
 `buildPolars.py` likewise reuses the IEA-15 AirfoilInfo parser.
 
-The mesh domain scales with `ROTOR_DIAMETER`; the castellated extents are the
-IEA-15 absolute values scaled by `142/120.675` (see PROVENANCE). The case has
-only been rendered, never meshed or run.
+The mesh is IEA-15's in units of R: the domain scales with `ROTOR_DIAMETER`, and the
+castellated extents, tower box and near-ground cell are the IEA-15 constants times
+`142/120.675`, computed in `generate_case.py` (`SNAPPY_SCALED`). Run
+`python -I tools/mesh_proportions.py` for the R-unit table (IEA-15 vs IEA-22) and
+see PROVENANCE "Mesh proportions" for the two exceptions caused by the real hub
+height (4,171,440 vs 4,299,792 base cells; `deltaT` +2 % in tip travel). Base cell
+8.875 m (D/32), 1.109 m in the level-3 rotor disk. The case has only been rendered,
+never meshed or run. No shaft tilt: rotor axis and the optional nacelle are
+horizontal, the tower is kept; `generate_case.py --shaft-tilt on` tilts the nacelle STL 6 deg.
 
 ## Conventions (identical to IEA-15)
 

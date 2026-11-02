@@ -20,6 +20,25 @@ accept `tunnel` with a `-tunnel` directory suffix. Coarse/fine/ultra: 2.61 M / 8
 wall boundary layer). `cell_sizes` now handles a unit ratio (uniform block) instead of dividing by zero
 (`odd/tasks/phasevi-tunnel-domain.md` T1).
 
+#### IEA 22-280-RWT: nominal point, no shaft tilt, IEA-15 mesh proportions (`validation/iea22mw`)
+
+**Files:** `turbinesFoam/validation/iea22mw/{tools/{generate_case,mesh_proportions}.py,scripts/{build_openfast_templates,openfast_iea22}.py,case/system/{blockMeshDict,controlDict,snappyHexMeshDict},data/openfast-v5-templates/,PROVENANCE.md,README.md,openfast/README.md}`,
+`turbinesFoam/validation/iea15mw/tools/generate_case.py`, `turbinesFoam/tests/{test_iea22_mesh_proportions,test_iea22_openfast}.py`.
+
+**Problem:** owner decision 2026-11-02: IEA-22 at nominal speed, no inclinations, mesh with the IEA-15 proportions. The case still
+carried a 6 deg shaft tilt (nacelle capsule; OpenFAST `ShftTilt -6`) and castellated extents guessed by rounding (disk radius
+175 m, wake 200 m, tower box floor -190 m = H + 20 m) that are not the IEA-15 values in units of R (175/R = 1.232 vs 1.243).
+
+**Fix:** the castellated extents, tower box and near-ground cell are now the IEA-15 constants times `R22/R15` (identical in R:
+disk 1.243 R, wake 1.409 R, downwind 3.895 R, floor -1.409 R, ground cell 0.0166 R; domain, `D/32` base cell 8.875 m and level 3
+already scaled). IEA-15 generator: new `--shaft-tilt on|off` (default `on`, byte-identical IEA-15 output); IEA-22 default `off`,
+`on` opts in (rotor axis horizontal in both). OpenFAST templates: `ShftTilt 0`, `OverHang -14.0`, `Twr2Shft 5.614` (hub stays at
+170 m), tower on; `openfast_iea22.py setup --tilt` replaces `--no-tilt`. Precone 4 deg is blade geometry and is kept. Rated point
+(11.134927 m/s, 6.853997 rpm, 4.127462 deg) is the only documented point. Remaining differences from IEA-15, both from the real hub
+height: 4,171,440 vs 4,299,792 base cells (34 vs 36 vertical cells below the hub) and `deltaT` +2 % in tip travel. BEM preflight at
+rated, tilt 0, tower on: Cp 0.45243, Ct 0.64171 vs Cp_Ct_Cq.txt 0.44410 / 0.63839 (+1.87 % / +0.52 %); tilted 0.44605 / 0.63757; no
+tower 0.45328. No coefficient tuned, nothing meshed or run on Slurm (`odd/tasks/iea22-case-readiness.md`).
+
 #### IEA 22-280-RWT: OpenFAST AeroDyn BEM/OLAF reference setup (`validation/iea22mw`)
 
 **Files:** `turbinesFoam/validation/iea22mw/{data/openfast-v5-templates/,openfast/README.md,README.md,scripts/{build_openfast_templates,openfast_iea22,rated_table_check,import_olaf_reference}.py}`,

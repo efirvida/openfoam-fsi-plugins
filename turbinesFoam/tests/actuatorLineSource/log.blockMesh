@@ -1,0 +1,100 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2506                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _615aae61d7-20250627 OPENFOAM=2506 version=v2506
+Arch   : "LSB;label=64;scalar=64"
+Exec   : blockMesh -dict system/blockMeshDict-2D
+Date   : Oct 28 2026
+Time   : 14:55:20
+Host   : sdumont17
+PID    : 3732798
+I/O    : uncollated
+Case   : /scratch/leahk/eduardo.donestevez/simulations/tmp/of-plugins/.worktrees/tip-pitch/turbinesFoam/tests/actuatorLineSource
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Overriding DebugSwitches according to controlDict
+    actuatorLineSource 1;
+
+    actuatorLineElement 1;
+
+    LeishmanBeddoes 1;
+
+    LeishmanBeddoes3G 1;
+
+    LeishmanBeddoesSGC 1;
+
+--> FOAM Warning : 
+    From static Foam::IOstreamOption::compressionType Foam::IOstreamOption::compressionEnum(const Foam::word&, Foam::IOstreamOption::compressionType)
+    in file db/options/IOstreamOption.C at line 189
+    Unknown compression specifier 'uncompressed' using compression off
+Creating block mesh from "system/blockMeshDict-2D"
+--> FOAM IOWarning :
+    Found [v1012] 'convertToMeters' entry instead of 'scale' in dictionary "system/blockMeshDict-2D"
+
+    This keyword is 174 months old.
+
+Creating block edges
+No non-planar block faces defined
+Creating topology blocks
+
+Creating topology patches - from patches section
+
+Reading physicalType from existing boundary file
+
+Default patch type set to empty
+
+Creating block mesh topology
+
+Check topology
+
+	Basic statistics
+		Number of internal faces : 0
+		Number of boundary faces : 6
+		Number of defined boundary faces : 6
+		Number of undefined boundary faces : 0
+	Checking patch -> block consistency
+
+Creating block offsets
+Creating merge list (topological search)...
+
+Creating polyMesh from blockMesh
+Creating patches
+Creating cells
+Creating points with scale (1 1 1)
+    Block 0 cell size :
+        i : 0.122 .. 0.122
+        j : 0.122 .. 0.122
+        k : 0.1 .. 0.1
+
+No patch pairs to merge
+
+Writing polyMesh with 0 cellZones
+----------------
+Mesh Information
+----------------
+  boundingBox: (-1.5 -1.83 -0.05) (2.16 1.83 0.05)
+  nPoints: 1922
+  nCells: 900
+  nFaces: 3660
+  nInternalFaces: 1740
+----------------
+Patches
+----------------
+  patch 0 (start: 1740 size: 30) name: inlet
+  patch 1 (start: 1770 size: 30) name: outlet
+  patch 2 (start: 1800 size: 60) name: walls
+  patch 3 (start: 1860 size: 900) name: front
+  patch 4 (start: 2760 size: 900) name: back
+
+End
+

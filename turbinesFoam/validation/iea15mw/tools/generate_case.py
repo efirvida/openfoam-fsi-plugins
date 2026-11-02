@@ -1252,12 +1252,36 @@ NACELLE_STL = "constant/triSurface/iea15mw_nacelle.stl"
 NACELLE_RHO = 1.225
 
 
-def nacelle_spec(flow_axis: str = DEFAULT_FLOW_AXIS) -> dict:
+#: Shaft/nacelle tilt of the rendered case: ``on`` = the WindIO ``uptilt`` (IEA-15
+#: keeps its 6 deg nacelle capsule), ``off`` = horizontal body axis. The rotor
+#: axis itself is horizontal in both cases; only the nacelle STL is affected.
+DEFAULT_SHAFT_TILT = "on"
+
+
+def nacelle_tilt_deg_for(shaft_tilt: str) -> float | str:
+    """``"windio"`` (the WindIO uptilt) for ``on``, ``0.0`` for ``off``."""
+    if shaft_tilt not in ("on", "off"):
+        raise ValueError(f"shaft tilt must be on or off, not {shaft_tilt!r}")
+    return "windio" if shaft_tilt == "on" else 0.0
+
+
+def _resolve_tilt(tilt_deg: float | str | None, uptilt: float) -> float:
+    """Tilt [rad]: ``None`` follows ``DEFAULT_SHAFT_TILT`` (read at call time)."""
+    if tilt_deg is None:
+        tilt_deg = nacelle_tilt_deg_for(DEFAULT_SHAFT_TILT)
+    return uptilt if tilt_deg == "windio" else math.radians(float(tilt_deg))
+
+
+def nacelle_spec(
+    flow_axis: str = DEFAULT_FLOW_AXIS, tilt_deg: float | str | None = None
+) -> dict:
     """Capsule nacelle behind the hub, from the WindIO drivetrain/generator.
 
     * flat cap centre: on the rotor axis at the hub radius (3.97 m) downwind of
       the apex (assumption: the nacelle starts where the hub ends);
-    * axis: downwind, tilted so the tail drops by the WindIO ``uptilt`` (6 deg);
+    * axis: downwind, tilted so the tail drops by the WindIO ``uptilt`` (6 deg)
+      unless ``tilt_deg`` overrides it (``0.0`` = horizontal body, ``"windio"`` =
+      the WindIO uptilt, ``None`` = the module ``DEFAULT_SHAFT_TILT``);
     * radius: ``rad_ag + h_m + h_yr`` = generator outer (rotor-yoke) radius, the
       only WindIO diameter that bounds the housing (assumption: the housing hugs
       the PMSG_Outer generator; real nacelle skin is a few tenths larger);
@@ -1266,7 +1290,7 @@ def nacelle_spec(flow_axis: str = DEFAULT_FLOW_AXIS) -> dict:
       at ``overhang`` lies inside it.
     """
     data = blade_geometry.read_nacelle_drivetrain()
-    tilt = data["uptilt"]
+    tilt = _resolve_tilt(tilt_deg, data["uptilt"])
     flow = inflow_direction(flow_axis)
     axis = tuple(
         math.cos(tilt) * flow[i] - math.sin(tilt) * (1.0 if i == 2 else 0.0)
@@ -1286,7 +1310,9 @@ def nacelle_spec(flow_axis: str = DEFAULT_FLOW_AXIS) -> dict:
     }
 
 
-def write_nacelle_stl(case_dir: Path, flow_axis: str = DEFAULT_FLOW_AXIS) -> Path:
+def write_nacelle_stl(
+    case_dir: Path, flow_axis: str = DEFAULT_FLOW_AXIS, tilt_deg: float | str | None = None
+) -> Path:
     """Write the nacelle STL under ``case_dir/constant/triSurface``."""
     spec = importlib.util.spec_from_file_location(
         "make_nacelle_stl", PACKAGE.parent.parent / "validation" / "tools" / "make_nacelle_stl.py"
@@ -1294,7 +1320,7 @@ def write_nacelle_stl(case_dir: Path, flow_axis: str = DEFAULT_FLOW_AXIS) -> Pat
     assert spec is not None and spec.loader is not None
     tool = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(tool)
-    nac = nacelle_spec(flow_axis)
+    nac = nacelle_spec(flow_axis, tilt_deg)
     tris, axis = tool.triangles(nac["radius"], nac["length"], nac["start"], nac["axis"])
     out = Path(case_dir) / NACELLE_STL
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -1302,9 +1328,11 @@ def write_nacelle_stl(case_dir: Path, flow_axis: str = DEFAULT_FLOW_AXIS) -> Pat
     return out
 
 
-def render_nacelle_block(flow_axis: str = DEFAULT_FLOW_AXIS) -> str:
+def render_nacelle_block(
+    flow_axis: str = DEFAULT_FLOW_AXIS, tilt_deg: float | str | None = None
+) -> str:
     """``nacelle {}`` subdict consumed by ``axialFlowTurbineALSource::createNacelle``."""
-    nac = nacelle_spec(flow_axis)
+    nac = nacelle_spec(flow_axis, tilt_deg)
     area = math.pi * nac["radius"] ** 2
     # bodyAxis is the streamwise direction of the skin-friction model (the
     # inflow), not the tilted body axis.
@@ -1353,6 +1381,7 @@ def render_fv_options(
     wake_azimuthal_step: float = DEFAULT_WAKE_AZIMUTHAL_STEP,
     tip_correction_epsilon: float = DEFAULT_TIP_CORRECTION_EPSILON,
     nacelle: bool = False,
+    nacelle_tilt_deg: float | str | None = None,
 ) -> str:
     """The neutral-baseline ``axialFlowTurbineALSource``.
 
@@ -1430,7 +1459,7 @@ def render_fv_options(
 """
     else:
         hub_block = ""
-    nacelle_block = render_nacelle_block(flow_axis) if nacelle else ""
+    nacelle_block = render_nacelle_block(flow_axis, nacelle_tilt_deg) if nacelle else ""
     tower_rows = render_cell_list(tower_element_rows(), indent="                ")
     tower_cd = tower_drag_coefficient()
     if tower:
@@ -1881,6 +1910,7 @@ def outputs(
     decomp_method: str = DEFAULT_DECOMP_METHOD,
     decomp_n: str | None = None,
     nacelle: bool = False,
+    nacelle_tilt_deg: float | str | None = None,
 ) -> dict[Path, str]:
     domain = _as_domain(domain)
     case_dir = Path(case_dir)
@@ -1922,6 +1952,7 @@ def outputs(
             wake_azimuthal_step=wake_azimuthal_step,
             tip_correction_epsilon=tip_correction_epsilon,
             nacelle=nacelle,
+            nacelle_tilt_deg=nacelle_tilt_deg,
         ),
         system / "fvOptions.ASM": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
@@ -1939,6 +1970,7 @@ def outputs(
             wake_azimuthal_step=wake_azimuthal_step,
             tip_correction_epsilon=tip_correction_epsilon,
             nacelle=nacelle,
+            nacelle_tilt_deg=nacelle_tilt_deg,
         ),
         system / "fvOptions.ASM-MESH": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
@@ -1957,6 +1989,7 @@ def outputs(
             wake_azimuthal_step=wake_azimuthal_step,
             tip_correction_epsilon=tip_correction_epsilon,
             nacelle=nacelle,
+            nacelle_tilt_deg=nacelle_tilt_deg,
         ),
         system / "fvOptions": render_fv_options(
             speed, rpm, pitch_deg, case_dir, n_elements, cone_angle,
@@ -1977,6 +2010,7 @@ def outputs(
             wake_azimuthal_step=wake_azimuthal_step,
             tip_correction_epsilon=tip_correction_epsilon,
             nacelle=nacelle,
+            nacelle_tilt_deg=nacelle_tilt_deg,
         ),
         system / "snappyHexMeshDict": render_snappy_dict(
             flow_axis,
@@ -2379,6 +2413,15 @@ def main(argv: list[str] | None = None) -> int:
         choices=("on", "off"),
         default="off",
         help="include the nacelle actuator surface + STL (default off; not in the reference)",
+    )
+    parser.add_argument(
+        "--shaft-tilt",
+        choices=("on", "off"),
+        default=DEFAULT_SHAFT_TILT,
+        help=(
+            "nacelle body tilt: on = WindIO uptilt, off = horizontal (the rotor "
+            f"axis is horizontal either way; default {DEFAULT_SHAFT_TILT})"
+        ),
     )
     parser.add_argument(
         "--ranks",
@@ -2816,6 +2859,7 @@ def main(argv: list[str] | None = None) -> int:
             decomp_method=decomp_method,
             decomp_n=decomp_n,
             nacelle=args.nacelle == "on",
+            nacelle_tilt_deg=nacelle_tilt_deg_for(args.shaft_tilt),
         )
     except (KeyError, ValueError) as exc:
         print(f"case generation error: {exc}", file=sys.stderr)
@@ -2829,7 +2873,10 @@ def main(argv: list[str] | None = None) -> int:
         path.write_text(content, encoding="utf-8")
         print(_display(path, PACKAGE))
     if args.nacelle == "on":
-        print(_display(write_nacelle_stl(Path(args.case_dir), args.flow_axis), PACKAGE))
+        stl = write_nacelle_stl(
+            Path(args.case_dir), args.flow_axis, nacelle_tilt_deg_for(args.shaft_tilt)
+        )
+        print(_display(stl, PACKAGE))
     return 0
 
 
