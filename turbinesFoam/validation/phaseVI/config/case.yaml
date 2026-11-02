@@ -181,6 +181,14 @@ domain_squat_D:
   y: [-3.0, 3.0]
   z_offset: [-3.0, 3.0]
 
+# NASA-Ames 24.4 m x 36.6 m test section. Selected with `--domain tunnel`.
+# Physical extents in metres (y from the rotor axis, z from the floor; the hub
+# is at turbine.hub_height); x as `domain_D`. The walls are slip
+# (symmetryPlane): no tunnel wall boundary layer, so blockage is an upper bound.
+domain_tunnel:
+  y_m: [-18.3, 18.3]
+  z_m: [0.0, 24.4]
+
 # Block breaks shared by every resolution (x/y absolute D, z hub offset in D).
 # Cells and grading are per resolution; the hub-adjacent cell is the finest
 # cell in z because the split sits at the hub.

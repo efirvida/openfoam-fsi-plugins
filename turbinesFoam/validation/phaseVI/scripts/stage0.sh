@@ -5,7 +5,7 @@
 # the authorized development queue. Stages 1-3 are declared in
 # config/case.yaml but MUST NOT be submitted.
 #
-# Usage: stage0.sh [--domain long|squat] [--skip-fine-mesh] [--mesh-only]
+# Usage: stage0.sh [--domain long|squat|tunnel] [--skip-fine-mesh] [--mesh-only]
 #                  [--runs-only] [--execute] [--submit]
 #
 #   (no flag)    print the stage plan and the prepared commands; nothing runs
@@ -89,8 +89,8 @@ fi
 
 if [ "$runs_only" -eq 1 ]; then
     coarse_dir="$root/runs/mesh-coarse"
-    if [ "$domain" = "squat" ]; then
-        coarse_dir="$coarse_dir-squat"
+    if [ "$domain" = "squat" ] || [ "$domain" = "tunnel" ]; then
+        coarse_dir="$coarse_dir-$domain"
     fi
     if [ ! -f "$coarse_dir/log.checkMesh" ] || ! grep -q "Mesh OK" "$coarse_dir/log.checkMesh"; then
         echo "ERROR: --runs-only requires a validated coarse mesh" >&2

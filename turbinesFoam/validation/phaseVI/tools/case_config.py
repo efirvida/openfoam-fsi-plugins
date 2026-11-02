@@ -107,6 +107,16 @@ def validate_config(cfg: dict[str, Any]) -> None:
         ):
             raise ValueError(f"{domain_key} z does not contain the rotor disk")
 
+    tunnel = cfg["domain_tunnel"]
+    y_lo, y_hi = (float(v) for v in tunnel["y_m"])
+    z_lo, z_hi = (float(v) for v in tunnel["z_m"])
+    if y_lo >= y_hi or z_lo >= z_hi:
+        raise ValueError("domain_tunnel y_m/z_m extents must be increasing")
+    if y_lo > -radius or y_hi < radius:
+        raise ValueError("domain_tunnel y does not contain the rotor disk")
+    if z_lo > hub - radius or z_hi < hub + radius:
+        raise ValueError("domain_tunnel z does not contain the rotor disk")
+
     breaks = cfg["mesh"]["breaks_D"]
     for axis in ("x", "y", "z"):
         values = [float(value) for value in breaks[axis]]
@@ -363,6 +373,8 @@ def cell_sizes(length: float, cells: int, grading: float) -> list[float]:
     if cells == 1:
         return [length]
     q = float(grading) ** (1.0 / (cells - 1))
+    if math.isclose(q, 1.0, rel_tol=0.0, abs_tol=1e-12):
+        return [length / cells] * cells
     first = length * (q - 1.0) / (q**cells - 1.0)
     return [first * q**i for i in range(cells)]
 
@@ -378,6 +390,18 @@ def axis_extents_D(cfg: dict[str, Any], axis: str, domain: str = "long") -> list
     diameter = float(turbine["diameter"])
     hub = float(turbine["hub_height"])
     breaks = [float(value) for value in cfg["mesh"]["breaks_D"][axis]]
+
+    if domain == "tunnel":
+        # Physical test section (metres): y and z are absolute, x as `long`.
+        if axis == "x":
+            return axis_extents_D(cfg, axis, "long")
+        tunnel = cfg["domain_tunnel"]
+        if axis == "y":
+            core = [diameter * value for value in breaks[1:-1]]
+            low, high = (float(v) for v in tunnel["y_m"])
+            return [low, *core, high]
+        low, high = (float(v) for v in tunnel["z_m"])
+        return [low, hub, high]
 
     if domain == "squat":
         target = cfg["domain_squat_D"]
@@ -410,10 +434,104 @@ def axis_extents_D(cfg: dict[str, Any], axis: str, domain: str = "long") -> list
     ]
 
 
+def blockage_ratio(cfg: dict[str, Any]) -> float:
+    """Rotor disk area over the wind-tunnel test-section area."""
+    radius = float(cfg["turbine"]["radius"])
+    tunnel = cfg["domain_tunnel"]
+    width = float(tunnel["y_m"][1]) - float(tunnel["y_m"][0])
+    height = float(tunnel["z_m"][1]) - float(tunnel["z_m"][0])
+    return math.pi * radius**2 / (width * height)
+
+
+def _geometric_sum(first: float, ratio: float, cells: int) -> float:
+    total = 0.0
+    size = first
+    for _ in range(cells):
+        total += size
+        size *= ratio
+    return total
+
+
+def _refit_block(
+    length: float, anchor: float, ratio_ref: float, cells_ref: int
+) -> tuple[int, float]:
+    """Cells and outward ratio filling `length` from an anchor cell of `anchor`.
+
+    Picks the integer cell count whose exact solution of the geometric ratio
+    (bisection, sizes `anchor * r**k` outward from the anchor) is closest to the
+    reference ratio, so the stretching law is preserved as far as possible.
+    """
+    best: tuple[float, int, float] | None = None
+    for cells in range(1, 4 * cells_ref + 2):
+        if cells == 1:
+            if math.isclose(anchor, length, rel_tol=1e-9):
+                candidate = (abs(math.log(ratio_ref)), 1, 1.0)
+                best = min(best, candidate) if best else candidate
+            continue
+        low, high = 1e-3, 1e3
+        if not (
+            _geometric_sum(anchor, low, cells) <= length <= _geometric_sum(anchor, high, cells)
+        ):
+            continue
+        for _ in range(200):
+            mid = math.sqrt(low * high)
+            if _geometric_sum(anchor, mid, cells) < length:
+                low = mid
+            else:
+                high = mid
+        ratio = math.sqrt(low * high)
+        candidate = (abs(math.log(ratio / ratio_ref)), cells, ratio)
+        best = min(best, candidate) if best else candidate
+    if best is None:
+        raise ValueError(
+            f"cannot fit a block of {length:g} m with an anchor cell of {anchor:g} m"
+        )
+    return best[1], best[2]
+
+
+def domain_resolution(cfg: dict[str, Any], mesh: str, domain: str = "long") -> dict[str, Any]:
+    """Per-domain cells/grading. `long` and `squat` use the reference as is.
+
+    `tunnel` keeps the cell beside the rotor (y blocks next to the core, both
+    hub-adjacent z cells) at its exact reference size and refits the cell count
+    and grading of the outer y blocks and the two z blocks to the shorter
+    physical blocks, keeping the per-cell ratio as close to the reference as an
+    integer cell count allows.
+    """
+    resolution = _resolution(cfg, mesh)
+    if domain != "tunnel":
+        return resolution
+    result = {
+        axis: {key: list(values) for key, values in resolution[axis].items()}
+        for axis in ("x", "y", "z")
+    }
+    for key in resolution:
+        if key not in result:
+            result[key] = resolution[key]
+    # (axis, block index, anchored at the block end?)
+    for axis, index, at_end in (("y", 0, True), ("y", 2, False), ("z", 0, True), ("z", 1, False)):
+        ref_ext = axis_extents_D(cfg, axis, "long")
+        new_ext = axis_extents_D(cfg, axis, "tunnel")
+        cells_ref = int(resolution[axis]["cells"][index])
+        grading_ref = float(resolution[axis]["grading"][index])
+        sizes = cell_sizes(ref_ext[index + 1] - ref_ext[index], cells_ref, grading_ref)
+        anchor = sizes[-1] if at_end else sizes[0]
+        # Outward ratio from the anchor in the reference block.
+        if cells_ref == 1:
+            ratio_ref = 1.0
+        else:
+            q_ref = grading_ref ** (1.0 / (cells_ref - 1))
+            ratio_ref = 1.0 / q_ref if at_end else q_ref
+        cells, ratio = _refit_block(new_ext[index + 1] - new_ext[index], anchor, ratio_ref, cells_ref)
+        grading = ratio ** (-(cells - 1)) if at_end else ratio ** (cells - 1)
+        result[axis]["cells"][index] = cells
+        result[axis]["grading"][index] = grading
+    return result
+
+
 def cell_count(cfg: dict[str, Any], mesh: str, domain: str = "long") -> int:
     """Total hexahedral cell count of a rendered mesh."""
-    del domain  # cell counts are identical for both domains
-    resolution = _resolution(cfg, mesh)
+    resolution = domain_resolution(cfg, mesh, domain)
     total = 1
     for axis in ("x", "y", "z"):
         total *= sum(int(value) for value in resolution[axis]["cells"])

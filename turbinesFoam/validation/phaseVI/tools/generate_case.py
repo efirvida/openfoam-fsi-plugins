@@ -10,7 +10,7 @@ stale, without writing anything.
 Usage:
     generate_case.py [--rotational-augmentation-model DuSelig|ChaviaropoulosHansen]
                      [--mesh coarse|fine|ultra] [--speed 7|10|13|15|20|25]
-                     [--domain long|squat] [--profile production|smoke]
+                     [--domain long|squat|tunnel] [--profile production|smoke]
                      [--solver urans|iddes] [--n-chordwise N] [--n-elements N]
                      [--ranks N]
                      [--surface-kernel cosine|gaussian]
@@ -38,6 +38,7 @@ from case_config import (
     ROOT,
     SOLVER_CHOICES,
     axis_extents_D,
+    domain_resolution,
     foam_header,
     foam_vector,
     inflow_fields,
@@ -55,7 +56,7 @@ from element_data import (
 )
 
 MESH_CHOICES = ("coarse", "fine", "ultra")
-DOMAIN_CHOICES = ("long", "squat")
+DOMAIN_CHOICES = ("long", "squat", "tunnel")
 PROFILE_CHOICES = ("production", "smoke")
 START_FROM_CHOICES = ("startTime", "latestTime")
 
@@ -73,7 +74,7 @@ PATCH_NAMES = ("inlet", "outlet", "bottom", "top", "sideMinus", "sidePlus")
 
 def render_block_mesh(cfg: dict[str, Any], mesh: str, domain: str, profile: str) -> str:
     """18-block hexahedral blockMeshDict with six far-field patches."""
-    resolution = cfg["mesh"]["resolutions"][mesh]
+    resolution = domain_resolution(cfg, mesh, domain)
     breaks = {axis: axis_extents_D(cfg, axis, domain) for axis in ("x", "y", "z")}
     cells = {
         axis: [int(value) for value in resolution[axis]["cells"]]

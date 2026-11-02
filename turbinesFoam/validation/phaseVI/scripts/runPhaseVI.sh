@@ -4,7 +4,7 @@
 #
 # Usage:
 #   runPhaseVI.sh -m alm|asm|asm-mesh -u <wind-speed> [-mesh coarse|fine|ultra]
-#                 [--domain long|squat] [-s H|S] [--solver urans|iddes]
+#                 [--domain long|squat|tunnel] [-s H|S] [--solver urans|iddes]
 #                 [--div-phi-u "bounded Gauss linear"] [--polar FILE.dat]
 #                 [--nchordwise N] [--n-elements N] [--ranks N]
 #                 [--end-revs FLOAT] [--run-label WORD] [--stage0]
@@ -179,7 +179,7 @@ case "$mesh" in
     *) echo "ERROR: unsupported mesh: $mesh" >&2; exit 2 ;;
 esac
 case "$domain" in
-    long|squat) ;;
+    long|squat|tunnel) ;;
     *) echo "ERROR: unsupported domain: $domain" >&2; exit 2 ;;
 esac
 case "$sequence" in
@@ -567,8 +567,8 @@ if [ "$refine_level" -gt 0 ]; then
     # levels can never share a directory and borrow each other's mesh.
     mesh_dir="$mesh_dir-r$refine_level"
 fi
-if [ "$domain" = "squat" ]; then
-    mesh_dir="$mesh_dir-squat"
+if [ "$domain" = "squat" ] || [ "$domain" = "tunnel" ]; then
+    mesh_dir="$mesh_dir-$domain"
 fi
 if [ ! -d "$mesh_dir/constant/polyMesh" ]; then
     echo "Shared $mesh mesh at refinement level $refine_level not found; generating it"

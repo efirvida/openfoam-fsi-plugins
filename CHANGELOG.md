@@ -4,6 +4,22 @@
 
 ### Features
 
+#### Phase VI: wind-tunnel blockage domain (`--domain tunnel`)
+
+**Files:** `turbinesFoam/validation/phaseVI/{tools/case_config.py,tools/generate_case.py,config/case.yaml,scripts/{mesh,runPhaseVI,stage0}.sh,README.md}`,
+`turbinesFoam/tests/test_phasevi_tunnel.py`.
+
+**Problem:** blockage was documented as "not simulated": the free box ignores the 24.4 x 36.6 m NASA-Ames test section
+(rotor/section 8.9 %).
+
+**Fix:** new `domain_tunnel` (y +-18.3 m, z 0..24.4 m, x as `long`), `axis_extents_D(..., "tunnel")`, `domain_resolution`
+(outer y blocks and both z blocks refit to the shorter lengths, keeping the cell beside the core/hub exact and the stretching
+ratio as close as possible to the reference) and `blockage_ratio`; `cell_count` and `render_block_mesh` use it; the scripts
+accept `tunnel` with a `-tunnel` directory suffix. Coarse/fine/ultra: 2.61 M / 8.96 M / 21.07 M cells; coarse meshes with
+`blockMesh` + `checkMesh` OK. `long`/`squat` blockMeshDict byte-identical. Slip walls: the blockage is an upper bound (no tunnel
+wall boundary layer). `cell_sizes` now handles a unit ratio (uniform block) instead of dividing by zero
+(`odd/tasks/phasevi-tunnel-domain.md` T1).
+
 #### IEA 22-280-RWT: OpenFAST AeroDyn BEM/OLAF reference setup (`validation/iea22mw`)
 
 **Files:** `turbinesFoam/validation/iea22mw/{data/openfast-v5-templates/,openfast/README.md,README.md,scripts/{build_openfast_templates,openfast_iea22,rated_table_check,import_olaf_reference}.py}`,

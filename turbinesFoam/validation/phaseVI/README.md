@@ -18,6 +18,29 @@ turbulence, no external inflow preprocessing):
 | y | ±4D | ±3D |
 | z | hub ± 2.5D (hub 12.192 m) | hub ± 3D |
 
+### Wind-tunnel domain (`--domain tunnel`)
+
+`--domain tunnel` closes the box on the NASA-Ames 24.4 m × 36.6 m test section
+(`domain_tunnel` in `config/case.yaml`): y ∈ [−18.3, 18.3] m, z ∈ [0, 24.4] m
+(hub 12.192 m), x as the free box. Topology (18 blocks) and the slip-wall
+(`symmetryPlane`) patches are unchanged. The rotor/section area ratio is
+`tools/case_config.blockage_ratio` = 8.9 %. The cell size around the rotor is
+preserved so the domain is the only change against `long`: the core y block is
+untouched, and the y cells next to the core and the z cells next to the hub keep
+their exact size. Only the cell count and `simpleGrading` of the two outer y
+blocks and the two z blocks change (`domain_resolution`: integer cell count,
+then the per-cell ratio is solved by bisection so the block is filled exactly,
+as close as possible to the reference ratio). Coarse/fine/ultra: 2,612,880 /
+8,961,720 / 21,065,008 cells (long: 6.67 M / 22.5 M / 53.4 M); `long` and
+`squat` output is byte-identical to before. Run directories and meshes carry a
+`-tunnel` suffix like `-squat`.
+
+**Caveat (upper bound).** The walls are slip walls: there is no tunnel-wall
+boundary layer, so the displacement of the real walls is not represented and
+the modelled blockage is an upper bound of the physical effect. Blockage raises
+the rotor loads, so it should help the under-predicted points (U8 inboard, S5
+mid-span) and worsen the over-predicted ones (tip, root).
+
 Boundary conditions: uniform velocity inlet, pressure outlet, symmetry far
 field. Solver: `pimpleFoam` + `kOmegaSST` URANS, `adjustTimeStep off` with a
 fixed time step (D/32 0.008 s, D/48 0.005 s, D/64 0.004 s) chosen so the blade
@@ -82,7 +105,7 @@ python3 tools/generate_case.py --check    # exit 1 on missing/stale, never write
 ```
 
 `--mesh coarse|fine|ultra`, `--speed <7|10|13|15|20|25>`,
-`--domain long|squat`, `--sequence H|S`, `--profile production|smoke`,
+`--domain long|squat|tunnel`, `--sequence H|S`, `--profile production|smoke`,
 `--solver urans|iddes`, `--n-chordwise N`, `--ranks N`,
 `--surface-kernel cosine|gaussian`, `--rotational-augmentation on|off`,
 `--rotational-augmentation-model DuSelig|ChaviaropoulosHansen`,
@@ -127,7 +150,7 @@ refines z like x/y); recorded in `design.md` §5 and `config/case.yaml`.
 
 ```sh
 scripts/runPhaseVI.sh -m alm|asm|asm-mesh -u <speed> [-mesh coarse|fine|ultra]
-                      [--domain long|squat] [-s H|S] [--solver urans|iddes]
+                      [--domain long|squat|tunnel] [-s H|S] [--solver urans|iddes]
                       [--nchordwise N] [--ranks N] [--run-label WORD]
                       [--stage0] [--restart] [--refine-level N] [--mesh-factor F] [--blade-dz DZ]
                       [--pitch-reference twist-zero|tip]
@@ -236,7 +259,7 @@ The tip-displacement assertion runs against the selected time step, so the
 ### Meshes and Stage 0
 
 ```sh
-scripts/mesh.sh coarse [--domain long|squat]   # blockMesh + topoSet + checkMesh
+scripts/mesh.sh coarse [--domain long|squat|tunnel]   # blockMesh + topoSet + checkMesh
 scripts/mesh.sh fine
 scripts/stage0.sh                              # print the stage plan only
 scripts/stage0.sh --submit                     # sbatch the dev-queue job
@@ -993,8 +1016,10 @@ BEM; `buildAeroDynCase.py --inflow-scale F` runs it at inflow x F with rpm and d
   only.
 - The tower is not modelled (rotor + hub only); EAEROTH is a blade pressure
   integration and the measured loads include tower shadow.
-- Blockage is not simulated (uniform free box versus the NASA-Ames test
-  section); documented, not corrected.
+- Blockage is not simulated in the default free box; `--domain tunnel` models it
+  with slip walls on the 24.4 × 36.6 m section (8.9 %), which is an upper bound
+  (no wall boundary layer), see "Wind-tunnel domain". The tunnel results are
+  only as valid as that idealisation.
 
 ## Data and tests
 
