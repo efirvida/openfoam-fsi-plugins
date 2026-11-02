@@ -682,7 +682,8 @@ def blade_profile_names() -> list[str]:
     The AeroDyn ``BlAFID`` is 1..50; the P1 polar files are ``polar_00`` ..
     ``polar_49`` in station order.
     """
-    return [f"polar_{station:02d}" for station in range(50)]
+    count = len(blade_geometry.read_geometry(BLADE_CSV))
+    return [f"polar_{station:02d}" for station in range(count)]
 
 
 def blade_element_profiles() -> list[str]:

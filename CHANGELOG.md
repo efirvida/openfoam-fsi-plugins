@@ -4,6 +4,36 @@
 
 ### Features
 
+#### IEA 22-280-RWT: OpenFAST AeroDyn BEM/OLAF reference setup (`validation/iea22mw`)
+
+**Files:** `turbinesFoam/validation/iea22mw/{data/openfast-v5-templates/,openfast/README.md,README.md,scripts/{build_openfast_templates,openfast_iea22,rated_table_check,import_olaf_reference}.py}`,
+`turbinesFoam/tests/test_iea22_openfast.py`.
+
+**Problem:** the IEA-22 case had no code-to-code reference; the IEA-15 OpenFAST templates point at absolute paths of the
+IEA-15 repository and the OLAF spanwise CSV behind the reference store was produced by hand.
+
+**Fix:** v5.0.0 templates generated from the IEA-15 layout and the IEA-22 monopile values (rigid rotor, `UA_Mod 0`,
+`BEM_Mod 2`, 59 staged polars, R = 142 m), a case writer/runner/extractor (`metrics.json`, `spanwise.csv`), a Cp/Ct plausibility
+check against the published tables, and an importer for the `olaf-fvw` / `openfast-bem` blocks that reuses the IEA-15 store code
+and refuses unconverged cases. Preflight only: BEM at the rated point ran (Cp 0.4460, Ct 0.6376; WISDEM rated row 0.4340 / 0.6316),
+an OLAF smoke ran 4 revolutions with a 120-panel wake and is not a result. No coefficient was tuned
+(`odd/tasks/iea22-case-readiness.md` T2).
+
+#### IEA 22-280-RWT: geometry, polars and case skeleton (`validation/iea22mw`)
+
+**Files:** `turbinesFoam/validation/iea22mw/{README.md,PROVENANCE.md,tools/,scripts/buildPolars.py,data/,case/}`,
+`turbinesFoam/validation/iea15mw/tools/{blade_geometry.py,generate_case.py}`, `turbinesFoam/tests/test_iea22mw_case.py`.
+
+**Problem:** the 22 MW reference turbine had no turbinesFoam case; its published diameter (284 m) could not be
+assumed to follow the IEA-15 convention (projected radius `TipRad*cos(precone)`).
+
+**Fix:** new package mirroring `iea15mw` (59-station geometry table, 59 `profileData` polars from the OpenFAST
+AirfoilInfo files, generated case, `--check` modes, tests). The radius is decided from evidence: workbook tip
+speed, windIO and ElastoDyn give R = 142.0 m = `TipRad` (not projected), hub radius 4.2 m, precone 4 deg
+(`PROVENANCE.md`). The IEA-15 generator is reused, not copied; its `read_blade_table`/`read_geometry` take an
+`n_stations` argument (default 50) and `blade_profile_names` counts the stations of the geometry CSV, so the
+IEA-15 outputs are unchanged. No model coefficient was changed (`odd/tasks/iea22-case-readiness.md` T1).
+
 #### Phase VI: double-precision OpenFAST as the binary of record
 
 **Files:** `turbinesFoam/validation/phaseVI/openfast/{build_openfast_dp.sh,README.md}`,
