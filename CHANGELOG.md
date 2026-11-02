@@ -20,6 +20,22 @@ accept `tunnel` with a `-tunnel` directory suffix. Coarse/fine/ultra: 2.61 M / 8
 wall boundary layer). `cell_sizes` now handles a unit ratio (uniform block) instead of dividing by zero
 (`odd/tasks/phasevi-tunnel-domain.md` T1).
 
+#### IEA 22-280-RWT: SDumont run platform, OLAF-DP sizing, BEM reference (`validation/iea22mw`)
+
+**Files:** `turbinesFoam/validation/iea22mw/{scripts/{run_iea22mw_case.sh,submit_iea22.sh,platform_derive.py,olaf_trace.py,slurm/{l2-ds,olaf-dp}.slurm},analysis/,runs/.gitignore,README.md}`,
+`turbinesFoam/tests/test_iea22_platform.py`.
+
+**Problem:** the IEA-22 case had no way to run on SDumont like the IEA-15 ALM L2 D&S reference, and every IEA-15 platform number
+(ranks, decomposition, domain, sampling radius, snappy level, rpm) was a literal in the IEA-15 Slurm files.
+
+**Fix:** a wrapper of the IEA-15 runner (no copy) and `platform_derive.py`, which reads the IEA-15 files and carries each value by
+a geometry-only rule (D multiples, R-proportional extents, dimensionless numbers as is, ranks from the lattice checked against the
+cells-per-rank rule); `l2-ds.slurm` (ALM, D&S, 120 deg output, 23 revolutions, no requeue), `olaf-dp.slurm` (guideline OLAF, one
+task), `submit_iea22.sh` (dry run default, bigmem for ALM, `sequana_cpu` for OLAF, `--ntasks` only, refuses existing run dirs).
+Sizing from dev-partition runs: ALM 6.0 s/step (9,588 steps, 16 h); OLAF 4-5 h extrapolated. BEM rated reference stored in
+`analysis/`. Found by the smoke run: the IEA-22 case aborts at start because `TOWER_N_ELEMENTS = 40` (IEA-15) is not a multiple
+of the 30 IEA-22 tower segments (not fixed here, see the odd task).
+
 #### IEA 22-280-RWT: nominal point, no shaft tilt, IEA-15 mesh proportions (`validation/iea22mw`)
 
 **Files:** `turbinesFoam/validation/iea22mw/{tools/{generate_case,mesh_proportions}.py,scripts/{build_openfast_templates,openfast_iea22}.py,case/system/{blockMeshDict,controlDict,snappyHexMeshDict},data/openfast-v5-templates/,PROVENANCE.md,README.md,openfast/README.md}`,

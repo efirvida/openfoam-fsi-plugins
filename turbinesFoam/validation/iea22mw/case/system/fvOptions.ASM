@@ -158,7 +158,7 @@ turbine
             // The OpenFAST reference has TwrAero=True, TwrCd=0.5; the
             // tower is excluded from the rotor total drag (RotThrust is rotor-only).
             includeInTotalDrag false;
-            nElements 40;
+            nElements 60;
             elementProfiles (tower);
             elementData
             (

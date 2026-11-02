@@ -41,6 +41,7 @@ disk is missing or stale, without writing anything.
 from __future__ import annotations
 
 import importlib.util
+import math
 import sys
 from pathlib import Path
 
@@ -88,6 +89,25 @@ SNAPPY_SCALED = (
 DEFAULT_SHAFT_TILT = "off"
 
 
+def _tower_n_elements(iea15_geometry, iea15_n_elements: int, scale: float) -> int:
+    """Tower ALM elements: IEA-15 element length in rotor-radius units, rounded up
+    to a multiple of the tower geometry segments.
+
+    ``actuatorLineSource`` requires ``nElements`` to be a multiple of the number of
+    geometry segments (30 for the IEA-22 monopile table, 10 for IEA-15), so the
+    fixed IEA-15 count cannot be carried over.
+    """
+    def height_and_segments(geometry):
+        stations = geometry.read_tower_table()
+        return stations[-1]["z"] - stations[0]["z"], len(stations) - 1
+
+    height15, _ = height_and_segments(iea15_geometry)
+    height22, segments = height_and_segments(blade_geometry)
+    element_length = height15 / iea15_n_elements * scale  # same size in R units
+    wanted = height22 / element_length
+    return segments * max(1, math.ceil(wanted / segments))
+
+
 def _build_module():
     """Load the IEA-15 generator bound to the IEA-22 geometry and constants."""
     previous = sys.modules.get("blade_geometry")
@@ -123,6 +143,9 @@ def _build_module():
     scale = module.ROTOR_RADIUS / iea15_geometry.ROTOR_RADIUS_PUBLISHED
     for key in SNAPPY_SCALED:
         setattr(module, key, getattr(module, key) * scale)
+    module.TOWER_N_ELEMENTS = _tower_n_elements(
+        iea15_geometry, module.TOWER_N_ELEMENTS, scale
+    )
     module.DEFAULT_SHAFT_TILT = DEFAULT_SHAFT_TILT
     module.EXPECTED_CELL_COUNT = module.cell_count()
     return module

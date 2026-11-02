@@ -120,7 +120,6 @@ def test_snappy_level_and_tower_lateral_proportions():
     assert gc22.ASM_WAKE_LEVEL_OFFSET == gc15.ASM_WAKE_LEVEL_OFFSET
     assert gc22.DEFAULT_VELOCITY_SAMPLE_RADIUS == gc15.DEFAULT_VELOCITY_SAMPLE_RADIUS == 0.0
     assert gc22.DEFAULT_N_VELOCITY_SAMPLES == gc15.DEFAULT_N_VELOCITY_SAMPLES
-    assert gc22.TOWER_N_ELEMENTS == gc15.TOWER_N_ELEMENTS
 
 
 def test_time_step_in_tip_travel_units_equal_iea15():
@@ -180,3 +179,35 @@ def test_mesh_proportions_tool_table_and_exit_code(capsys):
     assert "| rotorDisk radius | 150 | 1.24300 | 176.5 | 1.24300 |" in out
     assert "hub height (real geometry) (exception)" in out
     assert "4,299,792" in out and "4,171,440" in out
+
+
+def _tower_element_size_over_R(bg, gc):
+    stations = bg.read_tower_table()
+    height = stations[-1]["z"] - stations[0]["z"]
+    return height / gc.TOWER_N_ELEMENTS / gc.ROTOR_RADIUS, len(stations) - 1
+
+
+def test_tower_elements_divide_the_tower_segments():
+    """actuatorLineSource requires nElements to be a multiple of the geometry
+    segments; a fixed IEA-15 value (40) aborts the 30-segment IEA-22 monopile."""
+    _, segments = _tower_element_size_over_R(gc22.blade_geometry, gc22)
+    assert gc22.TOWER_N_ELEMENTS % segments == 0
+
+
+def test_tower_element_size_follows_iea15_in_rotor_radius_units():
+    """Element length <= IEA-15's in R units, within one segment multiple."""
+    size15, _ = _tower_element_size_over_R(bg15, gc15)
+    size22, segments = _tower_element_size_over_R(gc22.blade_geometry, gc22)
+    assert size22 <= size15 * (1.0 + 1e-9)
+    # not finer than needed: one fewer segment multiple would be coarser than IEA-15
+    coarser = (gc22.TOWER_N_ELEMENTS - segments)
+    if coarser > 0:
+        height = size22 * gc22.ROTOR_RADIUS * gc22.TOWER_N_ELEMENTS
+        assert height / coarser / gc22.ROTOR_RADIUS > size15
+
+
+def test_rendered_tower_n_elements_matches_constant():
+    text = gc22.render_fvoptions() if hasattr(gc22, "render_fvoptions") else None
+    if text is None:
+        pytest.skip("no fvOptions renderer exposed")
+    assert f"nElements {gc22.TOWER_N_ELEMENTS};" in text

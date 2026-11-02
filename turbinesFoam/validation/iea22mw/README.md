@@ -87,3 +87,36 @@ The reference for the ALM/ASM comparison is OpenFAST AeroDyn BEMT and OLAF with 
 rotor and uniform rated inflow; see [`openfast/README.md`](openfast/README.md) and
 [`data/openfast-v5-templates/README.md`](data/openfast-v5-templates/README.md). Prepared and preflighted only;
 no converged OLAF run exists yet.
+
+## Running on SDumont (T4)
+
+The ALM run is the L2 D&S platform of the IEA-15 reference `iea15mw-l2-ds`, carried to IEA-22 by geometry only.
+`scripts/run_iea22mw_case.sh` wraps (does not copy) the IEA-15 runner through `TURBINE_PKG_DIR`; every `TURBINE_*`
+variable of that runner works unchanged. `scripts/platform_derive.py` reads the IEA-15 Slurm files and prints the derived
+platform (`--env` for the Slurm scripts, `--get ranks` for the submit script):
+
+| quantity | IEA-15 | IEA-22 | rule |
+|---|---|---|---|
+| R [m] / rated rpm | 120.675 / 7.518 | 142 / 6.853997 | generator defaults, never passed |
+| domain up/down/lateral | 3 / 7 / 3 D = 6 / 14 / 6 R | 3 / 7 / 3 D = 6 / 14 / 6 R | multiples of D |
+| base cell, snappy level, castellated cell | R/16, 2, R/64 | R/16, 2, R/64 | D/32, level carried |
+| velocity-sample radius, samples | 3.3 eps, 16 | 3.3 eps, 16 | eps (projection width) is geometry-derived |
+| background cells | 2.36 M | 2.29 M (3.36 M after snappy) | geometry |
+| decomposition / ranks | simple 4 6 4 / 96 | simple 4 6 4 / 96 | lattice carried; cells-per-rank rule gives 93.1, lattice product kept |
+| deltaT | 0.0187 s (427 / rev) | 0.021 s (417 / rev) | `delta_t()`: 0.95 x finest cell / tip speed |
+| write interval, revolutions | 120 deg, 23 | 120 deg, 23 | carried, fresh start, no requeue |
+
+Model: Glauert tip off, root kept as the Prandtl hub loss, Dag & Sorensen on (`scripts/slurm/l2-ds.slurm`).
+`scripts/slurm/olaf-dp.slurm` runs the OLAF double-precision guideline setup (1399 near-wake panels, 699 free, dt 0.1459 s,
+1640 steps = 23.3 wake revolutions + 4 averaged) on one task (the build has no OpenMP).
+`scripts/submit_iea22.sh [--apply] [alm|olaf|all]` prints (default) or submits both; it refuses an existing run directory.
+Runs live in `runs/` (git-ignored by `runs/.gitignore`).
+
+Slurm sizing (dev partition, 2026-11-02): ALM 96 ranks, 3,357,872 cells, 6.0 s/step (steps 11-41, jobs 11637596/11637631)
+-> 9,588 steps for 23 revolutions = 16 h, request 36 h. IEA-15 `l2-ds` runs 2.1-5.1 s/step on the same mesh size, so 6.0 s is a
+pessimistic (loaded dev node) rate. OLAF: wall trace of a truncated production run (job 11637708, `olaf_trace.py fit`):
+per-step cost grows with the wake (1.1 s at step 68, 4.2 s at step 377), 917 s for the first 411 steps; extrapolation to
+1640 steps 4.0-5.2 h (quadratic then plateau at 1399 panels), request 12 h.
+
+BEM rated reference (fast, 4 s): `analysis/spanwise-references.csv` (`openfast-bem` block, 177 rows) and
+`analysis/bem-rated-metrics.json` (Cp 0.45243, Ct 0.64171).
