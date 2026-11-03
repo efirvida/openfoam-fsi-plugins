@@ -253,6 +253,21 @@ files regenerate byte-identical.
 
 ### Fixes
 
+#### ASM+mesh: Dag & Sorensen tip correction was still inert (`surfaceGeometry`)
+
+**Files:** `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineElement/actuatorLineElement.C`,
+`turbinesFoam/tests/{test_asm_tip_epsilon.py,asmMeshTipEpsilon/}`, `turbinesFoam/README.md`.
+
+**Problem:** the 3ed889b fix stored the epsilon only on the strip-projection path. With `surfaceGeometry`,
+`actuatorLineSource` forces `projectElementForce false`, `applyForceField` (the only active caller of
+`calcProjectionEpsilon()`) is skipped, `projectionEpsilon_` stayed `-VGREAT` and the correction was identically zero for
+ASM+mesh (README claimed otherwise). RED on a pre-fix build: `assert -1e+300 > 0.0` and `assert 0.0 > 0.0` (maxCorr).
+
+**Fix:** both `addSup` overloads call `calcProjectionEpsilon()` when the projection is skipped. It only reads the mesh and
+element state; with the tip correction off the mesh-backed case is byte-identical to the pre-fix build (`U`, `p`,
+`force.turbine`, element CSVs; only the wall-clock column of `surface_distribution.csv` differs). ALM and plain ASM paths
+unchanged.
+
 #### Phase VI acceptance criteria R3: uniform 10 % including the tip station
 
 **Files:** `turbinesFoam/validation/phaseVI/scripts/{summarizeBands.py,comparePhaseVI.py}`,

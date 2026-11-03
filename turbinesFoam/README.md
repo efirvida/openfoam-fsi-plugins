@@ -181,8 +181,14 @@ runtime, while the ALM tutorial defaults to `0.5`.
   inherited single-point kernel.
 - **Tip correction:** the surface element stores its mesh-based projection
   epsilon, so `tipCorrection { epsilon 0; }` (Dag & Sorensen) works on
-  surface elements. Before this fix the stored width stayed at `-VGREAT` and
-  the correction was silently zero for ASM and ASM+mesh.
+  surface elements. Two defects kept the stored width at `-VGREAT` (the
+  correction silently zero): the surface element never stored it (ASM, fixed
+  in 3ed889b), and with a mesh-backed `surfaceGeometry` (ASM+mesh) the strip
+  projection (`applyForceField`) is skipped, so it was never computed at all.
+  The element now computes its epsilon in `addSup` whenever the projection is
+  skipped. Only the ASM fix of 3ed889b covered the strip path; the
+  mesh-backed path is covered by the later fix (test
+  `tests/asmMeshTipEpsilon`). The deposited force is unchanged.
 - **HAWT-only:** the surface element is turbine-agnostic in principle, but
   only the axial-flow HAWT path is tested here. CFTAL/VAWT usage is
   untested.

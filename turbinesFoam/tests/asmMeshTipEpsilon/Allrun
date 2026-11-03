@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# One-blade axialFlowTurbineALSource with the Dag & Sorensen tip correction
+# (epsilon 0: the width is the element projection epsilon) on a mesh-backed
+# blade surface (surfaceGeometry, as fvOptions.ASM-MESH of validation/phaseVI).
+#   $1: -asm-mesh (default, tip correction on) | -asm-mesh-off (same, tip
+#       correction off: the deposit reference for the before/after check)
+# The test runs on a throwaway copy of the case.
+cd ${0%/*} || exit 1    # run from this directory
+
+# Source tutorial run functions
+. $WM_PROJECT_DIR/bin/tools/RunFunctions
+
+cp system/fvOptions.asmmesh system/fvOptions
+case "${1:--asm-mesh}" in
+    -asm-mesh) ;;
+    -asm-mesh-off) sed -i '/tipCorrection/,/^        }/ s/active  *on;/active          off;/' system/fvOptions ;;
+    *) echo "usage: $0 -asm-mesh|-asm-mesh-off" >&2; exit 1 ;;
+esac
+
+cp -rf 0.org 0
+runApplication blockMesh
+runApplication topoSet
+runApplication pimpleFoam
+
+# ----------------------------------------------------------------- end-of-file

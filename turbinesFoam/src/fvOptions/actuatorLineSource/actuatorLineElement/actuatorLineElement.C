@@ -1488,6 +1488,15 @@ void Foam::fv::actuatorLineElement::addSup
     {
         applyForceField(forceFieldI);
     }
+    else
+    {
+        // The projection width is still needed by the Dag & Sorensen tip
+        // correction (epsilon 0 reads projectionEpsilon()); it was only ever
+        // computed inside applyForceField, so with a blade surface it stayed
+        // -VGREAT. Pure read of the mesh and the element state: it changes
+        // neither the force nor the field.
+        calcProjectionEpsilon();
+    }
 
     // Add force to total actuator line force
     forceField += forceFieldI;
@@ -1532,6 +1541,15 @@ void Foam::fv::actuatorLineElement::addSup
     if (projectElementForce_)
     {
         applyForceField(forceFieldI);
+    }
+    else
+    {
+        // The projection width is still needed by the Dag & Sorensen tip
+        // correction (epsilon 0 reads projectionEpsilon()); it was only ever
+        // computed inside applyForceField, so with a blade surface it stayed
+        // -VGREAT. Pure read of the mesh and the element state: it changes
+        // neither the force nor the field.
+        calcProjectionEpsilon();
     }
 
     // Multiply force vector by local density

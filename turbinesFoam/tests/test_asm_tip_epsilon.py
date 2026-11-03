@@ -10,6 +10,13 @@ zero for ASM. ``tests/asmTipEpsilon`` is a one-blade rotor run once with
 ``tipCorrection { debug true; }`` line reports the tip element epsilon and the
 largest correction through the solver log.
 
+The mesh-backed surface (``surfaceGeometry``, the Phase VI ASM+mesh model)
+had a second, independent cause: ``actuatorLineSource`` forces
+``projectElementForce false`` there, the strip projection
+(``applyForceField``) is skipped, and it was the only place that computed the
+epsilon, so the member stayed at -VGREAT again. ``tests/asmMeshTipEpsilon`` is
+the same rotor with a flat ``surfaceGeometry`` plate.
+
 The ALM run is the regression guard: the unchanged ALM path must keep a
 positive epsilon and a non-zero correction.
 """
@@ -33,13 +40,16 @@ pytestmark = pytest.mark.skipif(
 CASE_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "asmTipEpsilon"
 )
+MESH_CASE_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "asmMeshTipEpsilon"
+)
 DEBUG_RE = re.compile(
     r"tipCorrectionDebug t=(\S+) maxCorr=(\S+) .* eps=(\S+) corr=\(([^)]*)\)"
 )
 
 
-def _run(case_dir, flag):
-    shutil.copytree(CASE_DIR, case_dir)
+def _run(case_dir, flag, source=CASE_DIR):
+    shutil.copytree(source, case_dir)
     proc = subprocess.run(
         ["./Allrun", flag],
         cwd=case_dir,
@@ -76,6 +86,15 @@ def asm_log(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
+def asm_mesh_log(tmp_path_factory):
+    return _run(
+        str(tmp_path_factory.mktemp("asm-mesh-eps") / "case"),
+        "-asm-mesh",
+        MESH_CASE_DIR,
+    )
+
+
+@pytest.fixture(scope="module")
 def alm_case(tmp_path_factory):
     case_dir = str(tmp_path_factory.mktemp("alm-eps") / "case")
     return case_dir, _run(case_dir, "-alm")
@@ -91,6 +110,19 @@ def test_asm_projection_epsilon_is_positive(asm_log):
 def test_asm_tip_correction_is_nonzero(asm_log):
     """The correction reaches the surface elements (it was exactly 0)."""
     t, max_corr, _, corr = _debug_lines(asm_log)[-1]
+    assert max_corr > 0.0
+    assert any(abs(c) > 0.0 for c in corr)
+
+
+def test_asm_mesh_projection_epsilon_is_positive(asm_mesh_log):
+    """With ``surfaceGeometry`` the strip projection is off, yet the element
+    still exposes its mesh-based epsilon (it stayed -VGREAT)."""
+    assert _debug_lines(asm_mesh_log)[-1][2] > 0.0
+
+
+def test_asm_mesh_tip_correction_is_nonzero(asm_mesh_log):
+    """The Dag & Sorensen correction reaches the mesh-backed elements."""
+    t, max_corr, _, corr = _debug_lines(asm_mesh_log)[-1]
     assert max_corr > 0.0
     assert any(abs(c) > 0.0 for c in corr)
 
