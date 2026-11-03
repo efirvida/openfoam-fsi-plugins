@@ -4,6 +4,27 @@
 
 ### Features
 
+#### Actuator line: opt-in near-tip virtual-camber correction (Trigaux et al. 2024, F_Cl)
+
+**Files:** `turbinesFoam/src/fvOptions/{actuatorLineSource/actuatorLineSource.C,actuatorLineSource/actuatorLineElement/actuatorLineElement.{C,H},axialFlowTurbineALSource/axialFlowTurbineALSource.C}`,
+`turbinesFoam/validation/phaseVI/{tools/generate_case.py,scripts/{runPhaseVI.sh,checkModelDefinition.py},config/{model-variants,model-definition,model-definition-v1.2}.yaml,README.md}`,
+`turbinesFoam/tests/{test_near_tip_correction.py,test_model_variants.py,nearTipCorrectionCase/}`, `turbinesFoam/README.md`.
+
+**Problem:** every lifting-line-class model (ALM + Dag & Sorensen, OLAF, BEM) over-predicts the Phase VI c_n at r/R 0.95
+(+20 to +26 % at S U7) with the same polar; the shared part is the "virtual camber" of the real wing near the tip, absent from
+line models (Trigaux et al. 2024, JFM 989:A1; thesis App. C: `F_Cl` is kernel-independent). Applied offline it brings 4 of 5 cells
+inside 10 % (`odd/tasks/tip-model-analysis.md` L9-L11).
+
+**Fix:** `nearTipCorrection { active on; model TrigauxVirtualCamber; table "..."; }` beside `tipCorrection`: per element
+`(d_tip/c)_eff = integral ds/c` along the geometry chain (thesis eq. 3.29-3.31), `F_Cl` by linear interpolation in the published
+table (0 beyond its last row), computed once at construction, and `cl *= (1 - F_Cl)` after the polar/dynamic-stall/added-mass step
+and before the end-effect factor and the force, so the Dag & Sorensen circulation uses the corrected `cl`. Drag is unchanged;
+`F_alpha_e` is not applied (it would double count the mollification with Dag & Sorensen). No fitted coefficient. Default off: the
+element CSV, fields and log of an existing case are byte-identical (proved on `tests/asmTipEpsilon`); with the option on, two
+columns `near_tip_f_cl,near_tip_d_over_c` are appended to the element CSV. Phase VI: `--near-tip-correction on|off` (default off,
+renders nothing), variant `tip-pitch-dag-sorensen-neartip` (v1.3 + flag), knob `nearTipCorrection.active` certified by
+`checkModelDefinition.py` (off in v1.2 and v1.3). RED/GREEN solver test `tests/test_near_tip_correction.py`.
+
 #### Phase VI: wind-tunnel blockage domain (`--domain tunnel`)
 
 **Files:** `turbinesFoam/validation/phaseVI/{tools/case_config.py,tools/generate_case.py,config/case.yaml,scripts/{mesh,runPhaseVI,stage0}.sh,README.md}`,

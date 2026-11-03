@@ -55,6 +55,15 @@ variants:
       --pitch-reference: tip
       --tip-correction: 'on'
       --tip-effects: 'off'
+  tip-pitch-dag-sorensen-neartip:
+    reference: 'Trigaux, Villeneuve, Dumas & Winckelmans, J. Fluid Mech. 989:A1 (2024), doi:10.1017/jfm.2024.461; F. Trigaux PhD thesis (UCLouvain 2024) eq. 3.17-3.31 and App. C Table C.3 (3D, sigma = c/4); v1.3 otherwise'
+    note: 'Diagnostic, never of record: v1.3 plus the near-tip virtual-camber factor cl x (1 - F_Cl((d_tip/c)_eff)) per element (table published, no fitted coefficient; F_alpha_e is not applied because the Dag & Sorensen correction already restores the mollification loss). F_Cl is kernel-independent (thesis tables, spread <= 0.004), so the 3D sigma = c/4 block is used for every model. odd/tasks/tip-model-analysis.md L9-L11.'
+    flags:
+      --pitch-reference: tip
+      --tip-correction: 'on'
+      --tip-effects: 'off'
+      --polar: S809_OSU_Re1M_total.dat
+      --near-tip-correction: 'on'
   tip-pitch-no-tip:
     reference: 'Jha, Churchfield, Moriarty & Schmitz, J. Sol. Energy Eng. 136:031003 (2014) p.6: "there should be no need for using the Prandtl correction within the ALM framework"; pitch reference as tip-pitch'
     note: 'Diagnostic, never of record. Tip pitch reference with no tip correction at all (Glauert tip factor off, Dag & Sorensen off); root/hub loss kept. Measures the size of the tip over-load on this mesh. Existing flags only; no fitted constant.'

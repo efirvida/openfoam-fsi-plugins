@@ -70,6 +70,7 @@ FLAG_RULES = {
     '--end-effects-model': 'endEffectsModel',
     '--tip-effects': 'tipEffects',
     '--tip-correction': 'tipCorrection.active',
+    '--near-tip-correction': 'nearTipCorrection.active',
     '--rotational-augmentation': 'rotationalAugmentation.active',
     '--rotational-augmentation-model': 'rotationalAugmentation.model',
     '--velocity-sample-radius': 'velocitySampleRadius',
@@ -111,7 +112,8 @@ def load_variants():
                 valid = value in PITCH_REFERENCES
             elif flag == '--polar':
                 valid = valid_polar(value)
-            elif flag in ('--tip-effects', '--tip-correction', '--rotational-augmentation'):
+            elif flag in ('--tip-effects', '--tip-correction', '--near-tip-correction',
+                          '--rotational-augmentation'):
                 valid = value in ('on', 'off')
             else:
                 valid = (isinstance(value, (int, float)) and not isinstance(value, bool)
@@ -167,6 +169,11 @@ def variant_definition(definition, name):
         for key, value in [('model', 'DagSorensen'), ('wakeTurns', 2),
                            ('wakeAzimuthalStep', 2), ('epsilon', 0)]:
             add('tipCorrection.' + key, value, value)
+    if knobs['nearTipCorrection.active']['expected'] == 'on':
+        for key, value in [('model', 'TrigauxVirtualCamber'),
+                           ('table', 'system/trigaux2024_tableC.csv'),
+                           ('kernel', '3D'), ('sigmaOverC', 0.25)]:
+            add('nearTipCorrection.' + key, value, None)
     return result
 
 

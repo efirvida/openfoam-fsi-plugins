@@ -66,6 +66,14 @@ ASM_ELEMENT = "actuatorSurfaceElement"
 # Case-relative path the ASM-mesh twin references; `runPhaseVI.sh -m asm-mesh`
 # stages the committed STL there (tools/stage_blade_stl.py).
 SURFACE_GEOMETRY = "constant/triSurface/phaseVI_blade.stl"
+# Near-tip virtual-camber table (Trigaux 2024, thesis App. C): the committed CSV
+# is copied into the case so a run is self-contained; the path is relative to
+# the case root (the solver resolves it against the case directory).
+NEAR_TIP_TABLE_SOURCE = (
+    Path(__file__).resolve().parents[1]
+    / "data" / "near-tip-functions" / "trigaux2024_tableC.csv"
+)
+NEAR_TIP_TABLE_CASE_PATH = "system/trigaux2024_tableC.csv"
 # Paper cosine kernel (default) and the Gaussian ablation (design D7).
 SURFACE_KERNELS = ("cosine", "gaussian")
 
@@ -611,6 +619,7 @@ def render_fv_options(
     root_effects: bool | None = None,
     tip_effects: bool | None = None,
     tip_correction: bool | None = None,
+    near_tip_correction: bool = False,
     hub_radius: float | None = None,
     polar: str | None = None,
     velocity_sample_radius: float | None = None,
@@ -816,6 +825,21 @@ def render_fv_options(
         f"            epsilon {float(correction['epsilon']):.8g};\n"
         "        }"
     )
+    # Opt-in near-tip virtual-camber correction (Trigaux et al. 2024, F_Cl
+    # only). Absent by default so the committed renders are byte-identical;
+    # `on` renders the block and `outputs` copies the table into the case.
+    near_tip_block = (
+        "\n\n        nearTipCorrection\n"
+        "        {\n"
+        "            active on;\n"
+        "            model TrigauxVirtualCamber;\n"
+        f"            table \"{NEAR_TIP_TABLE_CASE_PATH}\";\n"
+        "            kernel \"3D\";\n"
+        "            sigmaOverC 0.25;\n"
+        "        }"
+        if near_tip_correction
+        else ""
+    )
     nacelle_block = render_nacelle_block(cfg) if nacelle else ""
     hub_rows = "\n".join(
         "                (" + " ".join(f"{value:.9g}" for value in row) + ")"
@@ -854,7 +878,7 @@ def render_fv_options(
                 tipEffects {'on' if tip else 'off'};
                 rootEffects {'on' if root else 'off'};
             }}{shen_block}
-        }}{tip_correction_block}
+        }}{tip_correction_block}{near_tip_block}
 
         blades
         {{
@@ -1059,6 +1083,7 @@ def outputs(
     root_effects: bool | None = None,
     tip_effects: bool | None = None,
     tip_correction: bool | None = None,
+    near_tip_correction: bool = False,
     hub_radius: float | None = None,
     polar: str | None = None,
     velocity_sample_radius: float | None = None,
@@ -1086,6 +1111,7 @@ def outputs(
             root_effects=root_effects,
             tip_effects=tip_effects,
             tip_correction=tip_correction,
+            near_tip_correction=near_tip_correction,
             hub_radius=hub_radius,
             polar=polar,
             velocity_sample_radius=velocity_sample_radius,
@@ -1100,6 +1126,7 @@ def outputs(
             root_effects=root_effects,
             tip_effects=tip_effects,
             tip_correction=tip_correction,
+            near_tip_correction=near_tip_correction,
             hub_radius=hub_radius,
             polar=polar,
             velocity_sample_radius=velocity_sample_radius,
@@ -1122,6 +1149,7 @@ def outputs(
             root_effects=root_effects,
             tip_effects=tip_effects,
             tip_correction=tip_correction,
+            near_tip_correction=near_tip_correction,
             hub_radius=hub_radius,
             polar=polar,
             velocity_sample_radius=velocity_sample_radius,
@@ -1135,6 +1163,10 @@ def outputs(
     }
     for field in ("U", "p", "k", "omega", "nut"):
         rendered[zero / field] = render_field_uniform(cfg, speed, field)
+    if near_tip_correction:
+        rendered[case_dir / NEAR_TIP_TABLE_CASE_PATH] = (
+            NEAR_TIP_TABLE_SOURCE.read_text(encoding="utf-8")
+        )
     return rendered
 
 
@@ -1303,6 +1335,14 @@ def main(argv: list[str] | None = None) -> int:
              "config/case.yaml (off). `on` is the campaign arm",
     )
     parser.add_argument(
+        "--near-tip-correction",
+        choices=("on", "off"),
+        default=None,
+        help="render the opt-in near-tip virtual-camber correction (Trigaux "
+             "et al. 2024, F_Cl only: cl x (1 - F_Cl) from the effective tip "
+             "distance); default off, which renders nothing",
+    )
+    parser.add_argument(
         "--velocity-sample-radius",
         type=_non_negative_float,
         default=None,
@@ -1444,6 +1484,7 @@ def main(argv: list[str] | None = None) -> int:
         tip_correction = (
             None if args.tip_correction is None else args.tip_correction == "on"
         )
+        near_tip_correction = args.near_tip_correction == "on"
         rendered = outputs(
             cfg,
             args.mesh,
@@ -1464,6 +1505,7 @@ def main(argv: list[str] | None = None) -> int:
             root_effects=root_effects,
             tip_effects=tip_effects,
             tip_correction=tip_correction,
+            near_tip_correction=near_tip_correction,
             hub_radius=args.hub_radius,
             polar=args.polar,
             velocity_sample_radius=args.velocity_sample_radius,

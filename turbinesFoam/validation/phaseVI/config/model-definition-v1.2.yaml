@@ -33,6 +33,10 @@ knobs:
     path: tipCorrection.active
     expected: 'off'
     solver_default: false # axialFlowTurbineALSource/axialFlowTurbineALSource.C:1582-1585
+  nearTipCorrection.active:
+    path: nearTipCorrection.active
+    expected: 'off'
+    solver_default: false # actuatorLineSource/actuatorLineSource.C createElements: absent block => no correction (opt-in, Trigaux et al. 2024 F_Cl)
   rotationalAugmentation.active:
     path: rotationalAugmentation.active
     expected: 'off'

@@ -116,6 +116,17 @@ void Foam::fv::axialFlowTurbineALSource::createBlades()
             bladeSubDict.add("endEffects", true);
         }
 
+        // Opt-in near-tip virtual-camber correction (default absent: the blade
+        // dictionary is left untouched)
+        if (coeffs_.found("nearTipCorrection"))
+        {
+            bladeSubDict.add
+            (
+                "nearTipCorrection",
+                coeffs_.subDict("nearTipCorrection")
+            );
+        }
+
         if (debug)
         {
             Info<< "Creating actuator line blade " << bladeName << endl;

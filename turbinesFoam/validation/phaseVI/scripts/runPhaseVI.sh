@@ -112,6 +112,7 @@ rotational_augmentation_model=""
 root_effects=""
 tip_effects=""
 tip_correction=""
+near_tip_correction=""
 div_phi_u=""
 polar=""
 refine_level=0
@@ -145,6 +146,7 @@ while [ $# -gt 0 ]; do
         --root-effects) root_effects="$2"; shift ;;
         --tip-effects) tip_effects="$2"; shift ;;
         --tip-correction) tip_correction="$2"; shift ;;
+        --near-tip-correction) near_tip_correction="$2"; shift ;;
         --div-phi-u) div_phi_u="$2"; shift ;;
         --polar) polar="$2"; shift ;;
         --refine-level) refine_level="$2"; shift ;;
@@ -272,6 +274,12 @@ if [ -n "$tip_correction" ]; then
     case "$tip_correction" in
         on|off) ;;
         *) echo "ERROR: --tip-correction must be on or off" >&2; exit 2 ;;
+    esac
+fi
+if [ -n "$near_tip_correction" ]; then
+    case "$near_tip_correction" in
+        on|off) ;;
+        *) echo "ERROR: --near-tip-correction must be on or off" >&2; exit 2 ;;
     esac
 fi
 if [ -n "$div_phi_u" ]; then
@@ -472,6 +480,9 @@ if [ -n "$tip_effects" ]; then
 fi
 if [ -n "$tip_correction" ]; then
     render_args+=(--tip-correction "$tip_correction")
+fi
+if [ -n "$near_tip_correction" ]; then
+    render_args+=(--near-tip-correction "$near_tip_correction")
 fi
 if [ -n "$div_phi_u" ]; then
     render_args+=(--div-phi-u "$div_phi_u")
@@ -760,6 +771,9 @@ else
     fi
     if [ -n "$tip_correction" ]; then
         suggestion="$suggestion --tip-correction $tip_correction"
+    fi
+    if [ -n "$near_tip_correction" ]; then
+        suggestion="$suggestion --near-tip-correction $near_tip_correction"
     fi
     if [ -n "$div_phi_u" ]; then
         suggestion="$suggestion --div-phi-u \"$div_phi_u\""

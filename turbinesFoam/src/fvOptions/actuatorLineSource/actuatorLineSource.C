@@ -32,6 +32,8 @@ License
 #include "syncTools.H"
 #include "simpleMatrix.H"
 #include <utility>
+#include <fstream>
+#include <sstream>
 
 // * * * * * * * * * * * * * Static Member Functions * * * * * * * * * * * * //
 
@@ -48,6 +50,175 @@ namespace fv
     );
 }
 }
+
+
+// * * * * * * * * * * * * * * Local helpers  * * * * * * * * * * * * * * * //
+
+namespace
+{
+
+// Integral of ds/c over a stretch of length `length` whose chord varies
+// linearly from c1 to c2 (closed form of Trigaux thesis eq. 3.31)
+Foam::scalar invChordIntegral
+(
+    Foam::scalar length,
+    Foam::scalar c1,
+    Foam::scalar c2
+)
+{
+    using namespace Foam;
+    if (length <= 0.0)
+    {
+        return 0.0;
+    }
+    if (c1 <= VSMALL or c2 <= VSMALL)
+    {
+        FatalErrorInFunction
+            << "nearTipCorrection needs a positive chord at every geometry "
+            << "point, got " << c1 << " and " << c2 << exit(FatalError);
+    }
+    if (mag(c2 - c1) < 1e-12*max(c1, c2))
+    {
+        return length/c1;
+    }
+    return length/(c2 - c1)*Foam::log(c2/c1);
+}
+
+// Read the F_Cl table: either the committed Trigaux CSV (columns kernel,
+// sigma_over_c,d_over_c,F_l,F_Cl,F_alpha_e; one block is selected by
+// kernel/sigmaOverC) or a two-column d/c, F_Cl file (comma or blank
+// separated, '#' comments). Returns rows sorted by d/c.
+Foam::List<Foam::Pair<Foam::scalar>> readNearTipTable
+(
+    const Foam::fileName& path,
+    const Foam::word& kernel,
+    Foam::scalar sigmaOverC,
+    bool& isTrigauxCsv
+)
+{
+    using namespace Foam;
+    std::ifstream is(path.c_str());
+    if (!is.good())
+    {
+        FatalErrorInFunction
+            << "Cannot open nearTipCorrection table " << path
+            << exit(FatalError);
+    }
+    DynamicList<Pair<scalar>> rows;
+    std::string line;
+    isTrigauxCsv = false;
+    while (std::getline(is, line))
+    {
+        const std::size_t hash = line.find('#');
+        if (hash != std::string::npos)
+        {
+            line.erase(hash);
+        }
+        for (char& c : line)
+        {
+            if (c == ',')
+            {
+                c = ' ';
+            }
+        }
+        std::istringstream ss(line);
+        std::vector<std::string> tok;
+        std::string t;
+        while (ss >> t)
+        {
+            tok.push_back(t);
+        }
+        if (tok.empty())
+        {
+            continue;
+        }
+        if (tok[0] == "kernel")
+        {
+            isTrigauxCsv = true;
+            continue;
+        }
+        try
+        {
+            if (isTrigauxCsv)
+            {
+                if (tok.size() < 6)
+                {
+                    continue;
+                }
+                if
+                (
+                    tok[0] == kernel
+                 && mag(std::stod(tok[1]) - sigmaOverC) < 1e-9
+                )
+                {
+                    rows.append(Pair<scalar>(std::stod(tok[2]), std::stod(tok[4])));
+                }
+            }
+            else if (tok.size() == 2)
+            {
+                rows.append(Pair<scalar>(std::stod(tok[0]), std::stod(tok[1])));
+            }
+        }
+        catch (const std::exception&)
+        {
+            FatalErrorInFunction
+                << "Unreadable line in nearTipCorrection table " << path
+                << ": '" << line << "'" << exit(FatalError);
+        }
+    }
+    if (rows.size() < 2)
+    {
+        FatalErrorInFunction
+            << "nearTipCorrection table " << path << " gave " << rows.size()
+            << " rows" << (isTrigauxCsv ? " for kernel " + kernel + ", sigmaOverC "
+            + std::to_string(sigmaOverC) : std::string(""))
+            << "; at least two (d/c, F_Cl) rows are needed"
+            << exit(FatalError);
+    }
+    List<Pair<scalar>> sorted(rows);
+    std::sort
+    (
+        sorted.begin(),
+        sorted.end(),
+        [](const Pair<scalar>& a, const Pair<scalar>& b)
+        {
+            return a.first() < b.first();
+        }
+    );
+    return sorted;
+}
+
+// Linear interpolation of F_Cl in d/c; 0 beyond the last row (outside the
+// tabulated influence zone, no correction); the first row applies below it
+Foam::scalar nearTipFCl
+(
+    const Foam::List<Foam::Pair<Foam::scalar>>& rows,
+    Foam::scalar d
+)
+{
+    if (d >= rows.last().first())
+    {
+        return 0.0;
+    }
+    if (d <= rows[0].first())
+    {
+        return rows[0].second();
+    }
+    for (Foam::label i = 1; i < rows.size(); ++i)
+    {
+        if (d <= rows[i].first())
+        {
+            const Foam::scalar t =
+                (d - rows[i - 1].first())
+               /(rows[i].first() - rows[i - 1].first());
+            return rows[i - 1].second()
+                 + t*(rows[i].second() - rows[i - 1].second());
+        }
+    }
+    return 0.0;
+}
+
+} // End anonymous namespace
 
 
 // * * * * * * * * * * * * * Protected Member Functions  * * * * * * * * * * //
@@ -220,6 +391,77 @@ void Foam::fv::actuatorLineSource::createElements()
         coeffs_.lookupOrDefault("rootRadius", -VGREAT);
     const bool haveRadialGeometry = rotorRadius > 0.0 and rootRadius > 0.0;
 
+    // Near-tip virtual-camber correction (Trigaux et al. 2024, JFM 989 A1,
+    // F_Cl only), opt-in through the `nearTipCorrection` block that the turbine
+    // source forwards to the blade. F_Cl is a function of the effective tip
+    // distance (d_tip/c)_eff = int_element^tip ds/c(s) along the geometry
+    // chain, with the chord linear between geometry points (thesis eq.
+    // 3.29-3.31). It is computed once here: the geometry of a rigid blade is
+    // static. For a deforming blade (FSI) the geometry points and chords move
+    // with the structure, so d/c would have to be refreshed from the current
+    // element chain each step; this is not done here.
+    List<scalar> nearTipF(nElements_, 0.0);
+    List<scalar> nearTipD(nElements_, 0.0);
+    bool nearTipOn = false;
+    if (coeffs_.found("nearTipCorrection"))
+    {
+        const dictionary& ntDict = coeffs_.subDict("nearTipCorrection");
+        nearTipOn = ntDict.lookupOrDefault("active", false);
+        if (nearTipOn)
+        {
+            const word model =
+                ntDict.lookupOrDefault<word>("model", "TrigauxVirtualCamber");
+            if (model != "TrigauxVirtualCamber")
+            {
+                FatalIOErrorInFunction(ntDict)
+                    << "Unknown nearTipCorrection model '" << model
+                    << "'; only TrigauxVirtualCamber is registered"
+                    << exit(FatalIOError);
+            }
+            fileName tablePath(ntDict.get<fileName>("table"));
+            tablePath.expand();
+            if (not tablePath.isAbsolute())
+            {
+                tablePath = mesh_.time().globalPath()/tablePath;
+            }
+            bool isCsv = false;
+            const List<Pair<scalar>> table = readNearTipTable
+            (
+                tablePath,
+                ntDict.lookupOrDefault<word>("kernel", "3D"),
+                ntDict.lookupOrDefault<scalar>("sigmaOverC", 0.25),
+                isCsv
+            );
+            for (label i = 0; i < nElements_; ++i)
+            {
+                const label seg = i/nElementsPerSegment;
+                const label k = i % nElementsPerSegment;
+                const scalar cA = chordLengths[seg];
+                const scalar cB = chordLengths[seg + 1];
+                // Element centre as a fraction of its geometry segment
+                const scalar f = (k + 0.5)/nElementsPerSegment;
+                const scalar cE = cA + f*(cB - cA);
+                scalar d = invChordIntegral((1.0 - f)*spanLengths[seg], cE, cB);
+                for (label j = seg + 1; j < nGeometrySegments; ++j)
+                {
+                    d += invChordIntegral
+                    (
+                        spanLengths[j], chordLengths[j], chordLengths[j + 1]
+                    );
+                }
+                nearTipD[i] = d;
+                nearTipF[i] = nearTipFCl(table, d);
+            }
+            Info<< "nearTipCorrection (" << model << ", F_Cl only) on "
+                << name_ << ": table " << tablePath << endl;
+            for (label i = 0; i < nElements_; ++i)
+            {
+                Info<< "    element " << i << " (d/c)_eff = " << nearTipD[i]
+                    << " F_Cl = " << nearTipF[i] << endl;
+            }
+        }
+    }
+
     // Lookup initial element velocities if present
     List<vector> initialVelocities(nGeometryPoints, vector::zero);
     coeffs_.readIfPresent("initialVelocities", initialVelocities);
@@ -337,6 +579,11 @@ void Foam::fv::actuatorLineSource::createElements()
         dict.add("chordMount", chordMount);
         dict.add("rootDistance", rootDistance);
         dict.add("addedMass", coeffs_.lookupOrDefault("addedMass", false));
+        if (nearTipOn)
+        {
+            dict.add("nearTipFCl", nearTipF[i]);
+            dict.add("nearTipDistance", nearTipD[i]);
+        }
         dict.add
         (
             "velocitySampleRadius",

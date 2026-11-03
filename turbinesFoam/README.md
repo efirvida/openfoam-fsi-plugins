@@ -201,6 +201,62 @@ runtime, while the ALM tutorial defaults to `0.5`.
   surface model's mesh-only epsilon is intended to be re-validated on a finer
   mesh where it gives 1–2 cells of overlap.
 
+## Near-tip virtual-camber correction (opt-in)
+
+Line models (BEM, lifting line, actuator line) over-predict the lift within about three chords of the
+blade tip because they sample the induction at a single chordwise point and miss the uneven chordwise
+induction of the real wing (the "virtual camber"). Trigaux, Villeneuve, Dumas & Winckelmans (2024,
+*J. Fluid Mech.* 989:A1, doi:10.1017/jfm.2024.461; F. Trigaux PhD thesis, UCLouvain 2024, eq. 3.17-3.31
+and App. C) give a correction function `F_Cl` of the effective tip distance. The option scales the
+polar lift of every element:
+
+```
+cl <- cl * (1 - F_Cl((d_tip/c)_eff)),     (d_tip/c)_eff = integral from the element to the tip of ds / c(s)
+```
+
+The integral runs along the blade geometry chain with the chord linear between geometry points
+(thesis eq. 3.29-3.31); `F_Cl` is read by linear interpolation in `d/c` from the published table and is
+0 beyond the last tabulated `d/c` (3.46: outside the affected zone). There is no fitted coefficient.
+
+### Configuration
+
+Beside `tipCorrection` in `axialFlowTurbineALSourceCoeffs`:
+
+```
+nearTipCorrection
+{
+    active      on;                              // default off; absent block = off
+    model       TrigauxVirtualCamber;            // the only registered model
+    table       "system/trigaux2024_tableC.csv"; // case-relative or absolute path
+    kernel      "3D";                            // CSV block (default 3D)
+    sigmaOverC  0.25;                            // CSV block (default 0.25)
+}
+```
+
+`table` is either the committed
+`validation/phaseVI/data/near-tip-functions/trigaux2024_tableC.csv` (columns
+`kernel,sigma_over_c,d_over_c,F_l,F_Cl,F_alpha_e`; one `kernel`/`sigmaOverC` block is used) or a plain
+two-column `d/c F_Cl` file (blank or comma separated, `#` comments). `F_Cl` is independent of the kernel
+type and size in the thesis tables (spread <= 0.004 at the Phase VI stations), so any block may be used.
+
+### Behaviour and scope
+
+* Applied after the polar lookup (and dynamic stall / added mass) and before the end-effect factor and
+  the force, so the Dag & Sorensen circulation `0.5 c cl |Vrel|` uses the corrected `cl`, as in the
+  thesis (the correction acts during the force step). Drag and the angle of attack are unchanged.
+* `F_alpha_e` (the angle-of-attack correction that removes the mollification loss) is **not** applied:
+  with `tipCorrection` (Dag & Sorensen) on, the mollification is already compensated and `F_alpha_e` would
+  count it twice. Only the kernel-independent virtual-camber part `F_Cl` is used.
+* `(d_tip/c)_eff` and `F_Cl` are computed once at construction and printed per element. The geometry of a
+  rigid blade is static; for a deforming blade (FSI) the chain moves with the structure and the factor
+  would have to be refreshed each step (not done).
+* With `active on` the element CSV gets two extra trailing columns, `near_tip_f_cl,near_tip_d_over_c`;
+  with the option off the output is byte-identical to a build without it.
+* The Phase VI renderer exposes it as `--near-tip-correction on|off` (default off; variant
+  `tip-pitch-dag-sorensen-neartip` = v1.3 plus the flag); see `validation/phaseVI/README.md`.
+* Caveat: the functions were derived on steady translating wings (NACA 0015, AR 15) against wall-resolved
+  RANS; they remove the lifting-line-class error, not the ALM-specific mollification excess.
+
 ## Rotational augmentation (3D stall delay)
 
 An optional **Du–Selig rotational augmentation** (3D stall delay) correction can

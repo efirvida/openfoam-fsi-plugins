@@ -865,7 +865,13 @@ void Foam::fv::actuatorLineElement::createOutputFile()
     *outputFile_<< "time,root_dist,x,y,z,rel_vel_mag,Re,alpha_deg,"
                 << "alpha_geom_deg,cl,cd,fx,fy,fz,end_effect_factor,"
                 << "c_ref_t,c_ref_n,f_ref_t,f_ref_n,"
-                << "end_effect_phi_deg,inflow_ref_angle_deg" << endl;
+                << "end_effect_phi_deg,inflow_ref_angle_deg";
+    if (nearTipActive_)
+    {
+        // Appended after the existing columns; absent when the option is off
+        *outputFile_<< ",near_tip_f_cl,near_tip_d_over_c";
+    }
+    *outputFile_<< endl;
 }
 
 
@@ -885,7 +891,12 @@ void Foam::fv::actuatorLineElement::writePerf()
                 << endEffectFactor_ << "," << tangentialRefCoefficient() << ","
                 << normalRefCoefficient() << "," << tangentialRefForce() << ","
                 << normalRefForce() << "," << endEffectPhiDeg_ << ","
-                << inflowRefAngle() << endl;
+                << inflowRefAngle();
+    if (nearTipActive_)
+    {
+        *outputFile_<< "," << nearTipFCl_ << "," << nearTipDistance_;
+    }
+    *outputFile_<< endl;
 }
 
 
@@ -937,6 +948,9 @@ Foam::fv::actuatorLineElement::actuatorLineElement
     projectElementForce_(true),
     rootDistance_(0.0),
     endEffectFactor_(1.0),
+    nearTipFCl_(dict.lookupOrDefault<scalar>("nearTipFCl", 0.0)),
+    nearTipDistance_(dict.lookupOrDefault<scalar>("nearTipDistance", 0.0)),
+    nearTipActive_(dict.found("nearTipFCl")),
     endEffectPhiDeg_(std::numeric_limits<scalar>::quiet_NaN()),
     inducedVelocityCorrection_(vector::zero),
     projectionEpsilon_(-VGREAT),
@@ -1234,6 +1248,15 @@ void Foam::fv::actuatorLineElement::calculateForce
             mag(chordDirection_ & relativeVelocity_),
             mag(planformNormal_ & relativeVelocity_)
         );
+    }
+
+    // Near-tip virtual-camber correction (Trigaux et al. 2024, F_Cl only):
+    // applied to the polar lift before the end-effect factor and the force,
+    // so the Dag & Sorensen circulation 0.5 c cl |Urel| uses the corrected cl.
+    // Drag is untouched. Absent => nearTipActive_ false => unchanged.
+    if (nearTipActive_)
+    {
+        liftCoefficient_ *= (1.0 - nearTipFCl_);
     }
 
     // Apply end effect correction factor to lift coefficient

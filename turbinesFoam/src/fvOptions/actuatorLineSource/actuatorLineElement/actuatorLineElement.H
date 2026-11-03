@@ -228,6 +228,19 @@ protected:
         //- End effect correction factor [0, 1]
         scalar endEffectFactor_;
 
+        //- Near-tip virtual-camber function F_Cl of this element (Trigaux
+        //  et al. 2024); the lift coefficient is scaled by (1 - F_Cl).
+        //  Read from the element dictionary key `nearTipFCl` (set once by
+        //  actuatorLineSource at construction; geometry is static for rigid
+        //  blades)
+        scalar nearTipFCl_;
+
+        //- Effective tip distance (d_tip/c)_eff of this element
+        scalar nearTipDistance_;
+
+        //- Switch for the near-tip correction (default off)
+        bool nearTipActive_;
+
         //- Angle used to evaluate the rotor-level end factor (degrees).
         //  NaN when no angle-based end factor has been evaluated.
         scalar endEffectPhiDeg_;
