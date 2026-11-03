@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Copy the small, deterministic outputs of ./Allrun <workdir> into reference/.
+#   ./collect <workdir>
+set -eu
+here="$(cd "${0%/*}" && pwd)"
+work="${1:?usage: collect <workdir>}"
+for v in meshEps eps006 twoBlade off; do
+    d="$here/reference/$v"
+    rm -rf "$d"
+    mkdir -p "$d/system" "$d/postProcessing"
+    cp "$work/$v/system/fvOptions" "$work/$v/system/blockMeshDict" "$work/$v/system/S809.dat" "$d/system/"
+    cp -r "$work/$v/postProcessing/actuatorLineElements" "$d/postProcessing/"
+    if [ "$v" != off ]; then
+        grep tipCorrectionDebug "$work/$v/log.pimpleFoam" > "$d/debug.txt"
+    fi
+done

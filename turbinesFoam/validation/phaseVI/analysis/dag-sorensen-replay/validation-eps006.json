@@ -1,0 +1,90 @@
+[
+  {
+    "time": 0.002,
+    "tip_corr_solver": [
+      -1.34194,
+      0.267967,
+      -0.0608146
+    ],
+    "tip_corr_replica": [
+      -1.341958794875598,
+      0.26797055099111733,
+      -0.06081616989227982
+    ],
+    "tip_rel_err": 1.4010752953828943e-05,
+    "max_corr_solver": 1.36978,
+    "max_corr_replica": 1.36980298943418,
+    "max_corr_rel_err": 1.678330401970358e-05,
+    "max_element_solver": 5,
+    "max_element_replica": 5,
+    "eps_solver_tip": 0.4,
+    "eps_replica_tip": 0.06,
+    "tip_ux_err": 1.2851938606672775e-05,
+    "tip_ut_err_vs_debug_rel": 2.8348131294819723e-05,
+    "onoff_max_abs_err_axial": 4.339722883828223e-05,
+    "onoff_max_abs_err_tangential": 5.783345147301357e-05,
+    "onoff_relative_to_max_w": 4.2220270334722787e-05,
+    "onoff_solver_w_axial": [
+      -0.16844696147243177,
+      0.07919920532576441,
+      0.14817679161336983,
+      0.05079397110317885,
+      -0.0944465857990533,
+      -1.3420021921044363
+    ],
+    "onoff_replica_w_axial": [
+      -0.16846075947031058,
+      0.07922116449397097,
+      0.14815019478319233,
+      0.0507579922588267,
+      -0.09446109743450568,
+      -1.341958794875598
+    ]
+  },
+  {
+    "time": 0.003,
+    "tip_corr_solver": [
+      -1.29436,
+      0.204915,
+      -0.071175
+    ],
+    "tip_corr_replica": [
+      -1.2943733555691121,
+      0.2049171032327532,
+      -0.07117597989115355
+    ],
+    "tip_rel_err": 1.0328792882577065e-05,
+    "max_corr_solver": 1.31241,
+    "max_corr_replica": 1.3124250161125441,
+    "max_corr_rel_err": 1.144163222168681e-05,
+    "max_element_solver": 5,
+    "max_element_replica": 5,
+    "eps_solver_tip": 0.4,
+    "eps_replica_tip": 0.06,
+    "tip_ux_err": 8.583346142287951e-06,
+    "tip_ut_err_vs_debug_rel": 3.6903851487579686e-05
+  },
+  {
+    "time": 0.004,
+    "tip_corr_solver": [
+      -1.29513,
+      0.197028,
+      -0.0940633
+    ],
+    "tip_corr_replica": [
+      -1.2951146883293003,
+      0.19702592197323743,
+      -0.09406165349230798
+    ],
+    "tip_rel_err": 1.1831480761003562e-05,
+    "max_corr_solver": 1.31341,
+    "max_corr_replica": 1.3133883144422338,
+    "max_corr_rel_err": 1.6510882181618916e-05,
+    "max_element_solver": 5,
+    "max_element_replica": 5,
+    "eps_solver_tip": 0.4,
+    "eps_replica_tip": 0.06,
+    "tip_ux_err": 1.820673519681293e-05,
+    "tip_ut_err_vs_debug_rel": 3.183085988212042e-05
+  }
+]

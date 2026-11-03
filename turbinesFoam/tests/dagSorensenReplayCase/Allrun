@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Regenerate the solver reference used by tests/test_replay_dag_sorensen.py.
+#
+#   ./Allrun <workdir>
+#
+# Runs tests/tipCorrection/rotor (one-blade axialFlowTurbineALSource, 6
+# elements) for 4 steps with the Dag & Sorensen correction ON and `debug true`
+# for two projection widths (mesh-based epsilon = 0.4 m, explicit 0.06 m), plus
+# a correction-OFF control, in <workdir> (must NOT be inside the repository).
+# libturbinesFoam must be on LD_LIBRARY_PATH (use a private build, never
+# $FOAM_USER_LIBBIN). Collect the outputs into reference/ with ./collect.
+set -eu
+here="$(cd "${0%/*}" && pwd)"
+work="${1:?usage: Allrun <workdir>}"
+base="$here/../tipCorrection/rotor"
+mkdir -p "$work"
+for v in meshEps eps006 twoBlade off; do
+    d="$work/$v"
+    rm -rf "$d"
+    mkdir -p "$d"
+    cp -r "$base/0.org" "$base/constant" "$base/system" "$d/"
+    cp -r "$d/0.org" "$d/0"
+    if [ "$v" = off ]; then
+        cp "$base/system/fvOptions.off" "$d/system/fvOptions"
+    else
+        cp "$here/system/fvOptions.$v" "$d/system/fvOptions"
+    fi
+    sed -i 's/^endTime .*/endTime         0.004;/' "$d/system/controlDict"
+    (cd "$d" && blockMesh > log.blockMesh 2>&1 && topoSet > log.topoSet 2>&1 \
+        && pimpleFoam > log.pimpleFoam 2>&1)
+done

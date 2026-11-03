@@ -1,0 +1,4 @@
+t=0.002 tip_rel_err=1.40e-05 max_corr_rel_err=1.68e-05 maxElem solver/replica 5/5 onoff_rel=4.22e-05
+t=0.003 tip_rel_err=1.03e-05 max_corr_rel_err=1.14e-05 maxElem solver/replica 5/5
+t=0.004 tip_rel_err=1.18e-05 max_corr_rel_err=1.65e-05 maxElem solver/replica 5/5
+worst relative error 1.678e-05 (tolerance 1.0e-03): PASS
