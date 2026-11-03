@@ -114,3 +114,23 @@ def test_long_domain_resolution_is_unchanged(cfg):
 
 def test_config_validates_with_tunnel(cfg):
     validate_config(cfg)
+
+
+def test_tunnel_cell_band_follows_the_tunnel_block_count():
+    # mesh.sh used the long-domain band (6.6-6.8 M) for the 2.61 M-cell tunnel mesh and
+    # refused it (job 11641895).
+    import subprocess
+    import sys as _sys
+    import case_config
+    cfg = case_config.load_config()
+    exact = case_config.cell_count(cfg, "coarse", "tunnel")
+    low, high = case_config.target_cells(cfg, "coarse", 0, domain="tunnel")
+    assert low <= exact <= high and high < 6600000
+    assert case_config.target_cells(cfg, "coarse", 0) == (6600000, 6800000)
+    assert case_config.target_cells(cfg, "coarse", 0, domain="squat") == (6600000, 6800000)
+    tool = Path(case_config.__file__)
+    out = subprocess.run([_sys.executable, str(tool), "--target-cells", "coarse", "--domain", "tunnel"],
+                         capture_output=True, text=True)
+    assert (out.returncode, out.stdout, out.stderr) == (0, f"{low} {high}\n", "")
+    mesh_sh = (tool.parents[1] / "scripts" / "mesh.sh").read_text()
+    assert '--target-cells "$mesh" --refine-level "$refine_level" --domain "$domain"' in mesh_sh

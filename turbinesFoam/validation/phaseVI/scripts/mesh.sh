@@ -154,7 +154,7 @@ if ! awk -v value="$nonortho" 'BEGIN { exit !(value <= 1e-10) }'; then
     exit 3
 fi
 
-band=$(python3 "$root/tools/case_config.py" --target-cells "$mesh" --refine-level "$refine_level")
+band=$(python3 "$root/tools/case_config.py" --target-cells "$mesh" --refine-level "$refine_level" --domain "$domain")
 low=${band% *}
 high=${band#* }
 if [ "$cells" -lt "$low" ] || [ "$cells" -gt "$high" ]; then

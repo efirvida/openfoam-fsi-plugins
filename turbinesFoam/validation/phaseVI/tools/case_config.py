@@ -689,7 +689,9 @@ def turbine_origin(cfg: dict[str, Any]) -> tuple[float, float, float]:
     )
 
 
-def target_cells(cfg: dict[str, Any], mesh: str, level: int = 0) -> tuple[int, int]:
+def target_cells(
+    cfg: dict[str, Any], mesh: str, level: int = 0, domain: str = "long"
+) -> tuple[int, int]:
     """Accepted cell-count band for a (`mesh`, refinement `level`).
 
     Level 0 is the configured band of the base `blockMesh`. Above it the refined
@@ -698,9 +700,18 @@ def target_cells(cfg: dict[str, Any], mesh: str, level: int = 0) -> tuple[int, i
     `mesh.sh` rejects a mesh outside the band, which is what catches a level that
     silently changed size.
     """
+    if level == 0 and domain == "tunnel":
+        # The tunnel refits the outer block cell counts, so its base mesh is not the
+        # configured band of the long domain: accept its exact block count within the
+        # refinement tolerance.
+        exact = cell_count(cfg, mesh, domain)
+        tolerance = float(cfg["mesh"]["refinement"]["cell_tolerance"])
+        return int(exact * (1.0 - tolerance)), int(exact * (1.0 + tolerance))
     if level == 0:
         configured = _resolution(cfg, mesh)["target_cells"]
         return int(configured[0]), int(configured[1])
+    if domain == "tunnel":
+        raise ValueError("refinement levels are measured for the long/squat coarse mesh only, not the tunnel")
     refinement = cfg["mesh"]["refinement"]
     if mesh != "coarse":
         raise ValueError(
@@ -786,6 +797,12 @@ def _main(argv: list[str] | None = None) -> int:
              "base blockMesh)",
     )
     parser.add_argument(
+        "--domain",
+        default="long",
+        choices=("long", "squat", "tunnel"),
+        help="domain whose band --target-cells prints (default long)",
+    )
+    parser.add_argument(
         "--stage",
         metavar="NAME",
         help="print one stage of the staged run plan as JSON",
@@ -809,7 +826,7 @@ def _main(argv: list[str] | None = None) -> int:
             values = kinematics(cfg, speed, mesh, sequence, args.solver)
             print(json.dumps({"model": model, **values}, indent=2, sort_keys=True))
         elif args.target_cells:
-            low, high = target_cells(cfg, args.target_cells, args.refine_level)
+            low, high = target_cells(cfg, args.target_cells, args.refine_level, args.domain)
             print(f"{low} {high}")
         elif args.stage:
             stage = stages(cfg).get(args.stage)

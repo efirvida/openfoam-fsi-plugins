@@ -253,6 +253,11 @@ files regenerate byte-identical.
 
 ### Fixes
 
+- **Phase VI tunnel mesh refused by its own cell-count gate.**
+  Files: `turbinesFoam/validation/phaseVI/tools/case_config.py`, `turbinesFoam/validation/phaseVI/scripts/mesh.sh`, `turbinesFoam/tests/test_phasevi_tunnel.py`.
+  Problem: `mesh.sh` checked every domain against the long-domain band (6.6-6.8 M cells), so the 2.61 M-cell `--domain tunnel` mesh always failed (job 11641895).
+  Fix: `target_cells(..., domain)` and `case_config.py --target-cells MESH --domain DOMAIN` return the tunnel's exact block count within `cell_tolerance`; long and squat keep the configured band; `mesh.sh` passes its domain.
+
 #### ASM+mesh: Dag & Sorensen tip correction was still inert (`surfaceGeometry`)
 
 **Files:** `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineElement/actuatorLineElement.C`,
