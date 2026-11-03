@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "validation" / "iea22mw" / "scripts"
 TOOL = SCRIPTS / "compare_spanwise.py"
-sys.path.insert(0, str(SCRIPTS))
-sys.path.insert(0, str(SCRIPTS.parent / "tools"))
-import blade_geometry as bg  # noqa: E402
+# iea15mw ships a module with the same name: load the IEA-22 one under its own name.
+_spec = importlib.util.spec_from_file_location("iea22_blade_geometry", SCRIPTS.parent / "tools" / "blade_geometry.py")
+bg = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(bg)
 
 HEADER = ("time,root_dist,x,y,z,rel_vel_mag,Re,alpha_deg,alpha_geom_deg,cl,cd,fx,fy,fz,"
           "end_effect_factor,c_ref_t,c_ref_n,f_ref_t,f_ref_n\n")

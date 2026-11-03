@@ -61,8 +61,10 @@ def test_no_iea15_numbers_in_iea22_scripts():
             assert not IEA15_NUMBERS.search(line) or "ntasks" in line, f"{path.name}:{number}: {line}"
 
 
-def test_dry_run_prints_commands_and_submits_nothing(derived):
-    done = sh()
+def test_dry_run_prints_commands_and_submits_nothing(derived, tmp_path):
+    # An empty runs dir: the real one holds the finished production runs, which submit refuses.
+    runs = str(tmp_path / "runs")
+    done = sh(env={**os.environ, "IEA22_RUNS_DIR": runs})
     assert done.returncode == 0, done.stderr
     alm, olaf = done.stdout.strip().splitlines()
     assert alm.startswith("sbatch --partition=sequana_cpu_bigmem ") and f"--ntasks={derived['ranks22']} " in alm
@@ -70,8 +72,8 @@ def test_dry_run_prints_commands_and_submits_nothing(derived):
     for line in (alm, olaf):
         assert "--exclude=sdumont6006,sdumont6009,sdumont6029" in line
         assert "--nodes" not in line and "--mem" not in line
-    assert alm.endswith("scripts/slurm/l2-ds.slurm") and "TURBINE_RUN_DIR=runs/iea22mw-l2-ds" in alm
-    assert olaf.endswith("scripts/slurm/olaf-dp.slurm") and "OLAF_RUN_DIR=runs/iea22mw-olaf-dp" in olaf
+    assert alm.endswith("scripts/slurm/l2-ds.slurm") and f"TURBINE_RUN_DIR={runs}/iea22mw-l2-ds" in alm
+    assert olaf.endswith("scripts/slurm/olaf-dp.slurm") and f"OLAF_RUN_DIR={runs}/iea22mw-olaf-dp" in olaf
 
 
 def test_existing_run_dir_is_refused(tmp_path, derived):
