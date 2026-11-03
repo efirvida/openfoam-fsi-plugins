@@ -328,6 +328,15 @@ def test_variant_run_launcher_passes_every_v12_knob_before_the_registry_flags():
     assert 'POLAR=${POLAR:-S809_OSU_Re1M_pressure.dat}' in text
 
 
+def test_variant_run_launcher_forwards_caller_arguments_past_the_registry_flags():
+    # `sbatch ... variant-run.slurm --domain tunnel` once lost its arguments to `set -- $flags`
+    # and silently ran the free box for 8 h.
+    text = (ROOT / 'scripts/slurm/variant-run.slurm').read_text()
+    assert 'extra="$*"' in text
+    assert text.index('extra="$*"') < text.index('set -- $flags')
+    assert 'set -- $flags $extra' in text
+
+
 @pytest.mark.parametrize('launcher', ['v1-2-run', 'v1-2-evaluation', 'v1-2-lag', 'v1-2-small-eps'])
 def test_v12_launchers_pass_every_v12_knob_explicitly(launcher):
     text = (ROOT / f'scripts/slurm/{launcher}.slurm').read_text()
