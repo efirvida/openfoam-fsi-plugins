@@ -15,8 +15,8 @@ Gap analysis: `odd/tasks/tip-model-analysis.md` L21. Branch `feat/v13-adoption-a
 ## Tasks
 
 - T1 (S1): v1.4 adoption: model-definition record, frozen v1.3, registry, docs, tests. Route: writer W4. Commit: -
-- T2 (S2): pitch override + run.json pitch audit. Route: writer W1. Commit: -
-- T3 (S2): submit T/U/J runs after T2 (12 runs: pitch 2/4/6 x 5-8 m/s). Route: inline (Slurm). Commit: n/a
+- T2 [done] (S2): pitch override (`generate_case.py --pitch-deg`, `runPhaseVI.sh -s T|U|J|I`, ALM only, run id `-seq<T>`), run.json `pitch_deg`, `compareYawPitch.py --pitch` exit 5 on mismatch; 15 new tests pass, S render byte-identical; shellcheck unavailable. Route: writer W1. Commit: 976f9e6
+- T3 (S2): T/U/J x 5-8 m/s, variant tip-pitch-dag-sorensen-neartip, label var-tip-pitch-dag-sorensen-total-neartip, frozen worktree .worktrees/g1-runs at 976f9e6, LIB_DIR runs/lib-neartip-6f27aad; jobs T5-8 11725984/85/87/88, U5-8 11725989-92, J5-8 11725993-96 (cpu_long, bigmem_long, cpu, bigmem round-robin), 2026-11-11. Compare: `compareYawPitch.py --pitch P --sequence X --speed U --run-dir <run>`. Route: inline (Slurm). Commit: n/a
 - T4 (S3): H5/H6/H8 runs: jobs 11725946/7/8 (sequana_cpu), submitted 2026-11-11 from `.worktrees/v15b-runs` (02651dd), LIB_DIR runs/lib-neartip-6f27aad, label var-tip-pitch-dag-sorensen-total-neartip. Route: inline. Commit: n/a
 - T5 (S4): probe vs sampled inflow-angle reader. Route: writer W2. Commit: -
 - T6 (S5): root flap moment reader. Route: writer W3. Commit: -
