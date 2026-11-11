@@ -62,7 +62,7 @@ tools/stage_blade_stl.py  sha256-gated STL staging for asm-mesh run dirs
 case/                     committed generated skeleton (ALM/ASM/ASM-MESH twins)
 data/                     geometry, polars, experiment, s809 + PROVENANCE per dir
 scripts/                  runners, mesh/stage tooling, comparison
-  checkModelDefinition.py effective-value v1.3 (record) conformance gate; --variant v1.2 for the frozen base
+  checkModelDefinition.py effective-value v1.4 (record) conformance gate; --variant v1.2 / v1.3 for the frozen definitions
   summarizeBands.py      acceptance criteria (R3 default, --criteria r2); refuses non-conforming evidence
   slurm/stage0.slurm      authorized development-queue job
   slurm/production.slurm  prepared-only long-queue array (do not submit)
@@ -198,7 +198,7 @@ commit, OpenFOAM version, config sha256, variant, solver, `n_chordwise`,
   moves by −1.815°. The equispaced `--blade-dz` layout uses the same original-table tip twist. One
   helper (`tools/element_data.py`, `effective_pitch_deg`) feeds the element data and the
   Chaviaropoulos–Hansen `pitchOffset` (`−(3 + 1.815)` under `tip`, so its theta excludes the collective
-  pitch). Recorded as `pitch_reference` in `run.json`. A plain render is the v1.3 record; v1.2 is reproduced byte-identical
+  pitch). Recorded as `pitch_reference` in `run.json`. A plain render is the v1.3 definition (v1.4 adds `--near-tip-correction on`); v1.2 is reproduced byte-identical
   only with every v1.2 knob explicit (`scripts/slurm/v1-2-run.slurm`: `--pitch-reference twist-zero --polar S809_OSU_Re1M_pressure.dat --tip-effects on --tip-correction off`).
 - `--near-tip-correction on|off` (default off, which renders nothing: the case is byte-identical to a render without the flag) renders the opt-in `nearTipCorrection` block (Trigaux et al. 2024, `F_Cl` only; see `turbinesFoam/README.md`) and copies the committed table to `system/trigaux2024_tableC.csv`. A run: `scripts/runPhaseVI.sh -m alm -u 7 --near-tip-correction on` (v1.3 defaults otherwise), or `VARIANT=tip-pitch-dag-sorensen-neartip` through `scripts/slurm/variant-run.slurm`.
 - `--mesh-factor F` (positive number, exit 2 otherwise) overrides
@@ -575,23 +575,28 @@ failure remains; the primary criterion is still reported unweakened.
 
 ## Model variants (A/B bench)
 
-**Definition of record: Model Definition v1.3** (owner decision 2026-10-26 freeze,
-2026-10-27 adoption; `config/model-definition.yaml`, record and gate evidence in
-`odd/tasks/validation-model-definition-v1-3-record.md`): tip pitch reference, Dağ & Sørensen tip
-correction on with the Glauert tip factor off (Glauert root kept), OSU total polar. It is the renderer
-default, so a plain `runPhaseVI.sh` render is the record. v1.2 results are no longer of record; v1.2
-stays reproducible from the frozen `config/model-definition-v1.2.yaml`.
+**Definition of record: Model Definition v1.4** (owner decision 2026-11-11;
+`config/model-definition.yaml`, evidence in `odd/tasks/validation-model-definition-v1-4-record.md`):
+v1.3 plus the near-tip virtual-camber correction F_Cl (Trigaux et al. 2024, `--near-tip-correction on`).
+v1.3 (owner decision 2026-10-26 freeze, 2026-10-27 adoption, `odd/tasks/validation-model-definition-v1-3-record.md`:
+tip pitch reference, Dağ & Sørensen tip correction on with the Glauert tip factor off, Glauert root kept, OSU total
+polar) is frozen as `config/model-definition-v1.3.yaml`, and v1.2 as `config/model-definition-v1.2.yaml`; both stay
+reproducible (`--variant v1.3`, `--variant v1.2`) and are no longer of record. The renderer default is still v1.3
+(the near-tip correction is opt-in): a record render needs `--near-tip-correction on` (or `VARIANT=v1.4`).
+**Known cost:** S8 power -7.8 → -10.4 % leaves the R3 band. **Stall is an extrapolation** of F_Cl (derived for
+α 3–7°) and is documented as a limitation, not validation.
 
 `config/model-variants.yaml` registers diagnostic arms as **v1.2 (the frozen base, `base:`) plus
 renderer flag overrides**. No coefficient is fitted. Non-record variants are never of record;
-`summarizeBands.py` follows the record through the default definition. Launchers compose on the
+`summarizeBands.py` follows the record through the default definition (v1.4). Launchers compose on the
 v1.2 base (`scripts/slurm/variant-run.slurm` passes every v1.2 knob before the registry flags), so
 every existing arm renders exactly as before the adoption.
 
 | Variant | Exact renderer overrides | Reference / interpretation |
 |---|---|---|
 | `v1.2` | none | Frozen Model Definition v1.2 (the base) |
-| `v1.3` | `--pitch-reference tip --tip-correction on --tip-effects off --polar S809_OSU_Re1M_total.dat` | Model Definition v1.3, the record, reproduced on the v1.2 base; equals `tip-pitch-dag-sorensen` plus the OSU total polar. No `POLAR` environment needed |
+| `v1.3` | `--pitch-reference tip --tip-correction on --tip-effects off --polar S809_OSU_Re1M_total.dat` | Model Definition v1.3 (frozen, `config/model-definition-v1.3.yaml`), reproduced on the v1.2 base; equals `tip-pitch-dag-sorensen` plus the OSU total polar. No `POLAR` environment needed |
+| `v1.4` | `--pitch-reference tip --tip-correction on --tip-effects off --polar S809_OSU_Re1M_total.dat --near-tip-correction on` | Model Definition v1.4, **the record**, reproduced on the v1.2 base; identical to `tip-pitch-dag-sorensen-neartip` (the arm run in T14/T16). No `POLAR` environment needed |
 | `shen-tip` | `--end-effects-model Shen` | I10, Shen, Mikkelsen, Sorensen & Bak, *Wind Energy* 8:457–475 (2005); explicit `ShenCoeffs c1=0.125, c2=21` |
 | `dag-sorensen-tip` | `--tip-correction on` | Dağ & Sørensen (2020), existing prescribed helical wake; other settings unchanged |
 | `ring-sampling` | `--velocity-sample-radius 3.3 --n-velocity-samples 16` | v1.1 freeze: 16 equally spaced ring samples, radius **3.3 times local projection epsilon**, not 3.3 metres |
@@ -708,31 +713,32 @@ refusal on written state remains: use a fresh label for a new arm.
 
 The summary prints one table per sequence/speed, with P, T and five c_n errors
 in percent versus experiment; parentheses give the change from the same model's
-baseline row in **percentage points** (default the record, v1.3; `--baseline v1.2` picks another registry entry). Missing values or missing/ambiguous baselines
+baseline row in **percentage points** (default the record, v1.4; `--baseline v1.3` picks another registry entry). Missing values or missing/ambiguous baselines
 show `n/a`. Drifting baselines are not used as references. DRIFT and own-variant
 NON-CONFORMING rows are marked; nonconformance exits 1. Identity comes from
 `run.json`'s optional `variant`, the default `var-<variant>` label, or unique
-conformance. With a custom label, record `variant` in run metadata if an invalid
+conformance (an unlabelled run conforming to both `v1.4` and its identical twin `tip-pitch-dag-sorensen-neartip` is the record). With a custom label, record `variant` in run metadata if an invalid
 arm must still be identifiable. No checker or summary writes run data.
 
 ## Definition conformance
 
 ```sh
-python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-seqS-var-tip-pitch-dag-sorensen-total   # CONFORMS v1.3
+python3 scripts/checkModelDefinition.py runs/alm-U7-coarse-seqS-var-tip-pitch-dag-sorensen-total-neartip   # CONFORMS v1.4
+python3 scripts/checkModelDefinition.py --variant v1.3 runs/alm-U7-coarse-seqS-var-tip-pitch-dag-sorensen-total   # CONFORMS v1.3
 python3 scripts/checkModelDefinition.py --variant v1.2 runs/alm-U7-coarse-seqS-v12                    # CONFORMS v1.2
 python3 scripts/summarizeBands.py results/U7-H                  # R3: P, T, c_n all within 10 % (r/R 0.30-0.95)
 python3 scripts/summarizeBands.py results/U7-H --criteria r2    # frozen R2 verdicts (P 10, T 15, c_n 15/10, 0.95 report)
 ```
 
-With no `--variant` the checker judges against the record (`CONFORMS v1.3` / `NON-CONFORMING v1.3: ...`).
+With no `--variant` the checker judges against the record (`CONFORMS v1.4` / `NON-CONFORMING v1.4: ...`); a v1.3 run reports its `nearTipCorrection` mismatches against it.
 `--variant NAME` composes a registry entry on the frozen v1.2 base, so `--variant v1.2` reproduces the
-pre-adoption verdicts and a v1.2 run checked against the record reports its tip mounting, `tipEffects`,
+earlier verdicts (`--variant v1.3` the v1.3 ones) and a v1.2 run checked against the record reports its tip mounting, `tipEffects`,
 `tipCorrection` and polar mismatches. `--polar FILE.dat` is a registry flag too (a bare name of a
 file in `data/polars/`, the `runPhaseVI.sh --polar` rule; invalid → exit 2).
 
 A `--variant tip-pitch` check certifies the pitch reference from the rendered tip mounting
 (last `blade1.elementData` row: −3 for `tip`, −1.185 for the v1.2 `twist-zero` reference, twist
-from the blade table), so a tip-pitch case is reported `NON-CONFORMING v1.3` and conforms only to
+from the blade table), so a tip-pitch case is reported `NON-CONFORMING v1.4` and conforms only to
 its own variant. The four `tip-pitch-*` arms are certified from the rendered case the same
 way: tip mounting, `GlauertCoeffs.tipEffects`, `tipCorrection.active` and the augmentation
 switch/model/constants must all match the arm (`--tip-effects` is a registry flag).
@@ -790,7 +796,7 @@ experimental uncertainty" only inside the quadrature sum (`--coverage k`,
 default 1). Exit **1** for a non-conforming run unless `--allow-nonconforming`
 (output then tagged `[not of record]`), **2** for missing input.
 
-`config/model-definition.yaml` records v1.3 (of record) expected effective values and cited
+`config/model-definition.yaml` records v1.4 (of record) expected effective values and cited
 solver defaults. An absent key uses its solver default; absence without a known
 default is a mismatch. Point sampling (`velocitySampleRadius 0`) is frozen;
 `nVelocitySamples` is inert and not checked. The checker accepts `--definition PATH`

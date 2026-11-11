@@ -168,6 +168,11 @@ uniform-inflow validation package for the NREL/NASA-Ames Phase VI rotor with the
 D/32, D/48 or D/64 with per-speed measured TSR kinematics, committed experimental anchors and
 per-directory provenance. Its staged run plan is part of the package.
 
+Its definition of record is **Model Definition v1.4** (v1.3 plus the Trigaux et al. 2024 near-tip
+virtual-camber correction, adopted 2026-11-11; v1.3 and v1.2 are frozen and reproducible). Its tip
+error at S U7 goes from +26.2 to +7.9 %, at a 2-3 % power cost; stall is an extrapolation and is
+documented as a limitation. See `odd/tasks/validation-model-definition-v1-4-record.md`.
+
 ## Status
 
 Research prototype, developed against a moving OpenFOAM and preCICE. Interfaces and case

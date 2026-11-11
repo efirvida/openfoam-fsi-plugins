@@ -3,8 +3,8 @@
 """Summarize comparePhaseVI --out directories, grouped by sequence and speed.
 
 Cells are percent error vs experiment, then change vs the matching baseline
-error (default the version of record, config/model-definition.yaml; --baseline
-picks another registry entry, e.g. v1.2) in percentage points. Baselines match
+error (default the version of record, config/model-definition.yaml, v1.4; --baseline
+picks another registry entry, e.g. v1.3) in percentage points. Baselines match
 model, sequence and speed. Missing or
 ambiguous baselines give n/a. Variant identity uses run.json variant, the default
 var-<variant> label, or a unique conformance match. Custom labels on malformed
@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 STATIONS = (0.30, 0.47, 0.63, 0.80, 0.95)
 
 
-def identify(run, definitions):
+def identify(run, definitions, record=None):
     metadata = run / 'run.json'
     declared = json.loads(metadata.read_text()).get('variant') if metadata.exists() else None
     if declared is not None:
@@ -33,10 +33,14 @@ def identify(run, definitions):
         if run.name == name or run.name.endswith('-var-' + name):
             return name
     matches = [name for name, definition in definitions.items() if not check_run(run, definition)]
+    if len(matches) > 1 and record in matches:
+        # The record and its registry twin (v1.4 = tip-pitch-dag-sorensen-neartip) are the same
+        # definition; an unlabelled run that conforms to both is the record.
+        return record
     return matches[0] if len(matches) == 1 else 'UNKNOWN'
 
 
-def rows(directory, definitions):
+def rows(directory, definitions, record=None):
     data = json.loads((directory / 'metrics.json').read_text())
     turbine = list(csv.DictReader((directory / 'turbine_comparison.csv').open()))
     span = list(csv.DictReader((directory / 'spanwise_comparison.csv').open()))
@@ -45,7 +49,7 @@ def rows(directory, definitions):
         if not run.is_absolute():
             run = ROOT / run
         try:
-            name = identify(run, definitions)
+            name = identify(run, definitions, record)
             errors = check_run(run, definitions[name]) if name in definitions else ['unknown variant']
         except (OSError, ValueError, KeyError, TypeError) as exc:
             name, errors = 'UNKNOWN', [str(exc)]
@@ -75,7 +79,7 @@ def main(argv=None):
         definitions = {name: variant_definition(base, name) for name in load_variants()}
         if baseline_name not in definitions:
             raise ValueError(f'unknown baseline: {baseline_name}')
-        entries = [row for directory in args.dirs for row in rows(directory, definitions)]
+        entries = [row for directory in args.dirs for row in rows(directory, definitions, record)]
         for group in sorted({r['group'] for r in entries}):
             print(f'== {group[0]} U{group[1]:g}')
             print('variant | model | P | T | ' + ' | '.join(f'cn{x:.2f}' for x in STATIONS)

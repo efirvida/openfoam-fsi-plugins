@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Public-interface tests for Phase VI definition conformance and judging (v1.3 of record, v1.2 via --variant)."""
+"""Public-interface tests for Phase VI definition conformance and judging (v1.4 of record, v1.2 and v1.3 via --variant)."""
 import importlib.util
 import json
 import os
@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[1] / "validation/phaseVI"
 CHECK = ROOT / "scripts/checkModelDefinition.py"
 SUMMARY = ROOT / "scripts/summarizeBands.py"
 POLAR = "data/polars/S809_OSU_Re1M_total.dat"
-# Every Model Definition v1.2 knob, explicit: the renderer defaults are v1.3.
+# Every Model Definition v1.2 knob, explicit: the renderer defaults are v1.3 (the near-tip correction is
+# opt-in, so a record render passes --near-tip-correction on).
 V12_FLAGS = ["--pitch-reference", "twist-zero", "--tip-effects", "on", "--tip-correction", "off",
              "--polar", "S809_OSU_Re1M_pressure.dat"]
 
@@ -24,13 +25,30 @@ def invoke(script, *args):
                           env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
 
 
-def make_run(tmp_path, twin="ALM", old=None, new=None, metadata=None, name="run"):
+NEAR_TIP_BLOCK = """        nearTipCorrection
+        {
+            active on;
+            model TrigauxVirtualCamber;
+            table "system/trigaux2024_tableC.csv";
+            kernel "3D";
+            sigmaOverC 0.25;
+        }
+
+"""
+
+
+def make_run(tmp_path, twin="ALM", old=None, new=None, metadata=None, name="run", near_tip=True):
+    """A run dir from a committed twin (a v1.3 render); near_tip adds the v1.4 block so it is a record render."""
     run = tmp_path / name
     (run / "system").mkdir(parents=True)
     text = (ROOT / f"case/system/fvOptions.{twin}").read_text()
     if old is not None:
         assert old in text
         text = text.replace(old, new)
+    if near_tip:
+        anchor = "        blades\n"
+        assert text.count(anchor) == 1 and "nearTipCorrection" not in text
+        text = text.replace(anchor, NEAR_TIP_BLOCK + anchor)
     (run / "system/fvOptions").write_text(text)
     if metadata is not None:
         (run / "run.json").write_text(json.dumps(metadata))
@@ -42,7 +60,7 @@ def test_committed_renders_conform(tmp_path, twin):
     run = make_run(tmp_path, twin)
     result = invoke(CHECK, run)
     assert (result.returncode, result.stdout, result.stderr) == (
-        0, f"{run}: CONFORMS v1.3\n", "")
+        0, f"{run}: CONFORMS v1.4\n", "")
 
 
 @pytest.mark.parametrize("old,new,mismatch", [
@@ -72,7 +90,7 @@ def test_exact_mismatch_and_no_mutation(tmp_path, old, new, mismatch):
     before = (run / "system/fvOptions").read_bytes()
     result = invoke(CHECK, run)
     assert (result.returncode, result.stdout, result.stderr) == (
-        1, f"{run}: NON-CONFORMING v1.3: {mismatch}\n", "")
+        1, f"{run}: NON-CONFORMING v1.4: {mismatch}\n", "")
     assert (run / "system/fvOptions").read_bytes() == before
 
 
@@ -83,7 +101,7 @@ def test_refinement_scaling(tmp_path, metadata, name):
                    metadata=metadata, name=name)
     result = invoke(CHECK, run)
     assert (result.returncode, result.stdout, result.stderr) == (
-        0, f"{run}: CONFORMS v1.3\n", "")
+        0, f"{run}: CONFORMS v1.4\n", "")
 
 
 def test_all_mismatches_and_public_function(tmp_path):
@@ -100,7 +118,7 @@ def test_surface_strip_count(tmp_path):
     run = make_run(tmp_path, twin="ASM", old="nChordwise 5;", new="nChordwise 7;")
     result = invoke(CHECK, run)
     assert (result.returncode, result.stdout, result.stderr) == (
-        1, f"{run}: NON-CONFORMING v1.3: nChordwise=7 (expected 5)\n", "")
+        1, f"{run}: NON-CONFORMING v1.4: nChordwise=7 (expected 5)\n", "")
 
 
 def test_explicit_defaults_comments_and_inert_sample_count(tmp_path):
@@ -109,7 +127,7 @@ def test_explicit_defaults_comments_and_inert_sample_count(tmp_path):
                        '        nVelocitySamples 999; // inert\n')
     result = invoke(CHECK, run)
     assert (result.returncode, result.stdout, result.stderr) == (
-        0, f"{run}: CONFORMS v1.3\n", "")
+        0, f"{run}: CONFORMS v1.4\n", "")
 
 
 def test_unreadable_input(tmp_path):
@@ -134,36 +152,70 @@ def test_v12_render_conforms_only_to_the_v12_variant(tmp_path):
     assert (own.returncode, own.stdout, own.stderr) == (0, f"{case}: CONFORMS v1.2\n", "")
     record = invoke(CHECK, case)
     assert (record.returncode, record.stderr) == (1, "")
-    verdict = record.stdout.removeprefix(f"{case}: NON-CONFORMING v1.3: ").rstrip("\n").split("; ")
-    assert [m.split("=")[0] for m in verdict] == ["tipEffects", "tipCorrection.active", "polar", "tipMounting"]
+    verdict = record.stdout.removeprefix(f"{case}: NON-CONFORMING v1.4: ").rstrip("\n").split("; ")
+    assert [m.split("=")[0] for m in verdict] == [
+        "tipEffects", "tipCorrection.active", "nearTipCorrection.active", "nearTipCorrection.model",
+        "nearTipCorrection.table", "nearTipCorrection.kernel", "nearTipCorrection.sigmaOverC", "polar", "tipMounting"]
     assert verdict[0] == "tipEffects=on (expected off)"
     assert verdict[1] == "tipCorrection.active=off (expected on)"
-    assert verdict[2].endswith(f"S809_OSU_Re1M_pressure.dat (expected suffix {POLAR})")
-    assert verdict[3] == "tipMounting=-1.185 (expected -3, pitch reference tip)"
+    assert verdict[2] == "nearTipCorrection.active=off (expected on)"
+    assert verdict[7].endswith(f"S809_OSU_Re1M_pressure.dat (expected suffix {POLAR})")
+    assert verdict[8] == "tipMounting=-1.185 (expected -3, pitch reference tip)"
 
 
 def test_record_render_conforms_without_a_variant_and_not_to_v12(tmp_path):
-    case = render(tmp_path, "plain")
-    assert invoke(CHECK, case).stdout == f"{case}: CONFORMS v1.3\n"
-    assert invoke(CHECK, case, "--variant", "v1.3").stdout == f"{case}: CONFORMS v1.3\n"
+    case = render(tmp_path, "plain", "--near-tip-correction", "on")
+    assert invoke(CHECK, case).stdout == f"{case}: CONFORMS v1.4\n"
+    assert invoke(CHECK, case, "--variant", "v1.4").stdout == f"{case}: CONFORMS v1.4\n"
+    against_v13 = invoke(CHECK, case, "--variant", "v1.3")
+    assert (against_v13.returncode, against_v13.stderr) == (1, "")
+    assert against_v13.stdout == f"{case}: NON-CONFORMING v1.3: nearTipCorrection.active=on (expected off)\n"
     against_v12 = invoke(CHECK, case, "--variant", "v1.2")
     assert (against_v12.returncode, against_v12.stderr) == (1, "")
     verdict = against_v12.stdout.removeprefix(f"{case}: NON-CONFORMING v1.2: ").rstrip("\n").split("; ")
-    assert [m.split("=")[0] for m in verdict] == ["tipEffects", "tipCorrection.active", "polar", "tipMounting"]
+    assert [m.split("=")[0] for m in verdict] == ["tipEffects", "tipCorrection.active", "nearTipCorrection.active", "polar", "tipMounting"]
     assert verdict[0] == "tipEffects=off (expected on)"
     assert verdict[1] == "tipCorrection.active=on (expected off)"
-    assert verdict[3] == "tipMounting=-3 (expected -1.185, pitch reference twist-zero)"
+    assert verdict[2] == "nearTipCorrection.active=on (expected off)"
+    assert verdict[4] == "tipMounting=-3 (expected -1.185, pitch reference twist-zero)"
+
+
+def test_v13_render_conforms_to_the_frozen_v13_and_not_to_the_record(tmp_path):
+    """The v1.3 renderer defaults (near-tip off) stay reproducible and are no longer of record."""
+    case = render(tmp_path, "v13")
+    frozen = ROOT / "config/model-definition-v1.3.yaml"
+    for args in (("--variant", "v1.3"), ("--definition", frozen)):
+        own = invoke(CHECK, case, *args)
+        assert (own.returncode, own.stdout, own.stderr) == (0, f"{case}: CONFORMS v1.3\n", "")
+    record = invoke(CHECK, case)
+    assert (record.returncode, record.stderr) == (1, "")
+    verdict = record.stdout.removeprefix(f"{case}: NON-CONFORMING v1.4: ").rstrip("\n").split("; ")
+    assert verdict[0] == "nearTipCorrection.active=off (expected on)"
+    assert [m.split("=")[0] for m in verdict] == [
+        "nearTipCorrection.active", "nearTipCorrection.model", "nearTipCorrection.table",
+        "nearTipCorrection.kernel", "nearTipCorrection.sigmaOverC"]
+    assert verdict[1] == "nearTipCorrection.model=ABSENT (no solver default known)"
+
+
+def test_near_tip_constants_are_certified_in_the_record(tmp_path):
+    case = render(tmp_path, "plain", "--near-tip-correction", "on")
+    fv = case / "system/fvOptions"
+    assert "sigmaOverC 0.25;" in fv.read_text()
+    fv.write_text(fv.read_text().replace("sigmaOverC 0.25;", "sigmaOverC 0.3;"))
+    result = invoke(CHECK, case)
+    assert (result.returncode, result.stdout, result.stderr) == (
+        1, f"{case}: NON-CONFORMING v1.4: nearTipCorrection.sigmaOverC=0.3 (expected 0.25)\n", "")
 
 
 def test_tip_correction_constants_are_certified_when_on(tmp_path):
-    case = render(tmp_path, "plain")
+    case = render(tmp_path, "plain", "--near-tip-correction", "on")
     text = (case / "system/fvOptions").read_text()
     assert "wakeTurns 2;" in text
     fv = case / "system/fvOptions"
     fv.write_text(text.replace("wakeTurns 2;", "wakeTurns 3;"))
     result = invoke(CHECK, case)
     assert result.returncode == 1
-    assert result.stdout.endswith("NON-CONFORMING v1.3: tipCorrection.wakeTurns=3 (expected 2)\n")
+    assert result.stdout.endswith("NON-CONFORMING v1.4: tipCorrection.wakeTurns=3 (expected 2)\n")
 
 
 def test_definition_override(tmp_path):
@@ -172,7 +224,7 @@ def test_definition_override(tmp_path):
     definition.write_text((ROOT / "config/model-definition.yaml").read_text())
     result = invoke(CHECK, run, "--definition", definition)
     assert (result.returncode, result.stdout, result.stderr) == (
-        0, f"{run}: CONFORMS v1.3\n", "")
+        0, f"{run}: CONFORMS v1.4\n", "")
 
 
 def make_comparison(tmp_path, runs):
@@ -206,8 +258,8 @@ def test_summary_gate_and_preserved_output(tmp_path, bad, allow):
     # R2 is no longer the default (R3, 2026-10-30); --criteria r2 must keep its exact output
     result = invoke(SUMMARY, cmp, "--criteria", "r2",
                     *(["--allow-nonconforming"] if allow else []))
-    line = ("definition v1.3: NON-CONFORMING (tipEffects=on (expected off)) -> NOT OF RECORD"
-            if bad else "definition v1.3: CONFORMS")
+    line = ("definition v1.4: NON-CONFORMING (tipEffects=on (expected off)) -> NOT OF RECORD"
+            if bad else "definition v1.4: CONFORMS")
     suffix = " [not of record]" if bad else ""
     assert (result.returncode, result.stdout, result.stderr) == (
         int(bad and not allow),
@@ -242,7 +294,7 @@ def test_summary_drifting_window_is_not_of_record(tmp_path, flag, allow):
     before = (cmp / "metrics.json").read_bytes()
     result = invoke(SUMMARY, cmp, "--criteria", "r2",
                     *(["--allow-nonconforming"] if allow else []))
-    header = ["== cmp", "  definition v1.3: CONFORMS"]
+    header = ["== cmp", "  definition v1.4: CONFORMS"]
     if flag:
         header.append("  window: DRIFT (alm: cp variation 2.90 %, cd variation 1.69 %; "
                       "tolerance 1 %) -> NOT OF RECORD")

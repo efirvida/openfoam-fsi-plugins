@@ -36,6 +36,29 @@ always-written columns and the near-tip columns as a conditional append.
 
 ### Features
 
+#### Phase VI: Model Definition v1.4 (v1.3 + near-tip correction F_Cl) adopted as the definition of record
+
+**Files:** `turbinesFoam/validation/phaseVI/config/{model-definition.yaml,model-definition-v1.3.yaml,model-variants.yaml}`,
+`turbinesFoam/validation/phaseVI/scripts/{checkModelDefinition,summarizeVariants}.py`,
+`turbinesFoam/validation/phaseVI/README.md`, `README.md`,
+`turbinesFoam/tests/{test_model_definition_check,test_model_variants}.py`,
+`odd/tasks/validation-model-definition-v1-4-record.md`.
+
+**Problem:** the owner adopted the Trigaux et al. (2024) near-tip virtual-camber correction on the v1.3 ALM
+(2026-11-11, `odd/tasks/tip-model-analysis.md` L20) after T14/T16: tip c_n error at S U7 +26.2 -> +7.9 %, and +0.5..+5.9 %
+at r/R 0.95 for S6, S8, H7 (S5 -6.6 %), at a known cost of 2.2-2.8 % power (S8 P -7.8 -> -10.4 % leaves the R3 band). The
+definition of record, the checker and the registry were still v1.3.
+
+**Fix:** `config/model-definition.yaml` is v1.4 (`nearTipCorrection.active` on plus its model, table, kernel and sigma
+constants, all certified); v1.3 is frozen as `config/model-definition-v1.3.yaml` and stays reproducible with
+`--variant v1.3`. Registry variant `v1.4` has the flags of `tip-pitch-dag-sorensen-neartip` (the arm run in T14/T16, code
+`6f27aad`) and `variant_definition(base, 'v1.4')` equals the record (test). The checker defaults to the record
+(`CONFORMS v1.4`); `summarizeVariants.py` uses v1.4 as baseline and resolves an unlabelled run conforming to both
+`v1.4` and its identical registry twin to the record. Stall (extrapolation of F_Cl beyond alpha 3-7 deg) is documented as a
+limitation, not validation. Tests: new v1.4/v1.3 composition, frozen-v1.3, constant-certification and identification
+tests; existing tests that relied on the record being v1.3 now pin v1.4. Renderer defaults are not changed here: a
+record render needs `--near-tip-correction on` until a follow-up switches the default (see the record).
+
 #### IEA-15/IEA-22 spanwise comparison: tangential force in the rotor-plane frame
 
 **Files:** `turbinesFoam/validation/{iea15mw,iea22mw}/{scripts/compare_spanwise.py,README.md}`,

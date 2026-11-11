@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Synthetic public CLI contracts for the Phase VI A/B registry.
 
-Registry flags override the frozen Model Definition v1.2 base; v1.3 is the
-definition of record and the renderer default, so a variant is rendered with every
+Registry flags override the frozen Model Definition v1.2 base; v1.4 is the
+definition of record (v1.3 the renderer default, the near-tip correction opt-in), so a variant is rendered with every
 v1.2 knob explicit first, exactly as scripts/slurm/variant-run.slurm does.
 """
 import json
@@ -38,7 +38,7 @@ def render(tmp_path, name):
 
 
 @pytest.mark.parametrize('name', ['v1.2', 'v1.3', 'shen-tip', 'dag-sorensen-tip',
-                                  'ring-sampling', 'du-selig-ra', 'ch-ra', 'tip-pitch',
+                                  'ring-sampling', 'du-selig-ra', 'ch-ra', 'tip-pitch', 'v1.4',
                                   'tip-pitch-dag-sorensen', 'tip-pitch-no-tip',
                                   'tip-pitch-du-selig-ra', 'tip-pitch-ch-ra',
                                   'tip-pitch-dag-sorensen-neartip'])
@@ -50,14 +50,15 @@ def test_variants_render_and_check(tmp_path, name):
         assert 'c1 0.125;' in text and 'c2 21;' in text
     own = call('scripts/checkModelDefinition.py', case, '--variant', name)
     assert (own.returncode, own.stdout, own.stderr) == (0, f'{case}: CONFORMS {name}\n', '')
-    # No --variant checks against the record, v1.3.
+    # No --variant checks against the record, v1.4 (also the near-tip arm, which is identical).
     baseline = call('scripts/checkModelDefinition.py', case)
-    assert baseline.returncode == (0 if name == 'v1.3' else 1)
+    record = name in ('v1.4', 'tip-pitch-dag-sorensen-neartip')
+    assert baseline.returncode == (0 if record else 1)
     assert baseline.stderr == ''
-    if name == 'v1.3':
-        assert baseline.stdout == f'{case}: CONFORMS v1.3\n'
+    if record:
+        assert baseline.stdout == f'{case}: CONFORMS v1.4\n'
     else:
-        assert 'NON-CONFORMING v1.3:' in baseline.stdout
+        assert 'NON-CONFORMING v1.4:' in baseline.stdout
 
 
 # (tipEffects, rootEffects, tipCorrection.active, rotationalAugmentation.active/model)
@@ -174,12 +175,12 @@ def test_runner_forwards_near_tip_correction(tmp_path):
 
 def test_summary(tmp_path):
     dirs = []
-    for name, fraction in [('v1.3', 0.1), ('ring-sampling', 0.2)]:
+    for name, fraction in [('v1.4', 0.1), ('ring-sampling', 0.2)]:
         run = render(tmp_path, name)
         d = tmp_path / ('cmp-' + name)
         d.mkdir()
         (d / 'metrics.json').write_text(json.dumps({'case': {'sequence': 'S', 'speed_m_s': 7},
-            'models': {'alm': {'run_dir': str(run), 'drift': {'flag': name != 'v1.3'}}}}))
+            'models': {'alm': {'run_dir': str(run), 'drift': {'flag': name != 'v1.4'}}}}))
         (d / 'turbine_comparison.csv').write_text('model,quantity,delta_frac\n'
             f'alm,power,{fraction}\nalm,thrust,{fraction}\n')
         (d / 'spanwise_comparison.csv').write_text('model,r_over_R,dcn_frac\n' +
@@ -193,7 +194,7 @@ def test_summary(tmp_path):
     assert 'ring-sampling' in result.stdout and 'DRIFT' in result.stdout
     assert '+20.0 (+10.0)' in result.stdout
     assert '[not of record]' in result.stdout
-    assert 'change vs v1.3 in pp' in result.stdout
+    assert 'change vs v1.4 in pp' in result.stdout
     # A named variant with an extra, unregistered override must fail its own gate.
     fv = tmp_path / 'ring-sampling/system/fvOptions'
     fv.write_text(fv.read_text().replace('tipEffects on;', 'tipEffects off;'))
@@ -204,7 +205,7 @@ def test_summary(tmp_path):
 
 def test_summary_baseline_is_the_record_and_can_be_chosen(tmp_path):
     dirs = []
-    for name, fraction in [('v1.2', 0.1), ('v1.3', 0.3)]:
+    for name, fraction in [('v1.2', 0.1), ('v1.4', 0.3)]:
         run = render(tmp_path, name)
         d = tmp_path / ('cmp-' + name)
         d.mkdir()
@@ -218,13 +219,13 @@ def test_summary_baseline_is_the_record_and_can_be_chosen(tmp_path):
     record = call('scripts/summarizeVariants.py', *dirs)
     assert (record.returncode, record.stderr) == (0, '')
     lines = record.stdout.splitlines()
-    assert lines[2].startswith('v1.3 | alm | +30.0 (+0.0)')
+    assert lines[2].startswith('v1.4 | alm | +30.0 (+0.0)')
     assert lines[3].startswith('v1.2 | alm | +10.0 (-20.0)') and lines[3].count('[not of record]') == 1
     assert 'CONFORMS [not of record]' not in lines[2]
     chosen = call('scripts/summarizeVariants.py', '--baseline', 'v1.2', *dirs)
     assert chosen.returncode == 0
     assert chosen.stdout.splitlines()[2].startswith('v1.2 | alm | +10.0 (+0.0)')
-    assert chosen.stdout.splitlines()[3].startswith('v1.3 | alm | +30.0 (+20.0)')
+    assert chosen.stdout.splitlines()[3].startswith('v1.4 | alm | +30.0 (+20.0)')
     unknown = call('scripts/summarizeVariants.py', '--baseline', 'nope', *dirs)
     assert (unknown.returncode, unknown.stdout, unknown.stderr) == (2, '', 'error: unknown baseline: nope\n')
 
@@ -237,14 +238,15 @@ def load_checker():
     return module
 
 
-def test_registry_v13_on_the_v12_base_equals_the_record():
+def test_registry_v13_on_the_v12_base_equals_the_frozen_v13():
     module = load_checker()
     base = module.load_base_definition()
     assert base['version'] == 'v1.2' and base['pitch_reference'] == 'twist-zero'
     composed = module.variant_definition(base, 'v1.3')
-    record = module.load_definition()
-    assert record['version'] == 'v1.3' and record['pitch_reference'] == 'tip'
-    assert composed == record
+    frozen = module.load_definition(ROOT / 'config/model-definition-v1.3.yaml')
+    assert frozen['version'] == 'v1.3' and frozen['pitch_reference'] == 'tip'
+    assert frozen['knobs']['nearTipCorrection.active']['expected'] == 'off'
+    assert composed == frozen
     registry = yaml.safe_load((ROOT / 'config/model-variants.yaml').read_text())
     assert registry['base'] == 'model-definition-v1.2.yaml'
     assert registry['variants']['v1.2']['flags'] == {}
@@ -253,22 +255,52 @@ def test_registry_v13_on_the_v12_base_equals_the_record():
         '--polar': 'S809_OSU_Re1M_total.dat'}
 
 
-def test_registry_v13_renderer_flags_are_exact():
-    result = call('scripts/checkModelDefinition.py', '--variant', 'v1.3', '--renderer-flags')
-    assert (result.returncode, result.stdout, result.stderr) == (
+def test_registry_v14_on_the_v12_base_equals_the_record():
+    module = load_checker()
+    composed = module.variant_definition(module.load_base_definition(), 'v1.4')
+    record = module.load_definition()
+    assert record['version'] == 'v1.4' and record['pitch_reference'] == 'tip'
+    assert composed == record
+    knobs = record['knobs']
+    assert knobs['nearTipCorrection.active']['expected'] == 'on'
+    assert [knobs['nearTipCorrection.' + k]['expected'] for k in ('model', 'table', 'kernel', 'sigmaOverC')] == [
+        'TrigauxVirtualCamber', 'system/trigaux2024_tableC.csv', '3D', 0.25]
+    registry = yaml.safe_load((ROOT / 'config/model-variants.yaml').read_text())['variants']
+    assert registry['v1.4']['flags'] == registry['tip-pitch-dag-sorensen-neartip']['flags'] == {
+        **registry['v1.3']['flags'], '--near-tip-correction': 'on'}
+
+
+def test_v14_is_the_frozen_v13_plus_the_near_tip_correction():
+    module = load_checker()
+    frozen = module.load_definition(ROOT / 'config/model-definition-v1.3.yaml')
+    record = module.load_definition()
+    for key in ('model', 'table', 'kernel', 'sigmaOverC'):
+        assert record['knobs'].pop('nearTipCorrection.' + key)['expected'] is not None
+    assert record['knobs']['nearTipCorrection.active'].pop('expected') == 'on'
+    assert frozen['knobs']['nearTipCorrection.active'].pop('expected') == 'off'
+    record['version'] = frozen['version']
+    assert record == frozen
+
+
+def test_registry_v13_and_v14_renderer_flags_are_exact():
+    v13 = call('scripts/checkModelDefinition.py', '--variant', 'v1.3', '--renderer-flags')
+    assert (v13.returncode, v13.stdout, v13.stderr) == (
         0, '--pitch-reference\ntip\n--tip-correction\non\n--tip-effects\noff\n'
            '--polar\nS809_OSU_Re1M_total.dat\n', '')
+    v14 = call('scripts/checkModelDefinition.py', '--variant', 'v1.4', '--renderer-flags')
+    assert (v14.returncode, v14.stdout, v14.stderr) == (
+        0, v13.stdout + '--near-tip-correction\non\n', '')
 
 
 def test_v13_equals_tip_pitch_dag_sorensen_plus_the_total_polar():
     module = load_checker()
     base = module.load_base_definition()
     gate = module.variant_definition(base, 'tip-pitch-dag-sorensen')
-    record = module.load_definition()
+    frozen = module.load_definition(ROOT / 'config/model-definition-v1.3.yaml')
     assert gate['knobs'].pop('polar')['expected'] == 'data/polars/S809_OSU_Re1M_pressure.dat'
-    assert record['knobs'].pop('polar')['expected'] == 'data/polars/S809_OSU_Re1M_total.dat'
-    gate['version'] = record['version']
-    assert gate == record
+    assert frozen['knobs'].pop('polar')['expected'] == 'data/polars/S809_OSU_Re1M_total.dat'
+    gate['version'] = frozen['version']
+    assert gate == frozen
 
 
 # name -> (pitch_reference, tipEffects, tipCorrection.active, rotationalAugmentation.active, polar,
@@ -287,6 +319,7 @@ VARIANT_EXPECTED = {
     'tip-pitch-du-selig-ra': ('tip', 'on', 'off', 'on', 'pressure', None),
     'tip-pitch-ch-ra': ('tip', 'on', 'off', 'on', 'pressure', -4.815),
     'v1.3': ('tip', 'off', 'on', 'off', 'total', None),
+    'v1.4': ('tip', 'off', 'on', 'off', 'total', None),
     'tip-pitch-dag-sorensen-neartip': ('tip', 'off', 'on', 'off', 'total', None),
 }
 
@@ -302,7 +335,7 @@ def test_neartip_variant_is_v13_plus_the_near_tip_flag(tmp_path):
     assert knobs['nearTipCorrection.model']['expected'] == 'TrigauxVirtualCamber'
     # Every other variant leaves the option off
     for name in registry:
-        if name != 'tip-pitch-dag-sorensen-neartip':
+        if name not in ('tip-pitch-dag-sorensen-neartip', 'v1.4'):
             assert module.variant_definition(base, name)['knobs'][
                 'nearTipCorrection.active']['expected'] == 'off'
     # The rendered near-tip case carries the block and its table; v1.3 rejects it
@@ -311,11 +344,33 @@ def test_neartip_variant_is_v13_plus_the_near_tip_flag(tmp_path):
     assert 'nearTipCorrection' in text and 'model TrigauxVirtualCamber;' in text
     assert (case / 'system/trigaux2024_tableC.csv').read_text() == (
         ROOT / 'data/near-tip-functions/trigaux2024_tableC.csv').read_text()
-    assert 'NON-CONFORMING v1.3' in call('scripts/checkModelDefinition.py', case).stdout
-    # A v1.3 render has no block and no table
+    # It is the record's render: v1.4 accepts it, the frozen v1.3 rejects it
+    assert call('scripts/checkModelDefinition.py', case).stdout == f'{case}: CONFORMS v1.4\n'
+    assert 'NON-CONFORMING v1.3' in call('scripts/checkModelDefinition.py', case, '--variant', 'v1.3').stdout
+    # A v1.3 render has no block and no table, and is no longer of record
     v13 = render(tmp_path, 'v1.3')
     assert 'nearTipCorrection' not in (v13 / 'system/fvOptions').read_text()
     assert not (v13 / 'system/trigaux2024_tableC.csv').exists()
+    assert 'NON-CONFORMING v1.4: nearTipCorrection.active=off (expected on)' in call(
+        'scripts/checkModelDefinition.py', v13).stdout
+
+
+def test_summary_identifies_an_unlabelled_record_run_as_v14(tmp_path):
+    """v1.4 and tip-pitch-dag-sorensen-neartip are identical, so a custom label resolves to the record."""
+    run = render(tmp_path, 'v1.4')
+    custom = run.parent / 'custom-label'
+    run.rename(custom)
+    d = tmp_path / 'cmp'
+    d.mkdir()
+    (d / 'metrics.json').write_text(json.dumps({'case': {'sequence': 'S', 'speed_m_s': 7},
+        'models': {'alm': {'run_dir': str(custom)}}}))
+    (d / 'turbine_comparison.csv').write_text('model,quantity,delta_frac\nalm,power,0.1\nalm,thrust,0.1\n')
+    (d / 'spanwise_comparison.csv').write_text('model,r_over_R,dcn_frac\n' +
+        ''.join(f'alm,{r},0.1\n' for r in [0.30, 0.47, 0.63, 0.80, 0.95]))
+    result = call('scripts/summarizeVariants.py', d)
+    assert (result.returncode, result.stderr) == (0, '')
+    row = result.stdout.splitlines()[2]
+    assert row.startswith('v1.4 | alm | +10.0 (+0.0)') and 'CONFORMS' in row and '[not of record]' not in row
 
 
 def test_every_registered_variant_is_pinned():

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Check Phase VI run directories against effective Model Definition v1.3 (of record).
+"""Check Phase VI run directories against effective Model Definition v1.4 (of record).
 
 Usage: python3 scripts/checkModelDefinition.py RUN_DIR [RUN_DIR ...]
        [--definition PATH] [--variant NAME]
@@ -8,10 +8,11 @@ Exit 0: all conform; 1: mismatches; 2: unreadable/malformed input.
 `check_run(run_dir, definition)` returns every mismatch without writing files;
 `definition` is the mapping returned by `load_definition`.
 
-The definition of record is config/model-definition.yaml (v1.3, adopted
-2026-10-27). `--variant NAME` composes a registry entry on the frozen v1.2 base
-named by config/model-variants.yaml (`base`); `--variant v1.2` therefore
-reproduces the pre-adoption verdicts and `--variant v1.3` re-derives the record.
+The definition of record is config/model-definition.yaml (v1.4, adopted
+2026-11-11; v1.3 is frozen as config/model-definition-v1.3.yaml). `--variant NAME`
+composes a registry entry on the frozen v1.2 base named by
+config/model-variants.yaml (`base`); `--variant v1.2` and `--variant v1.3`
+reproduce the earlier verdicts and `--variant v1.4` re-derives the record.
 
 Absent dictionary keys use the YAML's cited solver defaults, never the expected
 value. Unknown defaults fail closed. nVelocitySamples is inert for the frozen
@@ -356,7 +357,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_dirs", nargs="*", type=Path)
     parser.add_argument('--variant', help='check a named registry arm composed on the frozen v1.2 base '
-                        '(v1.3 is the record; every other arm is diagnostic, never of record)')
+                        '(v1.4 is the record; every other arm is diagnostic, never of record)')
     parser.add_argument('--renderer-flags', action='store_true',
                         help='print validated variant override tokens, one per line; no run required')
     parser.add_argument("--definition", type=Path, default=None,

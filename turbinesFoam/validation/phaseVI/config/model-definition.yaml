@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Phase VI effective-value definition v1.3, the definition of record. Owner
-# decisions: freeze 2026-10-26, adoption 2026-10-27. Evidence and rationale:
-# odd/tasks/validation-model-definition-v1-3-record.md. It equals the frozen v1.2
-# (config/model-definition-v1.2.yaml) except the pitch reference (tip), the
-# Dag-Sorensen tip correction on with the Glauert tip factor off (Glauert root
-# kept) and the OSU total polar. Registry variant `v1.3` reproduces it on the v1.2 base.
+# Phase VI effective-value definition v1.4, the definition of record. Owner
+# decision 2026-11-11 (odd/tasks/tip-model-analysis.md L20). Evidence and rationale:
+# odd/tasks/validation-model-definition-v1-4-record.md. It equals the frozen v1.3
+# (config/model-definition-v1.3.yaml) plus the opt-in near-tip virtual-camber
+# correction (Trigaux et al. 2024, F_Cl) on. Registry variant `v1.4` reproduces it on
+# the v1.2 base and equals `tip-pitch-dag-sorensen-neartip`.
 # Source paths below are relative to turbinesFoam/src/fvOptions/.
 # null solver_default means no known default: absence must fail closed.
-version: v1.3
+version: v1.4
 pitch_reference: tip # NREL/TP-500-29955 p.20: pitch at the tip chord; mounting at the tip -3.0 deg
 coefficients: turbine.axialFlowTurbineALSourceCoeffs
 knobs:
@@ -53,8 +53,24 @@ knobs:
     solver_default: 0
   nearTipCorrection.active:
     path: nearTipCorrection.active
-    expected: 'off'
+    expected: 'on'
     solver_default: false # actuatorLineSource/actuatorLineSource.C createElements: absent block => no correction (opt-in, Trigaux et al. 2024 F_Cl)
+  nearTipCorrection.model:
+    path: nearTipCorrection.model
+    expected: TrigauxVirtualCamber
+    solver_default: null # No default: the block must name the model.
+  nearTipCorrection.table:
+    path: nearTipCorrection.table
+    expected: system/trigaux2024_tableC.csv
+    solver_default: null # No default table; staged from data/near-tip-functions/trigaux2024_tableC.csv.
+  nearTipCorrection.kernel:
+    path: nearTipCorrection.kernel
+    expected: 3D
+    solver_default: null # Trigaux thesis App. C Table C.3 (3D, sigma = c/4); kernel-independent within 0.004.
+  nearTipCorrection.sigmaOverC:
+    path: nearTipCorrection.sigmaOverC
+    expected: 0.25
+    solver_default: null # Table C.3 sigma = c/4.
   rotationalAugmentation.active:
     path: rotationalAugmentation.active
     expected: 'off'

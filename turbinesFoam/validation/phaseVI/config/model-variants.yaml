@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Each flags mapping is an override of the frozen Model Definition v1.2 named by
-# `base` (not of the definition of record, which is v1.3, config/model-definition.yaml),
-# and not a new baseline. Variants `v1.2` and `v1.3` reproduce the two definitions.
+# `base` (not of the definition of record, which is v1.4, config/model-definition.yaml),
+# and not a new baseline. Variants `v1.2`, `v1.3` and `v1.4` reproduce the three definitions.
 # Future C2-C3 arms can add renderer flags here once implemented and validated.
 base: model-definition-v1.2.yaml
 variants:
@@ -9,13 +9,22 @@ variants:
     reference: 'Model Definition v1.2, config/model-definition-v1.2.yaml (frozen; the base of every variant)'
     flags: {}
   v1.3:
-    reference: 'Model Definition v1.3, config/model-definition.yaml (of record since 2026-10-27); odd/tasks/validation-model-definition-v1-3-record.md'
-    note: 'Reproduces the record on the v1.2 base: tip pitch reference, Dag & Sorensen tip correction on, Glauert tip factor off (root kept), OSU total polar. Equals tip-pitch-dag-sorensen plus the polar; the gate runs were launched that way. No POLAR environment is needed.'
+    reference: 'Model Definition v1.3, config/model-definition-v1.3.yaml (frozen; of record 2026-10-27 to 2026-11-11); odd/tasks/validation-model-definition-v1-3-record.md'
+    note: 'Reproduces the frozen v1.3 on the v1.2 base: tip pitch reference, Dag & Sorensen tip correction on, Glauert tip factor off (root kept), OSU total polar. Equals tip-pitch-dag-sorensen plus the polar; the gate runs were launched that way. No POLAR environment is needed.'
     flags:
       --pitch-reference: tip
       --tip-correction: 'on'
       --tip-effects: 'off'
       --polar: S809_OSU_Re1M_total.dat
+  v1.4:
+    reference: 'Model Definition v1.4, config/model-definition.yaml (of record since 2026-11-11); odd/tasks/validation-model-definition-v1-4-record.md'
+    note: 'Reproduces the record on the v1.2 base: v1.3 plus the near-tip virtual-camber correction F_Cl (Trigaux et al., J. Fluid Mech. 989:A1, 2024). Flags identical to tip-pitch-dag-sorensen-neartip, the arm run in T14/T16 (libs runs/lib-neartip-6f27aad, code 6f27aad). No POLAR environment is needed.'
+    flags:
+      --pitch-reference: tip
+      --tip-correction: 'on'
+      --tip-effects: 'off'
+      --polar: S809_OSU_Re1M_total.dat
+      --near-tip-correction: 'on'
   shen-tip:
     reference: 'I10: Standard Shen tip correction (c2 = 21); Shen, Mikkelsen, Sorensen, Bak, Wind Energy 8:457-475 (2005)'
     note: 'Not a pure tip substitution: the solver Shen model also replaces the hub/root loss formula. Explicit literature constants c1=0.125, c2=21; no fit.'
