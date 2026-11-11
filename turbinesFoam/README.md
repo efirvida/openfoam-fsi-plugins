@@ -257,8 +257,8 @@ type and size in the thesis tables (spread <= 0.004 at the Phase VI stations), s
   would have to be refreshed each step (not done).
 * With `active on` the element CSV gets two extra trailing columns, `near_tip_f_cl,near_tip_d_over_c`;
   with the option off the output is byte-identical to a build without it.
-* The Phase VI renderer exposes it as `--near-tip-correction on|off` (default off; variant
-  `tip-pitch-dag-sorensen-neartip` = v1.3 plus the flag); see `validation/phaseVI/README.md`.
+* The Phase VI renderer exposes it as `--near-tip-correction on|off` (default on in the Phase VI renderer since Model
+  Definition v1.4, `off` = v1.3; variant `tip-pitch-dag-sorensen-neartip` = v1.4); see `validation/phaseVI/README.md`.
 * Caveat: the functions were derived on steady translating wings (NACA 0015, AR 15) against wall-resolved
   RANS; they remove the lifting-line-class error, not the ALM-specific mollification excess.
 

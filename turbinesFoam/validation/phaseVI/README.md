@@ -198,9 +198,9 @@ commit, OpenFOAM version, config sha256, variant, solver, `n_chordwise`,
   moves by −1.815°. The equispaced `--blade-dz` layout uses the same original-table tip twist. One
   helper (`tools/element_data.py`, `effective_pitch_deg`) feeds the element data and the
   Chaviaropoulos–Hansen `pitchOffset` (`−(3 + 1.815)` under `tip`, so its theta excludes the collective
-  pitch). Recorded as `pitch_reference` in `run.json`. A plain render is the v1.3 definition (v1.4 adds `--near-tip-correction on`); v1.2 is reproduced byte-identical
-  only with every v1.2 knob explicit (`scripts/slurm/v1-2-run.slurm`: `--pitch-reference twist-zero --polar S809_OSU_Re1M_pressure.dat --tip-effects on --tip-correction off`).
-- `--near-tip-correction on|off` (default off, which renders nothing: the case is byte-identical to a render without the flag) renders the opt-in `nearTipCorrection` block (Trigaux et al. 2024, `F_Cl` only; see `turbinesFoam/README.md`) and copies the committed table to `system/trigaux2024_tableC.csv`. A run: `scripts/runPhaseVI.sh -m alm -u 7 --near-tip-correction on` (v1.3 defaults otherwise), or `VARIANT=tip-pitch-dag-sorensen-neartip` through `scripts/slurm/variant-run.slurm`.
+  pitch). Recorded as `pitch_reference` in `run.json`. A plain render is the v1.4 record (v1.3 plus the near-tip correction); v1.3 needs `--near-tip-correction off`, and v1.2 is reproduced byte-identical
+  only with every v1.2 knob explicit (`scripts/slurm/v1-2-run.slurm`: `--pitch-reference twist-zero --polar S809_OSU_Re1M_pressure.dat --tip-effects on --tip-correction off --near-tip-correction off`).
+- `--near-tip-correction on|off` (default **on** since v1.4; `off` renders nothing, the frozen v1.3 render) renders the `nearTipCorrection` block (Trigaux et al. 2024, `F_Cl` only; see `turbinesFoam/README.md`) and copies the committed table to `system/trigaux2024_tableC.csv`. The committed `case/system/fvOptions.*` twins are the v1.4 render. A v1.3 run: `scripts/runPhaseVI.sh -m alm -u 7 --near-tip-correction off`, or `VARIANT=v1.3` through `scripts/slurm/variant-run.slurm` (which, like the `v1-2-*.slurm` launchers, pins `--near-tip-correction off` before the registry flags).
 - `--mesh-factor F` (positive number, exit 2 otherwise) overrides
   `turbine.gaussian_mesh_factor` (1.0) so the ALM / no-mesh-ASM projection width
   `eps = 2*cbrt(V)*meshFactor` varies per run **without changing the mesh**: the
@@ -813,6 +813,32 @@ recorded and non-null; missing layout metadata is not a geometry certification.
 is UNKNOWN and not of record. Non-conforming comparisons retain all diagnostic
 band lines with `[not of record]` and exit **1**. `--allow-nonconforming` permits
 exit 0 for diagnostics only; it does not remove the not-of-record labels.
+
+### Pitch sequences T/U/J/I and Sequence H at 6 and 8 m/s
+
+```sh
+scripts/runPhaseVI.sh -m alm -u 7 -s T --run          # T, U, J, I = collective tip pitch 2, 4, 6, 0 deg (ALM only; run id ...-seqT)
+python3 scripts/compareYawPitch.py --pitch 2 --sequence T --speed 7 --run-dir runs/<run>   # exit 5 if run.json pitch_deg differs
+scripts/runPhaseVI.sh -m alm -u 6 -s H --run          # H kinematics now cover 5, 6, 7, 8, 10 m/s (6/8 from the UAE6 archive)
+python3 scripts/comparePhaseVI.py --alm-dir runs/<run> --speed 6 --sequence H --experiment data/experiment/uae6-archive
+```
+
+`-s T|U|J|I` renders the Sequence S case at the sequence pitch (`generate_case.py --pitch-deg`) and records `pitch_deg` in
+`run.json`; `compareYawPitch.py --pitch` audits it. The 6 and 8 m/s H rows are archive-derived (`h0600000`, `h0800000`).
+
+### Probe inflow angle and root flap moment (H and pitch sequences)
+
+```sh
+python3 scripts/compareProbeInflow.py --alm-dir runs/<H-run> --speed 7 --csv probe.csv --report probe.txt
+python3 scripts/compareRootMoment.py --run-dir runs/<run> --speed 7 --sequence H --out results/rootmoment
+```
+
+`compareProbeInflow.py` compares the five-hole-probe flow angle (34/51/67/84/91 %) with the ALM blade-averaged `alpha_deg`.
+Caveats: at H7 the probe reads 3-8 deg above the ALM angle (the probe sits ahead of the leading edge, upwash not corrected), and the
+probe angle definition is undocumented, so the delta is an indicator, not a metric. `compareRootMoment.py` integrates
+`rho * sum(fx_i (r_i - r_gauge))` of blade 1 and compares it with `eaerorfb_nm` (aerodynamic estimate, the fair comparison)
+and `b1rfb_nm` (gauge, context). The gauge radius defaults to 0.5083 m (blade root attachment, assumed; `--gauge-radius`).
+EAERORFB deltas S5..S8/H7: -12.9/-5.0/-4.6/-8.4/-4.8 %.
 
 ## Comparison
 

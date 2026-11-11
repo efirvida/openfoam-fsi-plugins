@@ -115,6 +115,8 @@ KNOWN_TOOLS: tuple[str, ...] = (
     "plotPhaseVIDiagnosis.py",
     "makeElementData.py",
     "make_olaf_reference.py",
+    "compareProbeInflow.py",
+    "compareRootMoment.py",
 )
 
 #: Which evidence tags each repository tool already answers. A cluster whose tags
@@ -127,6 +129,8 @@ TOOL_COVERAGE: dict[str, frozenset[str]] = {
     "compare_spanwise.py": frozenset({"case-output", "turbine-csv", "blade-surface"}),
     "comparePhaseVI.py": frozenset({"experiment-ref", "turbine-csv"}),
     "compareNacelle.py": frozenset({"experiment-ref", "case-output"}),
+    "compareProbeInflow.py": frozenset({"experiment-ref", "element-csv"}),
+    "compareRootMoment.py": frozenset({"experiment-ref", "element-csv"}),
 }
 
 #: `validation/<area>` identifies which campaign a command belongs to.

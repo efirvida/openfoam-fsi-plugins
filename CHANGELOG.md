@@ -56,8 +56,51 @@ constants, all certified); v1.3 is frozen as `config/model-definition-v1.3.yaml`
 (`CONFORMS v1.4`); `summarizeVariants.py` uses v1.4 as baseline and resolves an unlabelled run conforming to both
 `v1.4` and its identical registry twin to the record. Stall (extrapolation of F_Cl beyond alpha 3-7 deg) is documented as a
 limitation, not validation. Tests: new v1.4/v1.3 composition, frozen-v1.3, constant-certification and identification
-tests; existing tests that relied on the record being v1.3 now pin v1.4. Renderer defaults are not changed here: a
-record render needs `--near-tip-correction on` until a follow-up switches the default (see the record).
+tests; existing tests that relied on the record being v1.3 now pin v1.4.
+
+#### Phase VI: renderer default is the v1.4 record (near-tip correction on)
+
+**Files:** `turbinesFoam/validation/phaseVI/tools/generate_case.py`, `turbinesFoam/validation/phaseVI/scripts/runPhaseVI.sh`,
+`turbinesFoam/validation/phaseVI/scripts/slurm/{v1-2-evaluation,v1-2-lag,v1-2-run,v1-2-small-eps,variant-run}.slurm`,
+`turbinesFoam/validation/phaseVI/case/system/{fvOptions.ALM,fvOptions.ASM,fvOptions.ASM-MESH,trigaux2024_tableC.csv}`,
+`turbinesFoam/validation/phaseVI/README.md`, `turbinesFoam/README.md`,
+`turbinesFoam/tests/{test_phasevi_near_tip_default,test_phasevi_pitch_reference}.py`.
+
+**Problem:** the v1.4 adoption left the renderer default at `--near-tip-correction off`, so a plain `runPhaseVI.sh` /
+`generate_case.py` render was v1.3 and `test_runner_default_is_the_record_and_forwards_the_reference` failed (the
+checker reported `CONFORMS v1.3`/`NON-CONFORMING` against the record).
+
+**Fix:** as for v1.3 (`988fee6`), the default render is the record: `--near-tip-correction` defaults to on (the generator
+constants are the record's `TrigauxVirtualCamber`, `system/trigaux2024_tableC.csv`, `kernel "3D"`, `sigmaOverC 0.25`;
+`off` renders nothing). The committed `case/system/fvOptions.*` twins are re-rendered (`generate_case.py --check` passes)
+and the table is staged in `case/system/`. The v1.2 launchers and `variant-run.slurm` pin `--near-tip-correction off`
+before the registry flags, so variant renders are byte-identical: sha256 of the full render tree before/after for `v1.3`,
+`tip-pitch-dag-sorensen-neartip`, `v1.4`, `shen-tip` and `v1.2` are unchanged. A plain render now reports `CONFORMS v1.4`.
+`paper-yaw-2021` calls the renderer function directly (default off) and is unaffected.
+
+#### Phase VI: pitch sequences T/U/J/I with a `run.json` pitch audit
+
+**Files:** `turbinesFoam/validation/phaseVI/tools/generate_case.py`, `turbinesFoam/validation/phaseVI/scripts/{runPhaseVI.sh,compareYawPitch.py}`,
+`turbinesFoam/tests/test_phasevi_pitch_sequence.py`, `turbinesFoam/validation/phaseVI/README.md` (commit `976f9e6`).
+
+**Problem:** the ALM could only be run at the Sequence S collective pitch (the Sequence S pitch), so the measured pitch
+sequences T (2 deg), U (4 deg), J (6 deg) and I (0 deg) of the yaw/pitch archive had no ALM counterpart, and nothing
+stopped a comparison against the wrong pitch.
+
+**Fix:** `generate_case.py --pitch-deg` and `runPhaseVI.sh -s T|U|J|I` (ALM only, run id `-seq<T>`) render the S case at the
+sequence pitch; `run.json` records `pitch_deg`; `compareYawPitch.py --pitch P` exits 5 when it differs from the run.
+15 new tests; the Sequence S render is byte-identical.
+
+#### Phase VI: Sequence H kinematics at 6 and 8 m/s
+
+**Files:** `turbinesFoam/validation/phaseVI/config/case.yaml`, `turbinesFoam/validation/phaseVI/tools/case_config.py`,
+`turbinesFoam/tests/{test_phasevi_h_speeds,test_phasevi_case}.py` (commit `5a25acd`).
+
+**Problem:** the H kinematics table held 5, 7 and 10 m/s only, so `-s H -u 6` and `-u 8` failed at render time (the first
+H6/H8 jobs 11725947/8 died there).
+
+**Fix:** archive-derived rows `h0600000` (TSR 6.299, 71.765 rpm) and `h0800000` (TSR 4.739, 71.995 rpm) were added and
+accepted by the config validator; 66 focused tests pass.
 
 #### IEA-15/IEA-22 spanwise comparison: tangential force in the rotor-plane frame
 
@@ -1360,6 +1403,25 @@ capture run. The default `alm` render stays byte-identical, the committed case
 is not regenerated, and `--check` still passes.
 
 ### Tooling
+
+#### 20. Compare the five-hole-probe flow angle and the root flap moment with the ALM
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/{compareProbeInflow,compareRootMoment}.py`,
+`turbinesFoam/tests/{test_compare_probe_inflow,test_compare_root_moment}.py`, `tools/analysis_gap.py`,
+`tools/tests/test_analysis_gap.py`, `turbinesFoam/validation/tools/README.md`, `turbinesFoam/validation/phaseVI/README.md`
+(commits `6824f0e`, `287f378`).
+
+**Problem:** the H five-hole-probe angle (`sequence_H_probes.csv`) and the root flap bending channels (`eaerorfb_nm`,
+`b1rfb_nm`) had no comparison with the ALM; each would have been recomputed inline.
+
+**Fix:** `compareProbeInflow.py` compares the probe `5HPxxA` angle (34/51/67/84/91 %) with the blade-averaged element
+`alpha_deg`; at H7 the probe reads 3-8 deg above the ALM angle, the upwash is NOT corrected and the probe angle definition is
+undocumented, so the delta is an indicator, not a validation metric (6 tests, written test-after). `compareRootMoment.py`
+integrates `rho * sum(fx_i (r_i - r_gauge))` of blade 1 and compares it with EAERORFB (the aerodynamic estimate, the fair
+comparison) and B1RFB (context): delta S5..S8/H7 = -12.9/-5.0/-4.6/-8.4/-4.8 %; the gauge radius 0.5083 m (blade root
+attachment) is assumed, not documented (14 tests, RED then GREEN). Both are read-only; registered in
+`TOOL_COVERAGE` (`experiment-ref` + `element-csv`, narrow) and `KNOWN_TOOLS`; `compareRootMoment.py` has its row in the
+validation tools README.
 
 #### 16. Measure the real token cost of the agent workflow
 

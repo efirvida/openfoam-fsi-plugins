@@ -155,3 +155,10 @@ def test_ranking_marks_a_solved_shape_as_covered() -> None:
     assert by_tags["case-output turbine-csv"].is_gap is False
     assert by_tags["case-output turbine-csv"].covered_by == "case_state.py"
     assert by_tags["pdf-page pdf-render"].is_gap is True
+
+
+def test_probe_inflow_and_root_moment_tools_cover_element_csv_against_experiment() -> None:
+    assert analysis_gap.covered_by(("experiment-ref", "element-csv")) == "compareProbeInflow.py"
+    assert analysis_gap.covered_by(("element-csv",)) == "compareProbeInflow.py"
+    assert analysis_gap.covered_by(("experiment-ref", "case-output")) == "compareNacelle.py"
+    assert analysis_gap.covered_by(("experiment-ref", "element-csv", "turbine-csv")) is None
