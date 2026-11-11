@@ -150,12 +150,12 @@ def validate_config(cfg: dict[str, Any]) -> None:
             )
 
     speeds = _speeds(cfg)
-    # The six campaign speeds are required; 5 m/s is an optional diagnostic
-    # speed validated against the archive-derived H table (P2.3 T13).
-    required, optional = {"7", "10", "13", "15", "20", "25"}, {"5"}
+    # The six campaign speeds are required; 5, 6 and 8 m/s are optional diagnostic
+    # speeds (5, 6, 8) validated against the archive-derived H table (P2.3 T13, T4 S3).
+    required, optional = {"7", "10", "13", "15", "20", "25"}, {"5", "6", "8"}
     if not required <= set(speeds) or not set(speeds) <= required | optional:
         raise ValueError(
-            "kinematics.speeds must define 7/10/13/15/20/25 m/s (5 m/s optional)"
+            "kinematics.speeds must define 7/10/13/15/20/25 m/s (5/6/8 m/s optional)"
         )
     for key, entry in speeds.items():
         for field in ("tsr", "rotor_speed_rpm", "row"):

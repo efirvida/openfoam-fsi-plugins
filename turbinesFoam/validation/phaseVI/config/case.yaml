@@ -47,10 +47,19 @@ kinematics:
       tsr: 7.549
       rotor_speed_rpm: 71.674
       row: h0500000
+    # 6 and 8 m/s: archive-derived rows (data/experiment/uae6-archive), H attached-flow series.
+    6:
+      tsr: 6.299
+      rotor_speed_rpm: 71.765
+      row: h0600000
     7:
       tsr: 5.408
       rotor_speed_rpm: 71.878
       row: h0700000
+    8:
+      tsr: 4.739
+      rotor_speed_rpm: 71.995
+      row: h0800000
     10:
       tsr: 3.798
       rotor_speed_rpm: 72.107
