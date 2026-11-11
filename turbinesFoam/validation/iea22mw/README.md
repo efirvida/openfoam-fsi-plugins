@@ -88,6 +88,28 @@ rotor and uniform rated inflow; see [`openfast/README.md`](openfast/README.md) a
 [`data/openfast-v5-templates/README.md`](data/openfast-v5-templates/README.md). Prepared and preflighted only;
 no converged OLAF run exists yet.
 
+## Spanwise ALM-vs-OpenFAST comparison (`scripts/compare_spanwise.py`)
+
+```sh
+python3 -I scripts/compare_spanwise.py --run-dir runs/iea22mw-l2-ds --revs 2 --source olaf-fvw \
+    --bands 0-0.2,0.2-0.4,0.4-0.6,0.6-0.8,0.8-0.9,0.9-0.95,0.95-1.0 --out /tmp/alm-vs-olaf.csv
+```
+
+Frames: the ALM `c_ref_n`/`c_ref_t` are the rotor-plane pair `(Cx, Cy)`; the AeroDyn
+`Cn`/`Ct` of `analysis/spanwise-references.csv` are the chord pair,
+`Cn = Cx cos(theta) + Cy sin(theta)`, `Ct = -Cx sin(theta) + Cy cos(theta)`,
+`theta = BlTwist + pitch` (OpenFAST v5.0.0 `AeroDyn_IO.f90` `BNCn`/`BNCt`/`BNFn`/`BNFt`;
+ALM `actuatorLineElement.C` `normalRefCoefficient`/`tangentialRefCoefficient`). The tool
+rotates the reference into the plane frame (`--pitch`, default 4.127462 deg) and prints
+`c_x` and `c_y` ratios (ALM / reference); `c_n` keeps its old chord-vs-plane definition.
+The earlier "c_t ratio, informational" (0.77-3.3) compared `Cy` with `Ct` and is gone.
+
+Integral check, printed with every run (`--reference-case`, default `runs/iea22mw-olaf-dp`
+or `runs/scratch-of/bem-rated`): `3 * sum(Fy r dr)` of the reference reproduces the OpenFAST
+`torque_nm` (OLAF 0.991, BEM 0.987) and `sum(Fx)` the thrust (0.995 / 0.996); the ALM
+`f_ref_t * rho` integral reproduces the module `cq` (0.992). Per-band torque shares show where
+the ALM power gap sits.
+
 ## Running on SDumont (T4)
 
 The ALM run is the L2 D&S platform of the IEA-15 reference `iea15mw-l2-ds`, carried to IEA-22 by geometry only.

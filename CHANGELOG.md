@@ -4,6 +4,31 @@
 
 ### Features
 
+#### IEA-15/IEA-22 spanwise comparison: tangential force in the rotor-plane frame
+
+**Files:** `turbinesFoam/validation/{iea15mw,iea22mw}/{scripts/compare_spanwise.py,README.md}`,
+`turbinesFoam/tests/{test_compare_spanwise.py,test_iea22_compare_spanwise.py}`.
+
+**Problem:** the AeroDyn/OLAF reference store holds chord-frame `BNCn`/`BNCt`, while the ALM element
+`c_ref_n`/`c_ref_t` are the rotor-plane pair `Cx`/`Cy`; the reported c_t ratio divided `Cy` by `Ct` and was
+only "informational", so the ALM-OLAF power gap could not be located along the span.
+
+**Fix:** AeroDyn sources are rotated to the plane, `Cx = Cn cos(theta) - Ct sin(theta)`, `Cy = Cn sin(theta) + Ct cos(theta)`,
+`theta = twist + pitch` (`--pitch`); IEA-22 adds an integral check (torque/thrust from the spanwise forces against
+the run metrics, closes within 1.3 %) and a per-band torque-gap table. c_n output is unchanged.
+
+#### Phase VI near-tip functions: stall cells and BEM stall references
+
+**Files:** `turbinesFoam/validation/phaseVI/{scripts/applyNearTipFunctions.py,analysis/near-tip-functions/REPORT.md}`,
+`turbinesFoam/tests/test_near_tip_functions.py`.
+
+**Problem:** the offline Trigaux tool knew only S5-S8 and H7 and exited when a model had no run, so the stall
+regime could not be assessed.
+
+**Fix:** `--cells` also accepts S10, S13, S15, S20, S25 (default unchanged, outputs byte-identical); a model with no
+run for a cell is skipped with a message instead of exiting 2 (also for the default cells). AeroDyn BEM references
+at S 10-25 m/s were run with the existing `aerodyn.slurm`.
+
 #### Actuator line: opt-in near-tip virtual-camber correction (Trigaux et al. 2024, F_Cl)
 
 **Files:** `turbinesFoam/src/fvOptions/{actuatorLineSource/actuatorLineSource.C,actuatorLineSource/actuatorLineElement/actuatorLineElement.{C,H},axialFlowTurbineALSource/axialFlowTurbineALSource.C}`,

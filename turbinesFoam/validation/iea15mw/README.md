@@ -500,6 +500,19 @@ table (default bands r/R 0.3-0.5, 0.5-0.7, 0.7-0.9 and the pooled 0.3-0.9);
 bands (`LO <= r/R < HI`, `0 <= LO < HI <= 1`, pooled row = min..max) so the tip
 region can be compared, reference columns included.
 
+**Tangential component against OLAF.** The ALM `c_ref_n`/`c_ref_t` are the
+rotor-plane pair (`Cx`, `Cy`); the AeroDyn `Cn`/`Ct` in the store are the *chord*
+pair, `Cn = Cx cos(theta) + Cy sin(theta)`, `Ct = -Cx sin(theta) + Cy cos(theta)`,
+`theta = BlTwist + pitch` (OpenFAST `AeroDyn_IO.f90`, `BNCn`/`BNCt`). With
+`--references` the table therefore carries `<source>_cx`, `<source>_cy` and the
+ratios `_cx_ratio`/`_cy_ratio` (reference rotated into the plane frame, `--pitch`
+default 0 = rated `BlPitch`) for `olaf-fvw`/`openfast-bem`; use those. The older
+`_cn_ratio`/`_ct_ratio` mix frames (`ct` ratios 0.4-1.3 here mean nothing).
+CCBlade's frame is undocumented in the store and is not rotated (`n/a`).
+The rotation was validated on IEA-22, where the raw OLAF/BEM spanwise forces are on
+disk: `sum(Fy r)` reproduces the OpenFAST torque within 1.3 % (see
+`../iea22mw/README.md`).
+
 The committed CSVs are frozen while the runs are live, so a redraw now differs
 from the committed PNG wherever the runs have advanced past the snapshot
 window; the reference curves are byte-for-byte the same conversion.

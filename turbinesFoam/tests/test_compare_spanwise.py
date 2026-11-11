@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import csv
 import importlib.util
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -457,3 +458,65 @@ def test_without_references_the_output_is_byte_identical(tmp_path: Path) -> None
     assert combined.stdout == (ALONE_GOLDEN + COMPARISON_GOLDEN).format(
         run_a=run_a, run_b=run_b
     )
+
+
+#: Two stations of ``data/iea15mw_blade.csv`` (r/R, twist deg), typed here so the
+#: expected rotation does not depend on the tool's own table reader.
+BLADE_TWIST = ((0.3881091732, 3.846955195), (0.4078475687, 3.445342057))
+
+
+def _aerodyn_chord_pair(c_x: float, c_y: float, theta_deg: float):
+    """AeroDyn ``BNCn``/``BNCt`` (AeroDyn_IO.f90) from the rotor-plane pair."""
+    theta = math.radians(theta_deg)
+    return (
+        c_x * math.cos(theta) + c_y * math.sin(theta),
+        -c_x * math.sin(theta) + c_y * math.cos(theta),
+    )
+
+
+def test_aerodyn_reference_is_rotated_into_the_plane_frame(tmp_path: Path) -> None:
+    """The store holds chord-frame Cn/Ct; the ALM pair is the plane frame (Cx, Cy)."""
+    pitch = 1.5
+    stations = {"olaf-fvw": {}, "ccblade-bem": {}}
+    for radius, twist in BLADE_TWIST:
+        c_n, c_t = _aerodyn_chord_pair(1.2, 0.4, twist + pitch)
+        quantities = {"alpha_deg": 5.0, "cn": c_n, "ct": c_t}
+        stations["olaf-fvw"][radius] = quantities
+        stations["ccblade-bem"][radius] = quantities
+    store = _write_store(tmp_path / "refs.csv", stations)
+    sources = ("olaf-fvw", "ccblade-bem")
+    run = _profile([(rr, 5.0, 1.2, 0.4) for rr, _ in BLADE_TWIST])
+
+    profiles = compare_spanwise.load_reference_profiles(store, sources, pitch_deg=pitch)
+    results = compare_spanwise.attach_references(
+        compare_spanwise.compare_profiles(run, "A", run, "B", bands=((0.3, 0.5),)),
+        profiles, sources,
+    )
+    band = results[0]["references"]["olaf-fvw"]
+    assert band["cx"] == pytest.approx(1.2)
+    assert band["cy"] == pytest.approx(0.4)
+    assert band["cx_ratio"] == pytest.approx(1.0)
+    assert band["cy_ratio"] == pytest.approx(1.0)
+    # The chord-frame ratio of the same data is not 1: that was the c_t defect.
+    assert band["ct_ratio"] != pytest.approx(1.0, abs=0.05)
+    # Only AeroDyn sources are rotated; CCBlade's frame is not documented here.
+    assert results[0]["references"]["ccblade-bem"]["cy"] is None
+
+
+def test_plane_frame_columns_reach_the_table_and_csv(tmp_path: Path) -> None:
+    store = _write_store(tmp_path / "refs.csv", {"olaf-fvw": {
+        0.4: {"alpha_deg": 5.0, "cn": 1.0, "ct": 0.1}}})
+    run = _make_run(tmp_path / "run", [(0.4, 5.0, 1.0, 0.1)])
+    out = tmp_path / "comparison.csv"
+    result = subprocess.run(
+        [sys.executable, str(TOOL), "--run-dir", str(run), "--time", "0", "--revs", "0",
+         "--compare-with", str(run), "--compare-time", "0", "--references",
+         "--reference-store", str(store), "--reference-source", "olaf-fvw",
+         "--pitch", "0", "--comparison-out", str(out)],
+        capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+    header = next(l for l in result.stdout.splitlines() if l.strip().startswith("band,"))
+    assert "olaf-fvw_cy_ratio" in header and "olaf-fvw_cx_ratio" in header
+    with out.open(encoding="utf-8", newline="") as stream:
+        row = next(csv.DictReader(stream))
+    assert row["olaf-fvw_cy"] != "" and row["olaf-fvw_cy_ratio"] != ""
