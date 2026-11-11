@@ -107,10 +107,14 @@ def test_element_csv_appends_angles_without_changing_existing_columns():
 
     source = (SCRIPTS.parents[2] / "src/fvOptions/actuatorLineSource/actuatorLineElement/actuatorLineElement.C").read_text()
     header_block = source.split('*outputFile_<< "time,root_dist', 1)[1].split('<< endl;', 1)[0]
-    header = "time,root_dist" + "".join(re.findall(r'"([^"\n]*)"', '"' + header_block))
+    always, optional = header_block.split(";", 1)
+    header = "time,root_dist" + "".join(re.findall(r'"([^"\n]*)"', '"' + always))
     assert header == ("time,root_dist,x,y,z,rel_vel_mag,Re,alpha_deg,alpha_geom_deg,"
                       "cl,cd,fx,fy,fz,end_effect_factor,c_ref_t,c_ref_n,f_ref_t,f_ref_n,"
                       "end_effect_phi_deg,inflow_ref_angle_deg")
+    # The near-tip columns are appended only when nearTipCorrection is active
+    assert "if (nearTipActive_)" in optional
+    assert re.findall(r'"([^"\n]*)"', optional) == [",near_tip_f_cl,near_tip_d_over_c"]
 
 
 @pytest.mark.parametrize("directory", [None, "reference-fixture"])

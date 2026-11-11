@@ -68,12 +68,20 @@ EXTRA_COLUMNS = {
     "B1PITCH": "b1pitch_deg", "B3PITCH": "b3pitch_deg",
     "B1RFB": "b1rfb_nm", "B3RFB": "b3rfb_nm", "EAERORFB": "eaerorfb_nm",
 }
+
+
+def _with_enriched(base, kind):
+    # The base schema of extractUAE6Reference may already carry the enriched
+    # columns (spanwise does); append only the missing ones.
+    return base + tuple(c for c in extract.ENRICHED_COLUMNS[kind] if c not in base)
+
+
 PERFORMANCE_COLUMNS = (
-    extract.PERFORMANCE_COLUMNS + extract.ENRICHED_COLUMNS["performance"]
+    _with_enriched(extract.PERFORMANCE_COLUMNS, "performance")
     + ("yaw_nominal_deg", "pitch_nominal_deg") + tuple(EXTRA_COLUMNS.values())
 )
 SPANWISE_COLUMNS = (
-    extract.SPANWISE_COLUMNS + extract.ENRICHED_COLUMNS["spanwise"]
+    _with_enriched(extract.SPANWISE_COLUMNS, "spanwise")
     + ("yaw_nominal_deg", "pitch_nominal_deg", "repetition")
 )
 

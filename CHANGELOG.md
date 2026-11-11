@@ -20,6 +20,20 @@ equations used, plus a "Not yet verified" list; code comments carry `[Key]` + ci
 sign convention (`g = exp(-c1 (B lambda - c2)) + 0.1`, `c1 = 0.125`, `c2 = 21`) is documented. Comments and
 documentation only: the C++ diff is identical to HEAD once comments are stripped; no behaviour change.
 
+### Bug Fixes
+
+#### Phase VI yaw/pitch extractor: no duplicated plane-of-rotation columns
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/extractYawPitchReference.py`, `turbinesFoam/tests/test_element_residuals.py`.
+
+**Problem:** the spanwise schema of `extractUAE6Reference` already carries `cth, ctq, qnorm_pa`, and the yaw/pitch
+extractor appended them again, so a regeneration would write them twice and its schema no longer matched the
+committed `data/experiment/yaw-pitch/*_spanwise.csv` (tests `test_schema_prefix_matches_committed_sequence_tables`
+failed). Separately, the static element-CSV header test predated the optional near-tip columns.
+
+**Fix:** enriched columns are appended only when missing (committed tables unchanged); the header test checks the
+always-written columns and the near-tip columns as a conditional append.
+
 ### Features
 
 #### IEA-15/IEA-22 spanwise comparison: tangential force in the rotor-plane frame
