@@ -228,8 +228,8 @@ protected:
         //- End effect correction factor [0, 1]
         scalar endEffectFactor_;
 
-        //- Near-tip virtual-camber function F_Cl of this element (Trigaux
-        //  et al. 2024); the lift coefficient is scaled by (1 - F_Cl).
+        //- Near-tip virtual-camber function F_Cl of this element ([Trigaux2024]
+        //  Trigaux et al., J. Fluid Mech. 989:A1, 2024, doi:10.1017/jfm.2024.461); the lift coefficient is scaled by (1 - F_Cl).
         //  Read from the element dictionary key `nearTipFCl` (set once by
         //  actuatorLineSource at construction; geometry is static for rigid
         //  blades)
@@ -246,8 +246,8 @@ protected:
         scalar endEffectPhiDeg_;
 
         //- Induced-velocity correction in the global frame, added to the
-        //  local inflow before the angle of attack is formed (Dag & Sorensen
-        //  Eq. 23); zero when the tip correction is inactive
+        //  local inflow before the angle of attack is formed ([DagSorensen2020],
+        //  Dag & Sorensen, Wind Energy 23(2):148-160, doi:10.1002/we.2419, Eq. 23); zero when the tip correction is inactive
         vector inducedVelocityCorrection_;
 
         //- Cached projection width epsilon from the most recent
@@ -286,7 +286,8 @@ protected:
 
         //- Apply the Du-Selig rotational augmentation (3D stall delay) in
         //  place to liftCoefficient_/dragCoefficient_.
-        //  Implements Eqs. 9-12 of Du & Selig (1998), AIAA-98-0021, in the
+        //  Implements Eqs. 9-12 of [DuSelig1998] Du & Selig (1998), AIAA-98-0021,
+        //  doi:10.2514/6.1998-21, in the
         //  original prefactor form, with the published constants a = b = d = 1.
         //  The lift factor tends to -1/(2*pi) as c/r -> 0; that outboard sign
         //  change is inherent to the model and is deliberately not clamped.
@@ -297,7 +298,8 @@ protected:
 
         //- Apply the Lindenburg rotational augmentation (bounded 3D stall
         //  delay) in place to liftCoefficient_/dragCoefficient_. Implements
-        //  Eqs. 5-9 of Lindenburg as transcribed by Ouakki & Arbaoui (2023),
+        //  Eqs. 5-9 of [Lindenburg2004] (ECN-RX--04-131) as transcribed by
+        //  Ouakki & Arbaoui (2023), doi:10.1063/5.0104437,
         //  with the trailing-edge separation factor f(alpha) inverted from the
         //  static polar through the Kirchhoff relation. Unlike Du-Selig it
         //  adds bounded increments and self-limits in deep stall. The full
@@ -305,7 +307,9 @@ protected:
         //  actuatorLineElement.C and odd/tasks/phasevi-lindenburg-design.md.
         void correctLindenburgRotationalAugmentation();
 
-        //- CH baseline: Burgos Tafur (2020), pp.307-308 Eqs.(1)-(4).
+        //- CH baseline: [BurgosTafur2020] Burgos Tafur (2020), pp.307-308
+        //  Eqs.(1)-(4); original model [ChaviaropoulosHansen2000], J. Fluids
+        //  Eng. 122(2):330-336, doi:10.1115/1.483261.
         //  Local twist excludes collective pitch; Cd0 is drag at alpha=0.
         void correctChaviaropoulosHansenRotationalAugmentation();
 

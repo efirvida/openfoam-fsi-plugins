@@ -27,6 +27,12 @@ Class
 Description
     Leishman-Beddoes dynamic stall model modified by Sheng et al. (2008).
 
+    [Sheng2008] W. Sheng, R. A. McD. Galbraith, F. N. Coton, "A Modified
+    Dynamic Stall Model for Low Mach Numbers", J. Sol. Energy Eng. 130(3)
+    (2008), doi:10.1115/1.2931509. This is taken to be the "Sheng et al.
+    (2008)" referred to here (not verified against the original code
+    attribution). Base model: [LeishmanBeddoes1989].
+
 SourceFiles
     LeishmanBeddoesSGC.C
 

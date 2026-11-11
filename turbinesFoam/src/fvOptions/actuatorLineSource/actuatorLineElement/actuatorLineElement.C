@@ -374,14 +374,19 @@ void Foam::fv::actuatorLineElement::correctRotationalAugmentation()
     // (a - X)/(b + X); a and b are the numerator/denominator constants, not
     // an exponent or multiplier of (c/r).
     //
-    // Primary source: Du & Selig, "A 3-D stall-delay model for horizontal axis
-    // wind turbine performance prediction", AIAA-98-0021 (1998). The prefactor
+    // Primary source: [DuSelig1998] Du & Selig, "A 3-D stall-delay model for
+    // horizontal axis wind turbine performance prediction", AIAA-98-0021
+    // (1998), doi:10.2514/6.1998-21, Eqs. 9-12. The prefactor
     // form above is the original formulation, independently reproduced by:
     //
     //   - NREL AirfoilPrep.py (Hansen/Ning), the NREL reference implementation
     //   - BYU CCBlade.jl (du.a/du.b/du.d, expon = d/(Lambda*rR))
-    //   - Munduate (2002), PhD thesis, Univ. of Glasgow, Eq. 3.6
-    //   - IOP 2024, J. Phys. Conf. Ser. 2767:022029, Eq. (3)
+    //   - [Munduate2002] Munduate (2002), PhD thesis, Univ. of Glasgow,
+    //     Eq. 3.6 (title not verified)
+    //   - [Cespedes2024] Cespedes, Bak & Zahle, "Limitations of lift
+    //     correction models for thick airfoils in wind turbine roots",
+    //     J. Phys.: Conf. Ser. 2767:022029 (2024),
+    //     doi:10.1088/1742-6596/2767/2/022029, Eq. (3)
     //   - Li, Liu & Yang (2022), Energies 15(18):6533, Eqs. (21)-(22)
     //
     // Fidelity note: arXiv:1702.02108v4 (Yang & Sotiropoulos) prints a
@@ -447,7 +452,11 @@ void Foam::fv::actuatorLineElement::correctRotationalAugmentation()
 
 void Foam::fv::actuatorLineElement::correctChaviaropoulosHansenRotationalAugmentation()
 {
-    // Original CH baseline, not the calibrated tables: Burgos Tafur et al.,
+    // [ChaviaropoulosHansen2000] P. K. Chaviaropoulos, M. O. L. Hansen,
+    // J. Fluids Eng. 122(2):330-336 (2000), doi:10.1115/1.483261 (a = 2.2,
+    // h = 1, n = 4).
+    // [BurgosTafur2020] Original CH baseline, not the calibrated tables:
+    // Burgos Tafur et al.,
     // Acta Mech. Sin. 36:306-319 (2020), DOI 10.1007/s10409-020-00949-0,
     // pp.307-308 Eqs.(1)-(4): fL = fD = a*(c/r)^h*cos(theta)^n,
     // a=2.2, h=1, n=4. The source names theta local twist; its passage does
@@ -477,6 +486,11 @@ void Foam::fv::actuatorLineElement::correctLindenburgRotationalAugmentation()
     // Rotationally augmented (3D stall-delayed) blade-load correction,
     // Lindenburg form, applied as bounded increments to the static 2-D
     // coefficients in place.
+    //
+    // [Lindenburg2004] C. Lindenburg, "Modelling of rotational augmentation
+    // based on engineering considerations and measurements", ECN-RX--04-131,
+    // EWEC London 2004 (original not consulted; equations as transcribed in
+    // [OuakkiArbaoui2023], doi:10.1063/5.0104437).
     //
     // Formulation -- Lindenburg, as transcribed by Ouakki & Arbaoui (2023),
     // "Verification, calibration, and validation of stall delay models using
@@ -605,7 +619,10 @@ Foam::scalar Foam::fv::actuatorLineElement::calcProjectionEpsilon()
     label posCellI = findCell(position_);
     if (posCellI >= 0)
     {
-        // Projection width based on local cell size (from Troldborg (2008))
+        // Projection width based on local cell size (from Troldborg (2008));
+        // chord and drag thresholds above: see [Jha2014] (Jha et al., J. Sol.
+        // Energy Eng. 136(3):031003, 2014, doi:10.1115/1.4026252) for volume
+        // force distribution guidelines
         epsilonMesh = 2.0*Foam::cbrt(V[posCellI]);
         epsilonMesh *= meshFactor; // Cell could have non-unity aspect ratio
 
@@ -1166,7 +1183,8 @@ void Foam::fv::actuatorLineElement::calculateForce
                             / magSqr(spanDirection_);
     inflowVelocity_ -= spanwiseVelocity;
 
-    // Add the rotor-level induced-velocity correction (Dag & Sorensen 2020)
+    // Add the rotor-level induced-velocity correction ([DagSorensen2020],
+    // Wind Energy 23(2):148-160, doi:10.1002/we.2419, Eq. 23)
     inflowVelocity_ += inducedVelocityCorrection_;
 
     // Calculate relative velocity and Reynolds number
@@ -1250,7 +1268,7 @@ void Foam::fv::actuatorLineElement::calculateForce
         );
     }
 
-    // Near-tip virtual-camber correction (Trigaux et al. 2024, F_Cl only):
+    // Near-tip virtual-camber correction ([Trigaux2024], F_Cl only):
     // applied to the polar lift before the end-effect factor and the force,
     // so the Dag & Sorensen circulation 0.5 c cl |Urel| uses the corrected cl.
     // Drag is untouched. Absent => nearTipActive_ false => unchanged.

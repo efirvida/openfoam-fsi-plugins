@@ -27,6 +27,12 @@ Class
 Description
     Cell based momentum source that represents a axial-flow turbine
 
+    Rotor-level end-effect and tip models (see REFERENCES.md):
+    - [DagSorensen2020] induced-velocity tip correction (Eqs. 15-19, 21-23)
+    - [Shen2005] tip-loss factor g (exp[-c1 (B lambda - c2)] + 0.1)
+    - Glauert/Prandtl tip and hub loss: primary source not yet verified
+    - [Trigaux2024] near-tip virtual-camber F_Cl (via actuatorLineSource)
+
 SourceFiles
     axialFlowTurbineALSource.C
 

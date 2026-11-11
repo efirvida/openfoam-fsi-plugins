@@ -156,6 +156,7 @@ Each plugin can also be built on its own; see its README.
 | The adapter fork and its divergence | [`precice-openfoam-adapter/README.md`](precice-openfoam-adapter/README.md), [`docs/`](precice-openfoam-adapter/docs/) |
 | The turbine models and their fork extensions | [`turbinesFoam/README.md`](turbinesFoam/README.md) |
 | NREL Phase VI validation package | [`turbinesFoam/validation/phaseVI/README.md`](turbinesFoam/validation/phaseVI/README.md) |
+| Literature behind every implemented model (keys, DOIs, equation numbers) | [`REFERENCES.md`](REFERENCES.md) |
 | Change history and provenance | [`CHANGELOG.md`](CHANGELOG.md) |
 | Build environment gotchas, layout and contributor conventions | [`AGENTS.md`](AGENTS.md) |
 

@@ -19,14 +19,17 @@
 > and the packages under `validation/` document how each one was verified.
 >
 > 1. **Actuator-line load chain.** Two rotational-augmentation models for the
->    3D stall delay, after Du–Selig and after Lindenburg, and an optional
->    induced-velocity tip correction after Dağ & Sørensen, as an alternative to
+>    3D stall delay, after Du–Selig [DuSelig1998] and after Lindenburg [Lindenburg2004], and an optional
+>    induced-velocity tip correction after Dağ & Sørensen [DagSorensen2020]
+>    (*Wind Energy* 23(2):148-160, doi:10.1002/we.2419), as an alternative to
 >    the original Glauert end effects. That root effect is the Prandtl hub loss
 >    as AeroDyn builds it (`f_hub = (B/2)*(r − rHub)/rHub`, with the new
 >    rotor-level `hubRadius` key supplying `rHub`); the tip factor is unchanged.
 >    The previous root constant was the tip constant reflected about the mid
 >    radius, which no source supports, and a `rootEffects on` case must now set
->    `hubRadius`. The `Shen` model's root factor is still the reflected tip
+>    `hubRadius`. The `Shen` model's tip factor is Shen et al. 2005 [Shen2005]
+>    (*Wind Energy* 8(4):457-475, doi:10.1002/we.153; `c1 0.125; c2 21`
+>    reproduce its `g = exp[-0.125(B λ − 21)] + 0.1`); its root factor is still the reflected tip
 >    constant; no source defines a Shen hub loss, so it is left unchanged and
 >    unmeasured, a known follow-up. Both act on the polar lookup and are read
 >    from the element dictionary (`rotationalAugmentation { active on; … }`,
@@ -114,11 +117,13 @@ default actuator line element. It is a **hybrid** of two published models, not
 the model of one paper:
 
 - the **chord-averaged sampling and the uniform chordwise force distribution**
-  follow Yang & Sotiropoulos (arXiv:1702.02108v4, Sec. 2.1);
+  follow Yang & Sotiropoulos [YangSotiropoulos2018] (arXiv:1702.02108v4, Sec. 2.1);
 - the **force spreading** is a spherical Gaussian kernel,
   `eta = exp(-(r/eps)^2)/(eps^3 pi^1.5)`, as in the actuator surface model of
-  Massie, Ouro, Stoesser & Luo (2019, *Energies*), whose width is
-  `eps = max(c/4, 4*cbrt(V_cell))` (after Mendoza et al.). The paper's own
+  Massie, Ouro, Stoesser & Luo [Massie2019] (2019, *Energies* 12(24):4741,
+  doi:10.3390/en12244741, Eq. 13), whose width is
+  `eps = max(c/4, 4*cbrt(V_cell))` ("after Mendoza et al."; the Mendoza
+  reference is an inferred candidate [Mendoza2019], not verified). The paper's own
   smoothed four-point cosine delta kernel is not used here (see the
   *Kernel adaptation* note).
 
@@ -205,7 +210,7 @@ runtime, while the ALM tutorial defaults to `0.5`.
 
 Line models (BEM, lifting line, actuator line) over-predict the lift within about three chords of the
 blade tip because they sample the induction at a single chordwise point and miss the uneven chordwise
-induction of the real wing (the "virtual camber"). Trigaux, Villeneuve, Dumas & Winckelmans (2024,
+induction of the real wing (the "virtual camber"). [Trigaux2024] Trigaux, Villeneuve, Dumas & Winckelmans (2024,
 *J. Fluid Mech.* 989:A1, doi:10.1017/jfm.2024.461; F. Trigaux PhD thesis, UCLouvain 2024, eq. 3.17-3.31
 and App. C) give a correction function `F_Cl` of the effective tip distance. The option scales the
 polar lift of every element:
@@ -600,6 +605,11 @@ the reported torque.
   CSV schemas, two-rank totals, Gaussian conservation, STL failure paths) and
   the minimal rotating `tests/bladeSurfaceAFTAL` fixture (rotation lockstep
   and the D8 surface moment against `turbine.csv`).
+
+## References
+
+Every implemented model is cited, with DOI and equation numbers, in the repository-level
+[`REFERENCES.md`](../REFERENCES.md); code comments refer to its entries as `[Key]`.
 
 ## Publications
 

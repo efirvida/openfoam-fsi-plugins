@@ -2,6 +2,24 @@
 
 ## [Unreleased] — 2026-10-01
 
+### Documentation
+
+#### Central bibliography and in-code citations for the implemented models
+
+**Files:** `REFERENCES.md` (new), `README.md`, `turbinesFoam/README.md`,
+`turbinesFoam/src/fvOptions/{axialFlowTurbineALSource,actuatorLineSource,bladeSurface,nacelleSurface}/**`,
+`turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineElement/{actuatorLineElement,actuatorSurfaceElement}.{C,H}`,
+`.../actuatorLineElement/dynamicStallModels/LeishmanBeddoes*/*.H`, `.../addedMassModel/addedMassModel.{C,H}`.
+
+**Problem:** no central bibliography; Dag & Sorensen, Glauert/Prandtl, Shen, the Leishman-Beddoes classes, added mass,
+Du-Selig, Chaviaropoulos-Hansen, Lindenburg, the projection epsilon (Massie/Mendoza) and the actuator-surface
+"paper Eq. 8/18" had no complete citation (authors, journal, year, DOI, equation numbers) or an unidentified one.
+
+**Fix:** `REFERENCES.md` lists every model with a `[Key]`, full citation, DOI/report number, implementing path and
+equations used, plus a "Not yet verified" list; code comments carry `[Key]` + citation + equation numbers; the Shen
+sign convention (`g = exp(-c1 (B lambda - c2)) + 0.1`, `c1 = 0.125`, `c2 = 21`) is documented. Comments and
+documentation only: the C++ diff is identical to HEAD once comments are stripped; no behaviour change.
+
 ### Features
 
 #### IEA-15/IEA-22 spanwise comparison: tangential force in the rotor-plane frame

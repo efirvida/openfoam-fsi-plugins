@@ -131,7 +131,7 @@ void Foam::addedMassModel::correct
         alphaPrev_ = alpha_;
     }
 
-    // Calculate added mass coefficients for a flat plate
+    // Calculate added mass coefficients for a flat plate ([Strickland1981])
     scalar cc = pi/8.0*chordLength_*alphaDot*normalRelVel_/relVelMagSqr;
     scalar cn = -pi/8.0*chordLength_*normVelDot/relVelMagSqr;
     // Moment coefficient is at quarter chord

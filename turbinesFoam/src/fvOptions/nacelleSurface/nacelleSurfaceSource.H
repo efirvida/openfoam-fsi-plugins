@@ -31,7 +31,7 @@ Description
     The source owns a \c nacelleSurfaceSampler, which reads the triangulated
     nacelle surface from STL and computes per-node normal (Eq. 19) and
     tangential (Eqs. 21-23) tractions per unit density. Each node force is
-    area-weighted and distributed onto the background cells with the paper's
+    area-weighted and distributed onto the background cells with the [YangSotiropoulos2018]'s
     smoothed four-point cosine kernel (Eq. 8, Eq. 18), scaled by \c 1/V_cell,
     which preserves the total force by the kernel's partition of unity.
 
@@ -69,10 +69,17 @@ Description
     \c axialFlowTurbineALSource::createNacelle() as an owned child
     (\c nacelle_ ), constructed from the case's \c nacelle {} subdictionary.
 
-    Unit convention (paper and \c cellSetOption ): the incompressible source
+    Unit convention ([YangSotiropoulos2018] and \c cellSetOption ): the incompressible source
     is force per unit volume per unit density (m/s²). The compressible
     overload multiplies the per-node force and the field by the local
     density. \c forces() of the sampler reports the SI force on the body.
+
+    Reference: [YangSotiropoulos2018] X. Yang, F. Sotiropoulos, "A new class of
+    actuator surface models for wind turbines", Wind Energy (2018),
+    doi:10.1002/we.2162, arXiv:1702.02108v4 (journal volume/pages not
+    verified); Eq. 7 velocity interpolation, Eq. 8 smoothed four-point cosine
+    kernel, Eq. 18 force distribution. Entry in the repository REFERENCES.md.
+
 
 SourceFiles
     nacelleSurfaceSource.C

@@ -391,7 +391,7 @@ void Foam::fv::actuatorLineSource::createElements()
         coeffs_.lookupOrDefault("rootRadius", -VGREAT);
     const bool haveRadialGeometry = rotorRadius > 0.0 and rootRadius > 0.0;
 
-    // Near-tip virtual-camber correction (Trigaux et al. 2024, JFM 989 A1,
+    // Near-tip virtual-camber correction ([Trigaux2024], Trigaux et al. 2024, JFM 989 A1,
     // F_Cl only), opt-in through the `nearTipCorrection` block that the turbine
     // source forwards to the blade. F_Cl is a function of the effective tip
     // distance (d_tip/c)_eff = int_element^tip ds/c(s) along the geometry

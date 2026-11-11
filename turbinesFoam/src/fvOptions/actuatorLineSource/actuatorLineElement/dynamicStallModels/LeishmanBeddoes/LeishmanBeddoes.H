@@ -27,6 +27,10 @@ Class
 Description
     Leishman-Beddoes dynamic stall model for use with actuatorLineElement.
 
+    [LeishmanBeddoes1989] J. G. Leishman, T. S. Beddoes, "A Semi-Empirical
+    Model for Dynamic Stall", J. Am. Helicopter Soc. 34(3):3-17 (1989),
+    doi:10.4050/jahs.34.3.
+
 SourceFiles
     LeishmanBeddoes.C
 

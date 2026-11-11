@@ -28,6 +28,10 @@ Description
     Added mass model based on Strickland (1981) "A vortex model of the
     Darrieus turbine: An analytical and experimental study".
 
+    [Strickland1981] R. Strickland (1981), Sandia National Laboratories
+    report (report number not verified). The flat-plate added mass
+    coefficients cc, cn, cm follow this model; see REFERENCES.md.
+
 SourceFiles
     addedMassModel.C
 

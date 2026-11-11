@@ -68,6 +68,10 @@ Foam::scalar Foam::fv::actuatorSurfaceElement::calcProjectionEpsilon()
     scalar meshFactor = GaussianCoeffs.lookupOrDefault("meshFactor", 2.0);
 
     // Projection width based on local cell size only (from Troldborg (2008)).
+    // Mesh branch of [Massie2019] Eq. 13, eps = max(c/4, 4 cbrt(V)): only the
+    // 4 cbrt(V) branch is kept (meshFactor 2). The Massie et al. attribution
+    // 'after Mendoza et al.' is an inferred candidate, see [Mendoza2019]
+    // (identity not verified) and REFERENCES.md. See also [Jha2014].
     // The actuator surface model couples to fine meshes, so no chord-length
     // term enters the epsilon calculation.
     scalar epsilon = VGREAT;

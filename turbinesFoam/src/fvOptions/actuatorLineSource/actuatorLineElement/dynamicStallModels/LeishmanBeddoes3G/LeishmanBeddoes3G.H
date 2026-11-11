@@ -28,6 +28,10 @@ Description
     Leishman-Beddoes 3rd generation dynamic stall model for use with
     actuatorLineElement.
 
+    Base model: [LeishmanBeddoes1989], J. Am. Helicopter Soc. 34(3):3-17,
+    doi:10.4050/jahs.34.3. The source of the third-generation modifications
+    implemented here is unidentified (not verified); see REFERENCES.md.
+
 SourceFiles
     LeishmanBeddoes3G.C
 
