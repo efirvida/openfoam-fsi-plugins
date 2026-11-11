@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# One-blade axialFlowTurbineALSource with the opt-in near-tip virtual-camber
+# correction (Trigaux et al. 2024, F_Cl).
+#   $1: -off | -on | -twocol | -offblock   (see system/fvOptions.template)
+#   NEAR_TIP_TABLE: path of trigaux2024_tableC.csv (needed by -on)
+# The test runs on a throwaway copy of the case.
+
+cd ${0%/*} || exit 1    # run from this directory
+
+# Source tutorial run functions
+. $WM_PROJECT_DIR/bin/tools/RunFunctions
+
+BLOCK=""
+case "$1" in
+    -off) ;;
+    -on) BLOCK='        nearTipCorrection
+        {
+            active          on;
+            model           TrigauxVirtualCamber;
+            table           "'"$NEAR_TIP_TABLE"'";
+            kernel          "3D";
+            sigmaOverC      0.25;
+        }' ;;
+    -twocol) BLOCK='        nearTipCorrection
+        {
+            active          on;
+            table           "system/fcl_two_column.dat";
+        }' ;;
+    -offblock) BLOCK='        nearTipCorrection
+        {
+            active          off;
+            table           "does/not/exist.csv";
+        }' ;;
+    *) echo "usage: NEAR_TIP_TABLE=<csv> $0 -off|-on|-twocol|-offblock" >&2; exit 1 ;;
+esac
+if [ "$1" = "-on" ] && [ ! -f "$NEAR_TIP_TABLE" ]
+then
+    echo "set NEAR_TIP_TABLE to the Trigaux table CSV" >&2; exit 1
+fi
+while IFS= read -r line
+do
+    if [ "$line" = "@NEARTIP@" ]; then printf '%s\n' "$BLOCK"; else printf '%s\n' "$line"; fi
+done < system/fvOptions.template > system/fvOptions
+
+cp -rf 0.org 0
+
+runApplication blockMesh
+runApplication topoSet
+runApplication pimpleFoam
+
+# ----------------------------------------------------------------- end-of-file

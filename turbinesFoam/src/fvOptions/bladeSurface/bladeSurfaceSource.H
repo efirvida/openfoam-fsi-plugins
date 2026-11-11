@@ -36,7 +36,7 @@ Description
 
     - per node: \c F_node = patchAreaShare_i*elements_[patch_i].force()
       (per unit density, force on the blade)
-    - per candidate cell: \c forceField_[c] -= F_node*(w/V_c), the paper's
+    - per candidate cell: \c forceField_[c] -= F_node*(w/V_c), the [YangSotiropoulos2018]'s
       Eq. 18 with the S1 sign, over the node's bounded candidate list
     - the returned total is the distributed force (global, \c returnReduce);
       partition of unity makes it equal the summed element forces in the
@@ -80,6 +80,13 @@ Description
     \c <owner>.surface_distribution.csv. The counters are observational only:
     the distribution result is unchanged. The schema is
     \c time,nodes,candidates,mean_candidates,max_candidates,seconds.
+
+    Reference: [YangSotiropoulos2018] X. Yang, F. Sotiropoulos, "A new class of
+    actuator surface models for wind turbines", Wind Energy (2018),
+    doi:10.1002/we.2162, arXiv:1702.02108v4 (journal volume/pages not
+    verified); Eq. 7 velocity interpolation, Eq. 8 smoothed four-point cosine
+    kernel, Eq. 18 force distribution. Entry in the repository REFERENCES.md.
+
 
 SourceFiles
     bladeSurfaceSource.C

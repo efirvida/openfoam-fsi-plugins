@@ -116,6 +116,17 @@ void Foam::fv::axialFlowTurbineALSource::createBlades()
             bladeSubDict.add("endEffects", true);
         }
 
+        // Opt-in near-tip virtual-camber correction (default absent: the blade
+        // dictionary is left untouched)
+        if (coeffs_.found("nearTipCorrection"))
+        {
+            bladeSubDict.add
+            (
+                "nearTipCorrection",
+                coeffs_.subDict("nearTipCorrection")
+            );
+        }
+
         if (debug)
         {
             Info<< "Creating actuator line blade " << bladeName << endl;
@@ -650,6 +661,14 @@ void Foam::fv::axialFlowTurbineALSource::calcEndEffects()
             (
                 endEffectsModel_ + "Coeffs"
             );
+            // [GlauertPrandtl] Prandtl-type tip and hub loss factor
+            //     f = (2/pi) acos(exp(-(B/2)(1/r* - 1)/sin(phi)))   (tip)
+            //     f = (2/pi) acos(exp(-(B/2)(r - rHub)/(rHub sin(phi))))
+            //                                                       (hub)
+            // Primary source NOT YET VERIFIED (no primary citation in this
+            // repository). The formula is cited only as the form used by
+            // NREL AeroDyn BEMT (BEMT.f90), not as a verified attribution to
+            // Prandtl or Glauert. See REFERENCES.md, "Not yet verified".
             if (endEffectsModel_ == "Glauert")
             {
                 if (endEffectsCoeffs.lookupOrDefault("tipEffects", true))
@@ -697,6 +716,16 @@ void Foam::fv::axialFlowTurbineALSource::calcEndEffects()
             }
             else if (endEffectsModel_ == "Shen")
             {
+                // [Shen2005] W. Z. Shen, R. Mikkelsen, J. N. Sorensen, C. Bak,
+                // "Tip loss corrections for wind turbine computations",
+                // Wind Energy 8(4):457-475 (2005), doi:10.1002/we.153.
+                // Tip-loss exponent factor g multiplying the Prandtl
+                // exponent. Sign convention: the code computes
+                //     g = exp(-c1 (B lambda - c2)) + 0.1
+                // so c1 = +0.125 and c2 = 21 reproduce Shen 2005
+                //     g = exp[-0.125 (B lambda - 21)] + 0.1.
+                // The root factor below reflects the tip constant; it is not
+                // a Shen formula (no source defines a Shen hub loss).
                 scalar c1;
                 endEffectsCoeffs.lookup("c1") >> c1;
                 scalar c2;
@@ -732,6 +761,11 @@ void Foam::fv::axialFlowTurbineALSource::calcEndEffects()
 }
 
 
+// [DagSorensen2020] K. O. Dag, J. N. Sorensen, "A new tip correction for
+// actuator line computations", Wind Energy 23(2):148-160 (2020),
+// doi:10.1002/we.2419. Eqs. 15-19 (bound circulation and trailed-vortex
+// geometry) and Eqs. 21-23 (Gaussian-regularised Biot-Savart induced
+// velocity, Eq. 23) as implemented in this function.
 void Foam::fv::axialFlowTurbineALSource::calcTipCorrection()
 {
     if (!tipCorrectionActive_)
@@ -1015,7 +1049,9 @@ void Foam::fv::axialFlowTurbineALSource::calcTipCorrection()
         }
     }
 
-    // Accumulate Eq. (23) for every actuator point and store the correction
+    // Accumulate Eq. (23) of [DagSorensen2020] (Dag & Sorensen, Wind Energy
+    // 23(2):148-160, 2020, doi:10.1002/we.2419) for every actuator point and
+    // store the correction
     const scalar invFourPi = 1.0/(4.0*pi);
 
     forAll(blades_, i2)

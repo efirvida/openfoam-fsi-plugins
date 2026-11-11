@@ -162,7 +162,7 @@ Foam::vector Foam::fv::nacelleSurfaceSampler::normalForce
     const vector& eN = normals_[i];
 
     // Eq. 19 with the desired surface velocity u^d = 0 (stationary nacelle).
-    // With the paper's signs as written this is the force of the flow on the
+    // With the [YangSotiropoulos2018]'s signs as written this is the force of the flow on the
     // surface (force on the body); the source applies -F_i to the flow.
     return (h*(uTilde & eN)/dt)*eN;
 }

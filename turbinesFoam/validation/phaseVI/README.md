@@ -18,6 +18,29 @@ turbulence, no external inflow preprocessing):
 | y | ±4D | ±3D |
 | z | hub ± 2.5D (hub 12.192 m) | hub ± 3D |
 
+### Wind-tunnel domain (`--domain tunnel`)
+
+`--domain tunnel` closes the box on the NASA-Ames 24.4 m × 36.6 m test section
+(`domain_tunnel` in `config/case.yaml`): y ∈ [−18.3, 18.3] m, z ∈ [0, 24.4] m
+(hub 12.192 m), x as the free box. Topology (18 blocks) and the slip-wall
+(`symmetryPlane`) patches are unchanged. The rotor/section area ratio is
+`tools/case_config.blockage_ratio` = 8.9 %. The cell size around the rotor is
+preserved so the domain is the only change against `long`: the core y block is
+untouched, and the y cells next to the core and the z cells next to the hub keep
+their exact size. Only the cell count and `simpleGrading` of the two outer y
+blocks and the two z blocks change (`domain_resolution`: integer cell count,
+then the per-cell ratio is solved by bisection so the block is filled exactly,
+as close as possible to the reference ratio). Coarse/fine/ultra: 2,612,880 /
+8,961,720 / 21,065,008 cells (long: 6.67 M / 22.5 M / 53.4 M); `long` and
+`squat` output is byte-identical to before. Run directories and meshes carry a
+`-tunnel` suffix like `-squat`.
+
+**Caveat (upper bound).** The walls are slip walls: there is no tunnel-wall
+boundary layer, so the displacement of the real walls is not represented and
+the modelled blockage is an upper bound of the physical effect. Blockage raises
+the rotor loads, so it should help the under-predicted points (U8 inboard, S5
+mid-span) and worsen the over-predicted ones (tip, root).
+
 Boundary conditions: uniform velocity inlet, pressure outlet, symmetry far
 field. Solver: `pimpleFoam` + `kOmegaSST` URANS, `adjustTimeStep off` with a
 fixed time step (D/32 0.008 s, D/48 0.005 s, D/64 0.004 s) chosen so the blade
@@ -82,7 +105,7 @@ python3 tools/generate_case.py --check    # exit 1 on missing/stale, never write
 ```
 
 `--mesh coarse|fine|ultra`, `--speed <7|10|13|15|20|25>`,
-`--domain long|squat`, `--sequence H|S`, `--profile production|smoke`,
+`--domain long|squat|tunnel`, `--sequence H|S`, `--profile production|smoke`,
 `--solver urans|iddes`, `--n-chordwise N`, `--ranks N`,
 `--surface-kernel cosine|gaussian`, `--rotational-augmentation on|off`,
 `--rotational-augmentation-model DuSelig|ChaviaropoulosHansen`,
@@ -127,7 +150,7 @@ refines z like x/y); recorded in `design.md` §5 and `config/case.yaml`.
 
 ```sh
 scripts/runPhaseVI.sh -m alm|asm|asm-mesh -u <speed> [-mesh coarse|fine|ultra]
-                      [--domain long|squat] [-s H|S] [--solver urans|iddes]
+                      [--domain long|squat|tunnel] [-s H|S] [--solver urans|iddes]
                       [--nchordwise N] [--ranks N] [--run-label WORD]
                       [--stage0] [--restart] [--refine-level N] [--mesh-factor F] [--blade-dz DZ]
                       [--pitch-reference twist-zero|tip]
@@ -177,6 +200,7 @@ commit, OpenFOAM version, config sha256, variant, solver, `n_chordwise`,
   Chaviaropoulos–Hansen `pitchOffset` (`−(3 + 1.815)` under `tip`, so its theta excludes the collective
   pitch). Recorded as `pitch_reference` in `run.json`. A plain render is the v1.3 record; v1.2 is reproduced byte-identical
   only with every v1.2 knob explicit (`scripts/slurm/v1-2-run.slurm`: `--pitch-reference twist-zero --polar S809_OSU_Re1M_pressure.dat --tip-effects on --tip-correction off`).
+- `--near-tip-correction on|off` (default off, which renders nothing: the case is byte-identical to a render without the flag) renders the opt-in `nearTipCorrection` block (Trigaux et al. 2024, `F_Cl` only; see `turbinesFoam/README.md`) and copies the committed table to `system/trigaux2024_tableC.csv`. A run: `scripts/runPhaseVI.sh -m alm -u 7 --near-tip-correction on` (v1.3 defaults otherwise), or `VARIANT=tip-pitch-dag-sorensen-neartip` through `scripts/slurm/variant-run.slurm`.
 - `--mesh-factor F` (positive number, exit 2 otherwise) overrides
   `turbine.gaussian_mesh_factor` (1.0) so the ALM / no-mesh-ASM projection width
   `eps = 2*cbrt(V)*meshFactor` varies per run **without changing the mesh**: the
@@ -236,7 +260,7 @@ The tip-displacement assertion runs against the selected time step, so the
 ### Meshes and Stage 0
 
 ```sh
-scripts/mesh.sh coarse [--domain long|squat]   # blockMesh + topoSet + checkMesh
+scripts/mesh.sh coarse [--domain long|squat|tunnel]   # blockMesh + topoSet + checkMesh
 scripts/mesh.sh fine
 scripts/stage0.sh                              # print the stage plan only
 scripts/stage0.sh --submit                     # sbatch the dev-queue job
@@ -575,6 +599,7 @@ every existing arm renders exactly as before the adoption.
 | `ch-ra` | `--rotational-augmentation on --rotational-augmentation-model ChaviaropoulosHansen` | I7, original CH baseline `a=2.2, h=1, n=4`; Burgos Tafur et al. (2020), pp. 307–308 Eqs. (1)–(4); not yet A/B tested |
 | `tip-pitch` | `--pitch-reference tip` | NREL/TP-500-29955 p.20 ("blade pitch is defined as the angle between the blade tip chord line and the plane of the turbine disk") and Table A-1 note 2 ("Twist convention is positive towards feather. Values listed are relative to zero twist at the 3.772-m station [75% span on a 5.029-m blade]"); tip mounting −3.0° instead of −1.185°. Diagnostic arm, never of record |
 | `tip-pitch-dag-sorensen` | `--pitch-reference tip --tip-correction on --tip-effects off` | Dağ & Sørensen (2020), Meyer Forsting et al. (2019, 2020): the velocity-side correction replaces the cl-side Glauert tip factor (root/hub loss kept), where `dag-sorensen-tip` stacks both. Diagnostic arm, never of record |
+| `tip-pitch-dag-sorensen-neartip` | `--pitch-reference tip --tip-correction on --tip-effects off --polar S809_OSU_Re1M_total.dat --near-tip-correction on` | v1.3 plus the opt-in Trigaux et al. (2024) virtual-camber factor `cl x (1 - F_Cl)` (F_Cl only, published table copied to `system/trigaux2024_tableC.csv`; no fitted coefficient). Diagnostic arm, never of record |
 | `tip-pitch-no-tip` | `--pitch-reference tip --tip-effects off` | Jha et al., *J. Sol. Energy Eng.* 136:031003 (2014) p.6: "there should be no need for using the Prandtl correction within the ALM framework"; no tip correction at all, root kept. Diagnostic arm, never of record |
 | `tip-pitch-du-selig-ra` | `--pitch-reference tip --rotational-augmentation on` | `tip-pitch` plus `du-selig-ra` (`a=b=d=1`). Diagnostic arm, never of record |
 | `tip-pitch-ch-ra` | `--pitch-reference tip --rotational-augmentation on --rotational-augmentation-model ChaviaropoulosHansen` | `tip-pitch` plus `ch-ra` (`a=2.2, h=1, n=4`; `pitchOffset` −4.815 from the tip reference). Diagnostic arm, never of record |
@@ -993,8 +1018,10 @@ BEM; `buildAeroDynCase.py --inflow-scale F` runs it at inflow x F with rpm and d
   only.
 - The tower is not modelled (rotor + hub only); EAEROTH is a blade pressure
   integration and the measured loads include tower shadow.
-- Blockage is not simulated (uniform free box versus the NASA-Ames test
-  section); documented, not corrected.
+- Blockage is not simulated in the default free box; `--domain tunnel` models it
+  with slip walls on the 24.4 × 36.6 m section (8.9 %), which is an upper bound
+  (no wall boundary layer), see "Wind-tunnel domain". The tunnel results are
+  only as valid as that idealisation.
 
 ## Data and tests
 

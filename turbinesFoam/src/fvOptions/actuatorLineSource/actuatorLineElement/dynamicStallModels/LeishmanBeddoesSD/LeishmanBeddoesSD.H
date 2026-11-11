@@ -28,6 +28,11 @@ Description
     Leishman-Beddoes dynamic stall model modified by Sheng et al. (2008),
     with modifications from Dyachuk's PhD thesis (2015).
 
+    [Sheng2008] W. Sheng, R. A. McD. Galbraith, F. N. Coton, J. Sol. Energy
+    Eng. 130(3) (2008), doi:10.1115/1.2931509 (taken to be that paper);
+    [DyachukPhD] E. Dyachuk, PhD thesis, Uppsala University, 2015 (title not
+    verified). Base model: [LeishmanBeddoes1989].
+
 SourceFiles
     LeishmanBeddoesSD.C
 

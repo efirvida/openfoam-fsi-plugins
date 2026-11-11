@@ -206,7 +206,7 @@ Foam::scalar Foam::fv::bladeSurfaceSampler::nodeSupport(const scalar h) const
         return 2.0*h*meshFactor_*Foam::sqrt(Foam::log(1.0/0.001));
     }
 
-    // Paper cosine kernel, support |r| <= 2.5 (Eq. 8)
+    // [YangSotiropoulos2018] cosine kernel, support |r| <= 2.5 (Eq. 8)
     return 2.5*h;
 }
 
@@ -566,7 +566,7 @@ Foam::label Foam::fv::bladeSurfaceSampler::distributeNodeForce
 
                     if (w > 0.0)
                     {
-                        // Eq. 18 with the paper's negative sign: the distributed
+                        // Eq. 18 with the [YangSotiropoulos2018]'s negative sign: the distributed
                         // force acts on the flow, F acts on the blade
                         ff[cellI] -= F*(w/V[cellI]);
                         ++visited;

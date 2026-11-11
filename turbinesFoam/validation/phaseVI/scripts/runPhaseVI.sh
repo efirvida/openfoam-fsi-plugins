@@ -4,7 +4,7 @@
 #
 # Usage:
 #   runPhaseVI.sh -m alm|asm|asm-mesh -u <wind-speed> [-mesh coarse|fine|ultra]
-#                 [--domain long|squat] [-s H|S] [--solver urans|iddes]
+#                 [--domain long|squat|tunnel] [-s H|S] [--solver urans|iddes]
 #                 [--div-phi-u "bounded Gauss linear"] [--polar FILE.dat]
 #                 [--nchordwise N] [--n-elements N] [--ranks N]
 #                 [--end-revs FLOAT] [--run-label WORD] [--stage0]
@@ -112,6 +112,7 @@ rotational_augmentation_model=""
 root_effects=""
 tip_effects=""
 tip_correction=""
+near_tip_correction=""
 div_phi_u=""
 polar=""
 refine_level=0
@@ -145,6 +146,7 @@ while [ $# -gt 0 ]; do
         --root-effects) root_effects="$2"; shift ;;
         --tip-effects) tip_effects="$2"; shift ;;
         --tip-correction) tip_correction="$2"; shift ;;
+        --near-tip-correction) near_tip_correction="$2"; shift ;;
         --div-phi-u) div_phi_u="$2"; shift ;;
         --polar) polar="$2"; shift ;;
         --refine-level) refine_level="$2"; shift ;;
@@ -179,7 +181,7 @@ case "$mesh" in
     *) echo "ERROR: unsupported mesh: $mesh" >&2; exit 2 ;;
 esac
 case "$domain" in
-    long|squat) ;;
+    long|squat|tunnel) ;;
     *) echo "ERROR: unsupported domain: $domain" >&2; exit 2 ;;
 esac
 case "$sequence" in
@@ -272,6 +274,12 @@ if [ -n "$tip_correction" ]; then
     case "$tip_correction" in
         on|off) ;;
         *) echo "ERROR: --tip-correction must be on or off" >&2; exit 2 ;;
+    esac
+fi
+if [ -n "$near_tip_correction" ]; then
+    case "$near_tip_correction" in
+        on|off) ;;
+        *) echo "ERROR: --near-tip-correction must be on or off" >&2; exit 2 ;;
     esac
 fi
 if [ -n "$div_phi_u" ]; then
@@ -473,6 +481,9 @@ fi
 if [ -n "$tip_correction" ]; then
     render_args+=(--tip-correction "$tip_correction")
 fi
+if [ -n "$near_tip_correction" ]; then
+    render_args+=(--near-tip-correction "$near_tip_correction")
+fi
 if [ -n "$div_phi_u" ]; then
     render_args+=(--div-phi-u "$div_phi_u")
 fi
@@ -567,8 +578,8 @@ if [ "$refine_level" -gt 0 ]; then
     # levels can never share a directory and borrow each other's mesh.
     mesh_dir="$mesh_dir-r$refine_level"
 fi
-if [ "$domain" = "squat" ]; then
-    mesh_dir="$mesh_dir-squat"
+if [ "$domain" = "squat" ] || [ "$domain" = "tunnel" ]; then
+    mesh_dir="$mesh_dir-$domain"
 fi
 if [ ! -d "$mesh_dir/constant/polyMesh" ]; then
     echo "Shared $mesh mesh at refinement level $refine_level not found; generating it"
@@ -760,6 +771,9 @@ else
     fi
     if [ -n "$tip_correction" ]; then
         suggestion="$suggestion --tip-correction $tip_correction"
+    fi
+    if [ -n "$near_tip_correction" ]; then
+        suggestion="$suggestion --near-tip-correction $near_tip_correction"
     fi
     if [ -n "$div_phi_u" ]; then
         suggestion="$suggestion --div-phi-u \"$div_phi_u\""

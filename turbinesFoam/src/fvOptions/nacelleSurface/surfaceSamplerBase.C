@@ -625,7 +625,7 @@ Foam::vector Foam::fv::surfaceSamplerBase::interpolateVelocity
     // be assigned back: a discarded return keeps the rank-local partial
     // sums, making each rank interpolate from its own subset (a rank with
     // no cell in the stencil would report a zero velocity) instead of the
-    // paper's Eq. 7 global kernel average.
+    // [YangSotiropoulos2018]'s Eq. 7 global kernel average.
     sumW = returnReduce(sumW, sumOp<scalar>());
     sumU = returnReduce(sumU, sumOp<vector>());
 
@@ -672,7 +672,7 @@ void Foam::fv::surfaceSamplerBase::distributeForce
 
                 if (w > 0.0)
                 {
-                    // Eq. 18 with the paper's negative sign: the distributed
+                    // Eq. 18 with the [YangSotiropoulos2018]'s negative sign: the distributed
                     // force acts on the flow, F_i acts on the body
                     ff[cellI] -= F*(w/mesh_.V()[cellI]);
                 }
@@ -716,7 +716,7 @@ void Foam::fv::surfaceSamplerBase::distributeForce
 
             if (w > 0.0)
             {
-                // Eq. 18 with the paper's negative sign: the distributed
+                // Eq. 18 with the [YangSotiropoulos2018]'s negative sign: the distributed
                 // force acts on the flow, F_i acts on the body
                 ff[cellI] -= F*(w/mesh_.V()[cellI]);
             }

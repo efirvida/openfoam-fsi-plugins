@@ -1,0 +1,23 @@
+# Central bibliography and in-code citations for implemented models
+Branch `feat/v13-adoption-asm`, worktree `.worktrees/tip-pitch`. Closes the gaps of wait-t16-prep.md L4 (T3 audit): every implemented physical model cites its source (authors, journal, year, DOI/report, equation numbers) in code and in a central `REFERENCES.md`; prerequisite for the article (memory topic paper/tip-virtual-camber-rotor).
+
+## Specs
+- S1 (agent proposal, owner "si hazlo."): "completar la documentación: un `REFERENCES.md` central y las citas completas con número de ecuación en el código. Es trabajo sin cómputo, ideal mientras esperamos, y es requisito para el artículo."
+- S2 (same proposal): "Antes de documentar Shen habría que resolver el posible error de signo." Resolved in L2: no error; document the convention.
+- S3: gaps to close, verbatim from the audit ranking (L4 of wait-t16-prep.md): "(1) no central bibliography; (2) Dag & Sorensen without journal/DOI outside odd/; (3) Glauert/Prandtl, Shen (possible sign inversion in g ...) and Leishman-Beddoes classes without citations; (4) projection epsilon (Massie 2019, Mendoza) without full citation, bladeSurface 'paper Eq. 8/18' unidentified; (5) primary Du & Selig 1998 and Chaviaropoulos & Hansen 2000 missing in code, Lindenburg and added mass unreferenced."
+- S4: comments and docs only; no behaviour change (C++ and Python outputs unchanged, libraries still build).
+
+## Tasks
+- T1 [done] (S1, S3): verify every citation against the publisher/DOI (web) and identify the unidentified ones (bladeSurface paper, Mendoza, Lindenburg, added mass source). Route: gentle-ai-explore (web). Commit: n/a.
+- T2 [done, 00a4487] (S1-S4): write `REFERENCES.md` (repo root) with verified entries and keys; add the citation + equation numbers to each model's code comment/header; link REFERENCES.md from root README and turbinesFoam/README; document the Shen c1 sign convention; CHANGELOG entry; rebuild check. Route: gentle-ai-worker. Commit: 00a4487.
+
+## Log
+- L1 (owner, 2026-11-10): "si hazlo." (to "¿Completo la documentación ahora? ... `REFERENCES.md` central y agregar las citas completas con número de ecuación en el código ... Antes de documentar Shen habría que resolver el posible error de signo.")
+- L2 (agent, 2026-11-10): Shen sign resolved without code change: code `g = exp(-c1(B lambda - c2)) + 0.1` (axialFlowTurbineALSource.C:709-728), case passes `c1 0.125; c2 21` (phaseVI/tools/generate_case.py:752), equivalent to Shen 2005 `g = exp[-0.125(B lambda - 21)] + 0.1`; phasevi-endeffect-diagnostic.md A3 is a dictionary-convention note, not a defect. Document the convention in code.
+- L3 (owner, 2026-11-10): "que tests estan rotos?" Answered: test_element_residuals is stale since 6f27aad (static header check lacks the optional near-tip columns); test_phasevi_yaw_pitch_reference [H]/[S] schema mismatch between extractYawPitchReference.py (yaw/pitch nominal at index 10) and the committed tables (cth at 10), needs checking which is right. Fix offered, not yet authorised.
+- L4 (agent, 2026-11-10): T1 explorer verified 30+ citations (Crossref/doi.org/OSTI/publisher; web rate-limited). Notable inconsistencies: Dag & Sorensen print year 2020 (online 2019); Martinez-Tossas 2023 online vs 2024 issue; Zormpa 2024 vs "2025" in model-improvements-register.md; "paper Eq. 8/18" = Yang & Sotiropoulos 2018 (arXiv:1702.02108v4).
+- L5 (agent, 2026-11-10): T2 done by worker, commit 00a4487 (24 files, +181/-43). Parent verified: 21 C/H files comment-only (preprocessed with comments stripped, HEAD vs working copy identical, 0 diffs); doc tests 5 passed (worker). Open: "not verified" list in REFERENCES.md (Glauert/Prandtl primary source, LB3G source, Sheng 2008 identity, Dyachuk/Munduate/Trigaux thesis titles, Strickland report number, Mendoza identity, some volumes/pages, Somers/Ramsay/Simms, turbinesFoam Zenodo DOI); bladeSurfaceSource.C / nacelleSurfaceSource.C Eq. 18 comments lack the key (headers have it); runtime string "paper Eq. 8" in bladeSurfaceSampler.C:655 left unchanged (S4: no behaviour change). Not audited: root plugins, Python scripts.
+- L6 (owner + agent, 2026-11-10): owner "si" to fixing the 3 pre-existing failures (L3). Commit 1d77973.
+  - test_element_residuals: the static header test now checks the always-written columns, and the near-tip columns as a conditional append. The C++ is unchanged.
+  - test_phasevi_yaw_pitch_reference [H]/[S]: the committed tables were correct. `extractYawPitchReference.SPANWISE_COLUMNS` appended `cth, ctq, qnorm_pa` a second time, because the base schema already carries them. Enriched columns are now appended only when missing.
+  - RED was the 3 failures, also seen on a clean HEAD. GREEN: 23 passed, 1 skipped in the two files.

@@ -2,7 +2,166 @@
 
 ## [Unreleased] — 2026-10-01
 
+### Documentation
+
+#### Central bibliography and in-code citations for the implemented models
+
+**Files:** `REFERENCES.md` (new), `README.md`, `turbinesFoam/README.md`,
+`turbinesFoam/src/fvOptions/{axialFlowTurbineALSource,actuatorLineSource,bladeSurface,nacelleSurface}/**`,
+`turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineElement/{actuatorLineElement,actuatorSurfaceElement}.{C,H}`,
+`.../actuatorLineElement/dynamicStallModels/LeishmanBeddoes*/*.H`, `.../addedMassModel/addedMassModel.{C,H}`.
+
+**Problem:** no central bibliography; Dag & Sorensen, Glauert/Prandtl, Shen, the Leishman-Beddoes classes, added mass,
+Du-Selig, Chaviaropoulos-Hansen, Lindenburg, the projection epsilon (Massie/Mendoza) and the actuator-surface
+"paper Eq. 8/18" had no complete citation (authors, journal, year, DOI, equation numbers) or an unidentified one.
+
+**Fix:** `REFERENCES.md` lists every model with a `[Key]`, full citation, DOI/report number, implementing path and
+equations used, plus a "Not yet verified" list; code comments carry `[Key]` + citation + equation numbers; the Shen
+sign convention (`g = exp(-c1 (B lambda - c2)) + 0.1`, `c1 = 0.125`, `c2 = 21`) is documented. Comments and
+documentation only: the C++ diff is identical to HEAD once comments are stripped; no behaviour change.
+
+### Bug Fixes
+
+#### Phase VI yaw/pitch extractor: no duplicated plane-of-rotation columns
+
+**Files:** `turbinesFoam/validation/phaseVI/scripts/extractYawPitchReference.py`, `turbinesFoam/tests/test_element_residuals.py`.
+
+**Problem:** the spanwise schema of `extractUAE6Reference` already carries `cth, ctq, qnorm_pa`, and the yaw/pitch
+extractor appended them again, so a regeneration would write them twice and its schema no longer matched the
+committed `data/experiment/yaw-pitch/*_spanwise.csv` (tests `test_schema_prefix_matches_committed_sequence_tables`
+failed). Separately, the static element-CSV header test predated the optional near-tip columns.
+
+**Fix:** enriched columns are appended only when missing (committed tables unchanged); the header test checks the
+always-written columns and the near-tip columns as a conditional append.
+
 ### Features
+
+#### IEA-15/IEA-22 spanwise comparison: tangential force in the rotor-plane frame
+
+**Files:** `turbinesFoam/validation/{iea15mw,iea22mw}/{scripts/compare_spanwise.py,README.md}`,
+`turbinesFoam/tests/{test_compare_spanwise.py,test_iea22_compare_spanwise.py}`.
+
+**Problem:** the AeroDyn/OLAF reference store holds chord-frame `BNCn`/`BNCt`, while the ALM element
+`c_ref_n`/`c_ref_t` are the rotor-plane pair `Cx`/`Cy`; the reported c_t ratio divided `Cy` by `Ct` and was
+only "informational", so the ALM-OLAF power gap could not be located along the span.
+
+**Fix:** AeroDyn sources are rotated to the plane, `Cx = Cn cos(theta) - Ct sin(theta)`, `Cy = Cn sin(theta) + Ct cos(theta)`,
+`theta = twist + pitch` (`--pitch`); IEA-22 adds an integral check (torque/thrust from the spanwise forces against
+the run metrics, closes within 1.3 %) and a per-band torque-gap table. c_n output is unchanged.
+
+#### Phase VI near-tip functions: stall cells and BEM stall references
+
+**Files:** `turbinesFoam/validation/phaseVI/{scripts/applyNearTipFunctions.py,analysis/near-tip-functions/REPORT.md}`,
+`turbinesFoam/tests/test_near_tip_functions.py`.
+
+**Problem:** the offline Trigaux tool knew only S5-S8 and H7 and exited when a model had no run, so the stall
+regime could not be assessed.
+
+**Fix:** `--cells` also accepts S10, S13, S15, S20, S25 (default unchanged, outputs byte-identical); a model with no
+run for a cell is skipped with a message instead of exiting 2 (also for the default cells). AeroDyn BEM references
+at S 10-25 m/s were run with the existing `aerodyn.slurm`.
+
+#### Actuator line: opt-in near-tip virtual-camber correction (Trigaux et al. 2024, F_Cl)
+
+**Files:** `turbinesFoam/src/fvOptions/{actuatorLineSource/actuatorLineSource.C,actuatorLineSource/actuatorLineElement/actuatorLineElement.{C,H},axialFlowTurbineALSource/axialFlowTurbineALSource.C}`,
+`turbinesFoam/validation/phaseVI/{tools/generate_case.py,scripts/{runPhaseVI.sh,checkModelDefinition.py},config/{model-variants,model-definition,model-definition-v1.2}.yaml,README.md}`,
+`turbinesFoam/tests/{test_near_tip_correction.py,test_model_variants.py,nearTipCorrectionCase/}`, `turbinesFoam/README.md`.
+
+**Problem:** every lifting-line-class model (ALM + Dag & Sorensen, OLAF, BEM) over-predicts the Phase VI c_n at r/R 0.95
+(+20 to +26 % at S U7) with the same polar; the shared part is the "virtual camber" of the real wing near the tip, absent from
+line models (Trigaux et al. 2024, JFM 989:A1; thesis App. C: `F_Cl` is kernel-independent). Applied offline it brings 4 of 5 cells
+inside 10 % (`odd/tasks/tip-model-analysis.md` L9-L11).
+
+**Fix:** `nearTipCorrection { active on; model TrigauxVirtualCamber; table "..."; }` beside `tipCorrection`: per element
+`(d_tip/c)_eff = integral ds/c` along the geometry chain (thesis eq. 3.29-3.31), `F_Cl` by linear interpolation in the published
+table (0 beyond its last row), computed once at construction, and `cl *= (1 - F_Cl)` after the polar/dynamic-stall/added-mass step
+and before the end-effect factor and the force, so the Dag & Sorensen circulation uses the corrected `cl`. Drag is unchanged;
+`F_alpha_e` is not applied (it would double count the mollification with Dag & Sorensen). No fitted coefficient. Default off: the
+element CSV, fields and log of an existing case are byte-identical (proved on `tests/asmTipEpsilon`); with the option on, two
+columns `near_tip_f_cl,near_tip_d_over_c` are appended to the element CSV. Phase VI: `--near-tip-correction on|off` (default off,
+renders nothing), variant `tip-pitch-dag-sorensen-neartip` (v1.3 + flag), knob `nearTipCorrection.active` certified by
+`checkModelDefinition.py` (off in v1.2 and v1.3). RED/GREEN solver test `tests/test_near_tip_correction.py`.
+
+#### Phase VI: wind-tunnel blockage domain (`--domain tunnel`)
+
+**Files:** `turbinesFoam/validation/phaseVI/{tools/case_config.py,tools/generate_case.py,config/case.yaml,scripts/{mesh,runPhaseVI,stage0}.sh,README.md}`,
+`turbinesFoam/tests/test_phasevi_tunnel.py`.
+
+**Problem:** blockage was documented as "not simulated": the free box ignores the 24.4 x 36.6 m NASA-Ames test section
+(rotor/section 8.9 %).
+
+**Fix:** new `domain_tunnel` (y +-18.3 m, z 0..24.4 m, x as `long`), `axis_extents_D(..., "tunnel")`, `domain_resolution`
+(outer y blocks and both z blocks refit to the shorter lengths, keeping the cell beside the core/hub exact and the stretching
+ratio as close as possible to the reference) and `blockage_ratio`; `cell_count` and `render_block_mesh` use it; the scripts
+accept `tunnel` with a `-tunnel` directory suffix. Coarse/fine/ultra: 2.61 M / 8.96 M / 21.07 M cells; coarse meshes with
+`blockMesh` + `checkMesh` OK. `long`/`squat` blockMeshDict byte-identical. Slip walls: the blockage is an upper bound (no tunnel
+wall boundary layer). `cell_sizes` now handles a unit ratio (uniform block) instead of dividing by zero
+(`odd/tasks/phasevi-tunnel-domain.md` T1).
+
+#### IEA 22-280-RWT: SDumont run platform, OLAF-DP sizing, BEM reference (`validation/iea22mw`)
+
+**Files:** `turbinesFoam/validation/iea22mw/{scripts/{run_iea22mw_case.sh,submit_iea22.sh,platform_derive.py,olaf_trace.py,slurm/{l2-ds,olaf-dp}.slurm},analysis/,runs/.gitignore,README.md}`,
+`turbinesFoam/tests/test_iea22_platform.py`.
+
+**Problem:** the IEA-22 case had no way to run on SDumont like the IEA-15 ALM L2 D&S reference, and every IEA-15 platform number
+(ranks, decomposition, domain, sampling radius, snappy level, rpm) was a literal in the IEA-15 Slurm files.
+
+**Fix:** a wrapper of the IEA-15 runner (no copy) and `platform_derive.py`, which reads the IEA-15 files and carries each value by
+a geometry-only rule (D multiples, R-proportional extents, dimensionless numbers as is, ranks from the lattice checked against the
+cells-per-rank rule); `l2-ds.slurm` (ALM, D&S, 120 deg output, 23 revolutions, no requeue), `olaf-dp.slurm` (guideline OLAF, one
+task), `submit_iea22.sh` (dry run default, bigmem for ALM, `sequana_cpu` for OLAF, `--ntasks` only, refuses existing run dirs).
+Sizing from dev-partition runs: ALM 6.0 s/step (9,588 steps, 16 h); OLAF 4-5 h extrapolated. BEM rated reference stored in
+`analysis/`. Found by the smoke run: the IEA-22 case aborts at start because `TOWER_N_ELEMENTS = 40` (IEA-15) is not a multiple
+of the 30 IEA-22 tower segments (not fixed here, see the odd task).
+
+#### IEA 22-280-RWT: nominal point, no shaft tilt, IEA-15 mesh proportions (`validation/iea22mw`)
+
+**Files:** `turbinesFoam/validation/iea22mw/{tools/{generate_case,mesh_proportions}.py,scripts/{build_openfast_templates,openfast_iea22}.py,case/system/{blockMeshDict,controlDict,snappyHexMeshDict},data/openfast-v5-templates/,PROVENANCE.md,README.md,openfast/README.md}`,
+`turbinesFoam/validation/iea15mw/tools/generate_case.py`, `turbinesFoam/tests/{test_iea22_mesh_proportions,test_iea22_openfast}.py`.
+
+**Problem:** owner decision 2026-11-02: IEA-22 at nominal speed, no inclinations, mesh with the IEA-15 proportions. The case still
+carried a 6 deg shaft tilt (nacelle capsule; OpenFAST `ShftTilt -6`) and castellated extents guessed by rounding (disk radius
+175 m, wake 200 m, tower box floor -190 m = H + 20 m) that are not the IEA-15 values in units of R (175/R = 1.232 vs 1.243).
+
+**Fix:** the castellated extents, tower box and near-ground cell are now the IEA-15 constants times `R22/R15` (identical in R:
+disk 1.243 R, wake 1.409 R, downwind 3.895 R, floor -1.409 R, ground cell 0.0166 R; domain, `D/32` base cell 8.875 m and level 3
+already scaled). IEA-15 generator: new `--shaft-tilt on|off` (default `on`, byte-identical IEA-15 output); IEA-22 default `off`,
+`on` opts in (rotor axis horizontal in both). OpenFAST templates: `ShftTilt 0`, `OverHang -14.0`, `Twr2Shft 5.614` (hub stays at
+170 m), tower on; `openfast_iea22.py setup --tilt` replaces `--no-tilt`. Precone 4 deg is blade geometry and is kept. Rated point
+(11.134927 m/s, 6.853997 rpm, 4.127462 deg) is the only documented point. Remaining differences from IEA-15, both from the real hub
+height: 4,171,440 vs 4,299,792 base cells (34 vs 36 vertical cells below the hub) and `deltaT` +2 % in tip travel. BEM preflight at
+rated, tilt 0, tower on: Cp 0.45243, Ct 0.64171 vs Cp_Ct_Cq.txt 0.44410 / 0.63839 (+1.87 % / +0.52 %); tilted 0.44605 / 0.63757; no
+tower 0.45328. No coefficient tuned, nothing meshed or run on Slurm (`odd/tasks/iea22-case-readiness.md`).
+
+#### IEA 22-280-RWT: OpenFAST AeroDyn BEM/OLAF reference setup (`validation/iea22mw`)
+
+**Files:** `turbinesFoam/validation/iea22mw/{data/openfast-v5-templates/,openfast/README.md,README.md,scripts/{build_openfast_templates,openfast_iea22,rated_table_check,import_olaf_reference}.py}`,
+`turbinesFoam/tests/test_iea22_openfast.py`.
+
+**Problem:** the IEA-22 case had no code-to-code reference; the IEA-15 OpenFAST templates point at absolute paths of the
+IEA-15 repository and the OLAF spanwise CSV behind the reference store was produced by hand.
+
+**Fix:** v5.0.0 templates generated from the IEA-15 layout and the IEA-22 monopile values (rigid rotor, `UA_Mod 0`,
+`BEM_Mod 2`, 59 staged polars, R = 142 m), a case writer/runner/extractor (`metrics.json`, `spanwise.csv`), a Cp/Ct plausibility
+check against the published tables, and an importer for the `olaf-fvw` / `openfast-bem` blocks that reuses the IEA-15 store code
+and refuses unconverged cases. Preflight only: BEM at the rated point ran (Cp 0.4460, Ct 0.6376; WISDEM rated row 0.4340 / 0.6316),
+an OLAF smoke ran 4 revolutions with a 120-panel wake and is not a result. No coefficient was tuned
+(`odd/tasks/iea22-case-readiness.md` T2).
+
+#### IEA 22-280-RWT: geometry, polars and case skeleton (`validation/iea22mw`)
+
+**Files:** `turbinesFoam/validation/iea22mw/{README.md,PROVENANCE.md,tools/,scripts/buildPolars.py,data/,case/}`,
+`turbinesFoam/validation/iea15mw/tools/{blade_geometry.py,generate_case.py}`, `turbinesFoam/tests/test_iea22mw_case.py`.
+
+**Problem:** the 22 MW reference turbine had no turbinesFoam case; its published diameter (284 m) could not be
+assumed to follow the IEA-15 convention (projected radius `TipRad*cos(precone)`).
+
+**Fix:** new package mirroring `iea15mw` (59-station geometry table, 59 `profileData` polars from the OpenFAST
+AirfoilInfo files, generated case, `--check` modes, tests). The radius is decided from evidence: workbook tip
+speed, windIO and ElastoDyn give R = 142.0 m = `TipRad` (not projected), hub radius 4.2 m, precone 4 deg
+(`PROVENANCE.md`). The IEA-15 generator is reused, not copied; its `read_blade_table`/`read_geometry` take an
+`n_stations` argument (default 50) and `blade_profile_names` counts the stations of the geometry CSV, so the
+IEA-15 outputs are unchanged. No model coefficient was changed (`odd/tasks/iea22-case-readiness.md` T1).
 
 #### Phase VI: double-precision OpenFAST as the binary of record
 
@@ -171,6 +330,26 @@ constants. Diagnostic only (`POLAR=S809_DUT_Re1M_total.dat`), never of record. A
 files regenerate byte-identical.
 
 ### Fixes
+
+- **Phase VI tunnel mesh refused by its own cell-count gate.**
+  Files: `turbinesFoam/validation/phaseVI/tools/case_config.py`, `turbinesFoam/validation/phaseVI/scripts/mesh.sh`, `turbinesFoam/tests/test_phasevi_tunnel.py`.
+  Problem: `mesh.sh` checked every domain against the long-domain band (6.6-6.8 M cells), so the 2.61 M-cell `--domain tunnel` mesh always failed (job 11641895).
+  Fix: `target_cells(..., domain)` and `case_config.py --target-cells MESH --domain DOMAIN` return the tunnel's exact block count within `cell_tolerance`; long and squat keep the configured band; `mesh.sh` passes its domain.
+
+#### ASM+mesh: Dag & Sorensen tip correction was still inert (`surfaceGeometry`)
+
+**Files:** `turbinesFoam/src/fvOptions/actuatorLineSource/actuatorLineElement/actuatorLineElement.C`,
+`turbinesFoam/tests/{test_asm_tip_epsilon.py,asmMeshTipEpsilon/}`, `turbinesFoam/README.md`.
+
+**Problem:** the 3ed889b fix stored the epsilon only on the strip-projection path. With `surfaceGeometry`,
+`actuatorLineSource` forces `projectElementForce false`, `applyForceField` (the only active caller of
+`calcProjectionEpsilon()`) is skipped, `projectionEpsilon_` stayed `-VGREAT` and the correction was identically zero for
+ASM+mesh (README claimed otherwise). RED on a pre-fix build: `assert -1e+300 > 0.0` and `assert 0.0 > 0.0` (maxCorr).
+
+**Fix:** both `addSup` overloads call `calcProjectionEpsilon()` when the projection is skipped. It only reads the mesh and
+element state; with the tip correction off the mesh-backed case is byte-identical to the pre-fix build (`U`, `p`,
+`force.turbine`, element CSVs; only the wall-clock column of `surface_distribution.csv` differs). ALM and plain ASM paths
+unchanged.
 
 #### Phase VI acceptance criteria R3: uniform 10 % including the tip station
 

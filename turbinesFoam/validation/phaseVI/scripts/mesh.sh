@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Generate and validate one Phase VI mesh.
 #
-# Usage: mesh.sh <coarse|fine|ultra> [--domain long|squat] [--speed 7]
+# Usage: mesh.sh <coarse|fine|ultra> [--domain long|squat|tunnel] [--speed 7]
 #                [--refine-level N] [--dir DIR]
 #
 # The case skeleton is rendered into runs/mesh-<mesh>[-r<N>][-<domain>]/, where
@@ -52,7 +52,7 @@ if [ -z "$mesh" ]; then
     exit 2
 fi
 case "$domain" in
-    long|squat) ;;
+    long|squat|tunnel) ;;
     *) echo "ERROR: unsupported domain: $domain" >&2; exit 2 ;;
 esac
 case "$refine_level" in
@@ -66,8 +66,8 @@ if [ -z "$dir" ]; then
     if [ "$refine_level" -gt 0 ]; then
         dir="$dir-r$refine_level"
     fi
-    if [ "$domain" = "squat" ]; then
-        dir="$dir-squat"
+    if [ "$domain" = "squat" ] || [ "$domain" = "tunnel" ]; then
+        dir="$dir-$domain"
     fi
 fi
 
@@ -154,7 +154,7 @@ if ! awk -v value="$nonortho" 'BEGIN { exit !(value <= 1e-10) }'; then
     exit 3
 fi
 
-band=$(python3 "$root/tools/case_config.py" --target-cells "$mesh" --refine-level "$refine_level")
+band=$(python3 "$root/tools/case_config.py" --target-cells "$mesh" --refine-level "$refine_level" --domain "$domain")
 low=${band% *}
 high=${band#* }
 if [ "$cells" -lt "$low" ] || [ "$cells" -gt "$high" ]; then

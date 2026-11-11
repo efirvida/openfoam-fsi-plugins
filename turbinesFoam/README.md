@@ -19,14 +19,17 @@
 > and the packages under `validation/` document how each one was verified.
 >
 > 1. **Actuator-line load chain.** Two rotational-augmentation models for the
->    3D stall delay, after Du–Selig and after Lindenburg, and an optional
->    induced-velocity tip correction after Dağ & Sørensen, as an alternative to
+>    3D stall delay, after Du–Selig [DuSelig1998] and after Lindenburg [Lindenburg2004], and an optional
+>    induced-velocity tip correction after Dağ & Sørensen [DagSorensen2020]
+>    (*Wind Energy* 23(2):148-160, doi:10.1002/we.2419), as an alternative to
 >    the original Glauert end effects. That root effect is the Prandtl hub loss
 >    as AeroDyn builds it (`f_hub = (B/2)*(r − rHub)/rHub`, with the new
 >    rotor-level `hubRadius` key supplying `rHub`); the tip factor is unchanged.
 >    The previous root constant was the tip constant reflected about the mid
 >    radius, which no source supports, and a `rootEffects on` case must now set
->    `hubRadius`. The `Shen` model's root factor is still the reflected tip
+>    `hubRadius`. The `Shen` model's tip factor is Shen et al. 2005 [Shen2005]
+>    (*Wind Energy* 8(4):457-475, doi:10.1002/we.153; `c1 0.125; c2 21`
+>    reproduce its `g = exp[-0.125(B λ − 21)] + 0.1`); its root factor is still the reflected tip
 >    constant; no source defines a Shen hub loss, so it is left unchanged and
 >    unmeasured, a known follow-up. Both act on the polar lookup and are read
 >    from the element dictionary (`rotationalAugmentation { active on; … }`,
@@ -114,11 +117,13 @@ default actuator line element. It is a **hybrid** of two published models, not
 the model of one paper:
 
 - the **chord-averaged sampling and the uniform chordwise force distribution**
-  follow Yang & Sotiropoulos (arXiv:1702.02108v4, Sec. 2.1);
+  follow Yang & Sotiropoulos [YangSotiropoulos2018] (arXiv:1702.02108v4, Sec. 2.1);
 - the **force spreading** is a spherical Gaussian kernel,
   `eta = exp(-(r/eps)^2)/(eps^3 pi^1.5)`, as in the actuator surface model of
-  Massie, Ouro, Stoesser & Luo (2019, *Energies*), whose width is
-  `eps = max(c/4, 4*cbrt(V_cell))` (after Mendoza et al.). The paper's own
+  Massie, Ouro, Stoesser & Luo [Massie2019] (2019, *Energies* 12(24):4741,
+  doi:10.3390/en12244741, Eq. 13), whose width is
+  `eps = max(c/4, 4*cbrt(V_cell))` ("after Mendoza et al."; the Mendoza
+  reference is an inferred candidate [Mendoza2019], not verified). The paper's own
   smoothed four-point cosine delta kernel is not used here (see the
   *Kernel adaptation* note).
 
@@ -181,8 +186,14 @@ runtime, while the ALM tutorial defaults to `0.5`.
   inherited single-point kernel.
 - **Tip correction:** the surface element stores its mesh-based projection
   epsilon, so `tipCorrection { epsilon 0; }` (Dag & Sorensen) works on
-  surface elements. Before this fix the stored width stayed at `-VGREAT` and
-  the correction was silently zero for ASM and ASM+mesh.
+  surface elements. Two defects kept the stored width at `-VGREAT` (the
+  correction silently zero): the surface element never stored it (ASM, fixed
+  in 3ed889b), and with a mesh-backed `surfaceGeometry` (ASM+mesh) the strip
+  projection (`applyForceField`) is skipped, so it was never computed at all.
+  The element now computes its epsilon in `addSup` whenever the projection is
+  skipped. Only the ASM fix of 3ed889b covered the strip path; the
+  mesh-backed path is covered by the later fix (test
+  `tests/asmMeshTipEpsilon`). The deposited force is unchanged.
 - **HAWT-only:** the surface element is turbine-agnostic in principle, but
   only the axial-flow HAWT path is tested here. CFTAL/VAWT usage is
   untested.
@@ -194,6 +205,62 @@ runtime, while the ALM tutorial defaults to `0.5`.
   chord-averaged inflow and the strip-wise spreading, not from epsilon. The
   surface model's mesh-only epsilon is intended to be re-validated on a finer
   mesh where it gives 1–2 cells of overlap.
+
+## Near-tip virtual-camber correction (opt-in)
+
+Line models (BEM, lifting line, actuator line) over-predict the lift within about three chords of the
+blade tip because they sample the induction at a single chordwise point and miss the uneven chordwise
+induction of the real wing (the "virtual camber"). [Trigaux2024] Trigaux, Villeneuve, Dumas & Winckelmans (2024,
+*J. Fluid Mech.* 989:A1, doi:10.1017/jfm.2024.461; F. Trigaux PhD thesis, UCLouvain 2024, eq. 3.17-3.31
+and App. C) give a correction function `F_Cl` of the effective tip distance. The option scales the
+polar lift of every element:
+
+```
+cl <- cl * (1 - F_Cl((d_tip/c)_eff)),     (d_tip/c)_eff = integral from the element to the tip of ds / c(s)
+```
+
+The integral runs along the blade geometry chain with the chord linear between geometry points
+(thesis eq. 3.29-3.31); `F_Cl` is read by linear interpolation in `d/c` from the published table and is
+0 beyond the last tabulated `d/c` (3.46: outside the affected zone). There is no fitted coefficient.
+
+### Configuration
+
+Beside `tipCorrection` in `axialFlowTurbineALSourceCoeffs`:
+
+```
+nearTipCorrection
+{
+    active      on;                              // default off; absent block = off
+    model       TrigauxVirtualCamber;            // the only registered model
+    table       "system/trigaux2024_tableC.csv"; // case-relative or absolute path
+    kernel      "3D";                            // CSV block (default 3D)
+    sigmaOverC  0.25;                            // CSV block (default 0.25)
+}
+```
+
+`table` is either the committed
+`validation/phaseVI/data/near-tip-functions/trigaux2024_tableC.csv` (columns
+`kernel,sigma_over_c,d_over_c,F_l,F_Cl,F_alpha_e`; one `kernel`/`sigmaOverC` block is used) or a plain
+two-column `d/c F_Cl` file (blank or comma separated, `#` comments). `F_Cl` is independent of the kernel
+type and size in the thesis tables (spread <= 0.004 at the Phase VI stations), so any block may be used.
+
+### Behaviour and scope
+
+* Applied after the polar lookup (and dynamic stall / added mass) and before the end-effect factor and
+  the force, so the Dag & Sorensen circulation `0.5 c cl |Vrel|` uses the corrected `cl`, as in the
+  thesis (the correction acts during the force step). Drag and the angle of attack are unchanged.
+* `F_alpha_e` (the angle-of-attack correction that removes the mollification loss) is **not** applied:
+  with `tipCorrection` (Dag & Sorensen) on, the mollification is already compensated and `F_alpha_e` would
+  count it twice. Only the kernel-independent virtual-camber part `F_Cl` is used.
+* `(d_tip/c)_eff` and `F_Cl` are computed once at construction and printed per element. The geometry of a
+  rigid blade is static; for a deforming blade (FSI) the chain moves with the structure and the factor
+  would have to be refreshed each step (not done).
+* With `active on` the element CSV gets two extra trailing columns, `near_tip_f_cl,near_tip_d_over_c`;
+  with the option off the output is byte-identical to a build without it.
+* The Phase VI renderer exposes it as `--near-tip-correction on|off` (default off; variant
+  `tip-pitch-dag-sorensen-neartip` = v1.3 plus the flag); see `validation/phaseVI/README.md`.
+* Caveat: the functions were derived on steady translating wings (NACA 0015, AR 15) against wall-resolved
+  RANS; they remove the lifting-line-class error, not the ALM-specific mollification excess.
 
 ## Rotational augmentation (3D stall delay)
 
@@ -538,6 +605,11 @@ the reported torque.
   CSV schemas, two-rank totals, Gaussian conservation, STL failure paths) and
   the minimal rotating `tests/bladeSurfaceAFTAL` fixture (rotation lockstep
   and the D8 surface moment against `turbine.csv`).
+
+## References
+
+Every implemented model is cited, with DOI and equation numbers, in the repository-level
+[`REFERENCES.md`](../REFERENCES.md); code comments refer to its entries as `[Key]`.
 
 ## Publications
 

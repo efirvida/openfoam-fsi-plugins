@@ -39,7 +39,7 @@ Description
     - the body-frame transform (optional \c bodyOrigin and \c bodyAxis entries,
       completed deterministically) and the body-frame node geometry
     - the local cell size (findCell + reduce(minOp) sentinel)
-    - the paper's smoothed four-point cosine kernel (Eq. 8, support |r| <= 2.5)
+    - the [YangSotiropoulos2018]'s smoothed four-point cosine kernel (Eq. 8, support |r| <= 2.5)
       and the kernel-smoothed velocity interpolation (Eq. 7)
     - the Eq. 18 distribution helper: candidate list optional, \c nullptr means
       "all local cells" (the original nacelle behavior, byte-for-byte)
@@ -49,6 +49,13 @@ Description
     lists (\c nacelleSurfaceSampler is the static-frame, direct-forcing/friction
     consumer; the blade surface sampler is the rotating-frame, BEM-distribution
     consumer). This class never calls a force model.
+
+    Reference: [YangSotiropoulos2018] X. Yang, F. Sotiropoulos, "A new class of
+    actuator surface models for wind turbines", Wind Energy (2018),
+    doi:10.1002/we.2162, arXiv:1702.02108v4 (journal volume/pages not
+    verified); Eq. 7 velocity interpolation, Eq. 8 smoothed four-point cosine
+    kernel, Eq. 18 force distribution. Entry in the repository REFERENCES.md.
+
 
 SourceFiles
     surfaceSamplerBase.C

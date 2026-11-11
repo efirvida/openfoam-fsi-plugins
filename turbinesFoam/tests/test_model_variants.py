@@ -40,7 +40,8 @@ def render(tmp_path, name):
 @pytest.mark.parametrize('name', ['v1.2', 'v1.3', 'shen-tip', 'dag-sorensen-tip',
                                   'ring-sampling', 'du-selig-ra', 'ch-ra', 'tip-pitch',
                                   'tip-pitch-dag-sorensen', 'tip-pitch-no-tip',
-                                  'tip-pitch-du-selig-ra', 'tip-pitch-ch-ra'])
+                                  'tip-pitch-du-selig-ra', 'tip-pitch-ch-ra',
+                                  'tip-pitch-dag-sorensen-neartip'])
 def test_variants_render_and_check(tmp_path, name):
     case = render(tmp_path, name)
     text = (case / 'system/fvOptions').read_text()
@@ -102,6 +103,7 @@ def test_unknown_variant_refused_before_input(tmp_path):
     ('--velocity-sample-radius', '-1', 'must be a non-negative finite number'),
     ('--velocity-sample-radius', 'nan', 'must be a non-negative finite number'),
     ('--n-velocity-samples', '0', 'must be a positive integer'),
+    ('--near-tip-correction', 'maybe', 'must be on or off'),
 ])
 def test_runner_rejects_invalid_flags_before_environment(flag, value, message):
     result = subprocess.run(['bash', str(ROOT / 'scripts/runPhaseVI.sh'),
@@ -149,6 +151,25 @@ def test_runner_forwards_sampling_and_model(tmp_path, ra_model):
     assert 'velocitySampleRadius 3.3;' in text
     assert 'nVelocitySamples 16;' in text
     assert 'c1 0.125;' in text and 'c2 21;' in text
+
+
+def test_runner_forwards_near_tip_correction(tmp_path):
+    package = tmp_path / 'validation/phaseVI'
+    shutil.copytree(ROOT, package, ignore=shutil.ignore_patterns(
+        'runs', 'results', 'polyMesh', '__pycache__'))
+    (tmp_path / 'geometry').symlink_to(ROOT.parents[1] / 'geometry')
+    (package / 'scripts/check_environment.sh').write_text('#!/bin/sh\nexit 0\n')
+    mesh = package / 'runs/mesh-coarse/constant/polyMesh'
+    mesh.mkdir(parents=True)
+    (mesh / '.keep').write_text('')
+    env = {k: v for k, v in ENV.items() if not k.startswith('SLURM_')}
+    result = subprocess.run(['bash', str(package / 'scripts/runPhaseVI.sh'),
+        '-m', 'alm', '-u', '7', '--near-tip-correction', 'on'],
+        capture_output=True, text=True, env=env, cwd=package)
+    assert result.returncode == 0, result.stderr
+    case = package / 'runs/alm-U7-coarse'
+    assert 'model TrigauxVirtualCamber;' in (case / 'system/fvOptions').read_text()
+    assert (case / 'system/trigaux2024_tableC.csv').is_file()
 
 
 def test_summary(tmp_path):
@@ -266,7 +287,35 @@ VARIANT_EXPECTED = {
     'tip-pitch-du-selig-ra': ('tip', 'on', 'off', 'on', 'pressure', None),
     'tip-pitch-ch-ra': ('tip', 'on', 'off', 'on', 'pressure', -4.815),
     'v1.3': ('tip', 'off', 'on', 'off', 'total', None),
+    'tip-pitch-dag-sorensen-neartip': ('tip', 'off', 'on', 'off', 'total', None),
 }
+
+
+def test_neartip_variant_is_v13_plus_the_near_tip_flag(tmp_path):
+    registry = yaml.safe_load((ROOT / 'config/model-variants.yaml').read_text())['variants']
+    assert registry['tip-pitch-dag-sorensen-neartip']['flags'] == \
+        {**registry['v1.3']['flags'], '--near-tip-correction': 'on'}
+    module = load_checker()
+    base = module.load_base_definition()
+    knobs = module.variant_definition(base, 'tip-pitch-dag-sorensen-neartip')['knobs']
+    assert knobs['nearTipCorrection.active']['expected'] == 'on'
+    assert knobs['nearTipCorrection.model']['expected'] == 'TrigauxVirtualCamber'
+    # Every other variant leaves the option off
+    for name in registry:
+        if name != 'tip-pitch-dag-sorensen-neartip':
+            assert module.variant_definition(base, name)['knobs'][
+                'nearTipCorrection.active']['expected'] == 'off'
+    # The rendered near-tip case carries the block and its table; v1.3 rejects it
+    case = render(tmp_path, 'tip-pitch-dag-sorensen-neartip')
+    text = (case / 'system/fvOptions').read_text()
+    assert 'nearTipCorrection' in text and 'model TrigauxVirtualCamber;' in text
+    assert (case / 'system/trigaux2024_tableC.csv').read_text() == (
+        ROOT / 'data/near-tip-functions/trigaux2024_tableC.csv').read_text()
+    assert 'NON-CONFORMING v1.3' in call('scripts/checkModelDefinition.py', case).stdout
+    # A v1.3 render has no block and no table
+    v13 = render(tmp_path, 'v1.3')
+    assert 'nearTipCorrection' not in (v13 / 'system/fvOptions').read_text()
+    assert not (v13 / 'system/trigaux2024_tableC.csv').exists()
 
 
 def test_every_registered_variant_is_pinned():
@@ -326,6 +375,15 @@ def test_variant_run_launcher_passes_every_v12_knob_before_the_registry_flags():
     assert all(token in command for token in v12)
     assert max(command.index(token) for token in v12) < command.index('"$@"')
     assert 'POLAR=${POLAR:-S809_OSU_Re1M_pressure.dat}' in text
+
+
+def test_variant_run_launcher_forwards_caller_arguments_past_the_registry_flags():
+    # `sbatch ... variant-run.slurm --domain tunnel` once lost its arguments to `set -- $flags`
+    # and silently ran the free box for 8 h.
+    text = (ROOT / 'scripts/slurm/variant-run.slurm').read_text()
+    assert 'extra="$*"' in text
+    assert text.index('extra="$*"') < text.index('set -- $flags')
+    assert 'set -- $flags $extra' in text
 
 
 @pytest.mark.parametrize('launcher', ['v1-2-run', 'v1-2-evaluation', 'v1-2-lag', 'v1-2-small-eps'])

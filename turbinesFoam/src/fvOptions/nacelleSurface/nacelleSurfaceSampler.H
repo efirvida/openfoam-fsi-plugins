@@ -31,7 +31,7 @@ Description
     The geometry and kernel assets (STL load, centroid node set with normals
     and areas, static body frame, cell size, Eq. 8 kernel, Eq. 7 velocity
     interpolation, Eq. 18 distribution) come from \c surfaceSamplerBase. This
-    class adds the nacelle force model, which is the paper's bluff-body closure
+    class adds the nacelle force model, which is the [YangSotiropoulos2018]'s bluff-body closure
     with no blade-element (BEM) content:
 
     - normal force (Eq. 19, direct forcing, \c u^d = 0):
@@ -43,7 +43,7 @@ Description
     - tangential direction (Eq. 23): the normalized velocity at the off-wall
       probe point \f$ X + h e_n \f$
 
-    The unit system is the paper's: \c f_n and \c f_\tau are tractions per unit
+    The unit system is the [YangSotiropoulos2018]'s: \c f_n and \c f_\tau are tractions per unit
     area **per unit density** (m²/s²). They become per-node forces only after
     multiplication by the node area (m⁴/s², \c nodeForces_); the SI contract
     exposed by \c forces() (newtons) is \c rhoRef_ times that list.

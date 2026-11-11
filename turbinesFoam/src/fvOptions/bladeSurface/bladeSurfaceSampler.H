@@ -66,7 +66,7 @@ Description
     nodes rotate with the blade through an Eulerian mesh, so the receiving
     cells may not be cached per node: a list cached at the construction
     azimuth would make the deposit miss (and then silently lose) the receiving
-    cells as the blade advances. The support is 2.5*h_i for the paper cosine
+    cells as the blade advances. The support is 2.5*h_i for the [YangSotiropoulos2018] cosine
     kernel (Eq. 8) or eps_i*sqrt(ln(1000)) with eps_i = 2*cbrt(V_i)*meshFactor
     for the Gaussian ablation (D7).
 
@@ -83,6 +83,13 @@ Description
     MPI follows the S1 replicated-node/local-cell design: every rank holds the
     full node list and builds candidates over its own local cells only, so
     every local cell is written exactly once by its owner.
+
+    Reference: [YangSotiropoulos2018] X. Yang, F. Sotiropoulos, "A new class of
+    actuator surface models for wind turbines", Wind Energy (2018),
+    doi:10.1002/we.2162, arXiv:1702.02108v4 (journal volume/pages not
+    verified); Eq. 7 velocity interpolation, Eq. 8 smoothed four-point cosine
+    kernel, Eq. 18 force distribution. Entry in the repository REFERENCES.md.
+
 
 SourceFiles
     bladeSurfaceSampler.C
@@ -199,7 +206,7 @@ class bladeSurfaceSampler
         //- Root chord pitch-axis point (root quarter-chord at construction)
         point pitchPoint_;
 
-        //- Kernel mode: cosine (paper Eq. 8) or gaussian (D7 ablation)
+        //- Kernel mode: cosine ([YangSotiropoulos2018] Eq. 8) or gaussian (D7 ablation)
         word kernelMode_;
 
         //- Gaussian width factor (meshFactor), D7 fallback chain
@@ -272,7 +279,7 @@ class bladeSurfaceSampler
         );
 
         //- Distribute the node forces onto the cells of their support boxes at
-        //  the current node positions (Eq. 18); the kernel is the paper cosine
+        //  the current node positions (Eq. 18); the kernel is the [YangSotiropoulos2018] cosine
         //  or the Gaussian ablation. \c localCandidates receives the number of
         //  receiving cells visited and \c localMax the largest per-node count.
         void distributeNodeForces

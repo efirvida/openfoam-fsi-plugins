@@ -1,0 +1,91 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvOptions;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Mesh-backed (surfaceGeometry) variant of tests/asmTipEpsilon: the same
+// minimal one-blade rotor (six elements r = 0.05 m to 0.45 m, chord 0.04 m,
+// TSR 5, axis -x, Dag & Sorensen tip correction with `epsilon 0`) with a flat
+// blade plate in constant/triSurface/blade.stl (canonical frame: z span
+// outward from the root, y chord).
+
+turbine
+{
+    type            axialFlowTurbineALSource;
+    active          on;
+
+    axialFlowTurbineALSourceCoeffs
+    {
+        fieldNames          (U);
+        selectionMode       cellSet;
+        cellSet             turbine;
+        origin              (0 0 0);
+        axis                (-1 0 0);
+        verticalDirection   (0 0 1);
+        freeStreamVelocity  (10 0 0);
+        tipSpeedRatio       5.0;
+        rotorRadius         0.45;
+
+        dynamicStall
+        {
+            active          off;
+            dynamicStallModel LeishmanBeddoes;
+        }
+
+        endEffects
+        {
+            active          off;
+            endEffectsModel Glauert;
+        }
+
+        tipCorrection
+        {
+            active          on;
+            model           DagSorensen;
+            wakeTurns       2;
+            wakeAzimuthalStep 2;
+            epsilon         0;
+            debug           true;
+        }
+
+        blades
+        {
+            blade1
+            {
+                writePerf           true;
+                writeElementPerf    true;
+                elementType         actuatorSurfaceElement;
+                surfaceGeometry     "constant/triSurface/blade.stl";
+                nChordwise          5;
+                nElements           6;
+                elementProfiles     (S809 S809 S809 S809 S809 S809);
+                elementData
+                (
+                    (0.0  0.05  0.0  0.04  0.25  0.0)
+                    (0.0  0.45  0.0  0.04  0.25  0.0)
+                );
+            }
+        }
+
+        profileData
+        {
+            S809
+            {
+                data (#include "S809.dat");
+            }
+        }
+    }
+}
+
+// ************************************************************************* //

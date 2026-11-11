@@ -27,9 +27,10 @@ Class
 Description
     An actuator surface element: an actuator line element that averages the
     inflow velocity over \c nChordwise equal chord strips and distributes the
-    aerodynamic force uniformly across those strips (Yang & Sotiropoulos,
-    arXiv:1702.02108v4, Sec. 2.1), spread with a spherical Gaussian kernel
-    whose width is mesh-based (Massie, Ouro, Stoesser & Luo, Energies 2019;
+    aerodynamic force uniformly across those strips ([YangSotiropoulos2018] Yang & Sotiropoulos,
+    Wind Energy 2018, doi:10.1002/we.2162, arXiv:1702.02108v4, Sec. 2.1), spread with a spherical Gaussian kernel
+    whose width is mesh-based ([Massie2019] Massie, Ouro, Stoesser & Luo,
+    Energies 12(24):4741, 2019, doi:10.3390/en12244741, Eq. 13;
     this element keeps their mesh branch 4*cbrt(V) at the default meshFactor
     and drops the c/4 branch). A hybrid of the two, not either paper's model.
 

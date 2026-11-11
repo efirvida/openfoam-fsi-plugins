@@ -88,6 +88,19 @@ if it were ``r/R``.  A requested source missing from the store is an error,
 and a band with no reference stations is printed ``n/a`` with a station count
 of 0, never a synthesised value.
 
+Frames of the reference columns: the ALM ``c_ref_n``/``c_ref_t`` are the
+rotor-plane pair ``(Cx, Cy)``, whereas the AeroDyn sources (``olaf-fvw``,
+``openfast-bem``) store ``Cn = Cx cos(theta) + Cy sin(theta)`` and
+``Ct = -Cx sin(theta) + Cy cos(theta)`` in the *chord* frame
+(``AeroDyn_IO.f90`` ``BNCn``/``BNCt``), ``theta = BlTwist + pitch``.  The
+``cn_ratio``/``ct_ratio`` columns divide the chord-frame values by the plane-
+frame run values and are **not** frame-consistent (``ct`` mixes ``Cy`` with
+``Cx sin(theta)``: ratios 0.8-3 with no meaning).  ``cx``/``cy`` and
+``cx_ratio``/``cy_ratio`` are the reference rotated into the plane frame with
+``--pitch`` (default 0, the rated ``BlPitch``) and are the comparable ones.
+CCBlade's frame is not documented in the store, so ``ccblade-bem`` gets no
+``cx``/``cy`` (printed ``n/a``).
+
 The multi-model snapshot ``analysis/spanwise-profiles.csv`` is written by
 ``--profiles-out`` (one row per model per element, window mean over the last
 ``--revs`` revolutions).  It carries the averaging-window bounds as extra
@@ -211,6 +224,16 @@ REFERENCE_STORE = ANALYSIS_DIR / "spanwise-references.csv"
 #: Reference quantities band-averaged per source (the store's ``quantity``).
 REFERENCE_QUANTITIES = ("alpha_deg", "cn", "ct")
 
+#: Sources whose ``cn``/``ct`` are AeroDyn ``BNCn``/``BNCt`` (chord frame, rotated
+#: by ``theta = BlTwist + pitch`` from the rotor-plane pair); only these are
+#: rotated into the plane frame of the ALM ``c_ref_n``/``c_ref_t``.
+CHORD_FRAME_SOURCES = ("olaf-fvw", "openfast-bem")
+
+#: Collective pitch of the OpenFAST reference (ElastoDyn ``BlPitch``, rated).
+PITCH_DEG = 0.0
+
+BLADE_TABLE = ROOT / "data" / "iea15mw_blade.csv"
+
 #: The store's ``r_over_R_or_radius_m`` column may only carry ``r/R``; a value
 #: above this is a radius in metres and must not be band-averaged as ``r/R``.
 R_OVER_R_MAX = 1.2
@@ -230,6 +253,43 @@ class UnknownReferenceSourceError(ReferenceStoreError):
 
 class ReferenceUnitError(ReferenceStoreError):
     """A reference source's radius column carries metres, not ``r/R``."""
+
+
+def plane_components(first: float, second: float, theta_deg: float):
+    """Rotate a chord-frame pair (n, t) into the rotor-plane pair (x, y).
+
+    AeroDyn defines ``Cn = Cx cos(theta) + Cy sin(theta)`` and
+    ``Ct = -Cx sin(theta) + Cy cos(theta)`` (``AeroDyn_IO.f90``), with
+    ``theta = BlTwist + pitch``; this is the inverse.  The ALM
+    ``c_ref_n``/``c_ref_t`` are the plane pair ``(Cx, Cy)``.
+    """
+    theta = math.radians(theta_deg)
+    return (
+        first * math.cos(theta) - second * math.sin(theta),
+        first * math.sin(theta) + second * math.cos(theta),
+    )
+
+
+def _twist_table(path: Path = BLADE_TABLE):
+    """``[(r/R, twist deg)]`` of the committed blade geometry table."""
+    table = []
+    with path.open(encoding="utf-8") as stream:
+        lines = (line for line in stream if not line.startswith("#"))
+        for row in csv.DictReader(lines):
+            table.append((float(row["r_over_R"]), float(row["twist_deg"])))
+    return table
+
+
+def theta_deg(r_over_r: float, pitch_deg: float, table=None) -> float:
+    """Twist plus collective pitch at ``r/R`` (linear, clamped at the ends)."""
+    table = table if table is not None else _twist_table()
+    if r_over_r <= table[0][0]:
+        return table[0][1] + pitch_deg
+    for (r_lo, t_lo), (r_hi, t_hi) in zip(table, table[1:]):
+        if r_over_r <= r_hi:
+            weight = (r_over_r - r_lo) / (r_hi - r_lo)
+            return t_lo + weight * (t_hi - t_lo) + pitch_deg
+    return table[-1][1] + pitch_deg
 
 
 def _element_index(path: Path) -> int:
@@ -647,12 +707,14 @@ def compare_profiles(profile_a, label_a, profile_b, label_b,
     return results
 
 
-def load_reference_profiles(store: Path, sources) -> dict:
+def load_reference_profiles(store: Path, sources, pitch_deg: float = PITCH_DEG) -> dict:
     """Per-source reference profiles from the long-format store.
 
     Returns ``{source: [{"r_over_R": r, "alpha_deg": ..., "cn": ...,
     "ct": ...}, ...]}`` with one entry per station, sorted by ``r/R`` and
-    carrying only :data:`REFERENCE_QUANTITIES`.
+    carrying :data:`REFERENCE_QUANTITIES` and, for the AeroDyn sources
+    (:data:`CHORD_FRAME_SOURCES`), the rotor-plane pair ``cx``/``cy`` rotated
+    from the chord-frame ``cn``/``ct`` with ``theta = twist + pitch_deg``.
 
     Raises :class:`UnknownReferenceSourceError` for a source missing from the
     store (naming the available ones) and :class:`ReferenceUnitError` when a
@@ -697,6 +759,13 @@ def load_reference_profiles(store: Path, sources) -> dict:
                 f"{R_OVER_R_MAX:g}]; it cannot be band-averaged with the r/R "
                 f"bands"
             )
+        if source in CHORD_FRAME_SOURCES:
+            table = _twist_table()
+            for radius, quantities in stations.items():
+                if "cn" in quantities and "ct" in quantities:
+                    quantities["cx"], quantities["cy"] = plane_components(
+                        quantities["cn"], quantities["ct"],
+                        theta_deg(radius, pitch_deg, table))
         profiles[source] = [
             {"r_over_R": radius} | stations[radius]
             for radius in sorted(stations)
@@ -714,7 +783,7 @@ def reference_band_stats(profile, band) -> dict:
     low, high = band
     stations = [item for item in profile if low <= item["r_over_R"] < high]
     stats: dict[str, float | None] = {"stations": len(stations)}
-    for quantity in REFERENCE_QUANTITIES:
+    for quantity in REFERENCE_QUANTITIES + ("cx", "cy"):
         values = [item[quantity] for item in stations if quantity in item]
         stats[quantity] = sum(values) / len(values) if values else None
     return stats
@@ -742,6 +811,14 @@ def attach_references(results, profiles, sources):
                     stats["ct"] / c_t_a
                     if stats["ct"] is not None and c_t_a else None
                 ),
+                "cx_ratio": (
+                    stats["cx"] / c_n_a
+                    if stats["cx"] is not None and c_n_a else None
+                ),
+                "cy_ratio": (
+                    stats["cy"] / c_t_a
+                    if stats["cy"] is not None and c_t_a else None
+                ),
             }
         enriched.append(item | {"references": references})
     return enriched
@@ -758,6 +835,10 @@ def reference_table_columns(sources) -> tuple:
             f"{source}_ct",
             f"{source}_cn_ratio",
             f"{source}_ct_ratio",
+            f"{source}_cx",
+            f"{source}_cy",
+            f"{source}_cx_ratio",
+            f"{source}_cy_ratio",
         )
     return tuple(columns)
 
@@ -811,6 +892,10 @@ def print_comparison(results, label_a, label_b, sources=(), store=None):
                 _reference_cell(reference["ct"]),
                 _reference_cell(reference["cn_ratio"]),
                 _reference_cell(reference["ct_ratio"]),
+                _reference_cell(reference["cx"]),
+                _reference_cell(reference["cy"]),
+                _reference_cell(reference["cx_ratio"]),
+                _reference_cell(reference["cy_ratio"]),
             ]
         print("  " + ",".join(fields))
 
@@ -848,6 +933,10 @@ def write_comparison_csv(path, results, label_a, label_b, sources=()):
                     _reference_csv_cell(reference["ct"]),
                     _reference_csv_cell(reference["cn_ratio"]),
                     _reference_csv_cell(reference["ct_ratio"]),
+                    _reference_csv_cell(reference["cx"]),
+                    _reference_csv_cell(reference["cy"]),
+                    _reference_csv_cell(reference["cx_ratio"]),
+                    _reference_csv_cell(reference["cy_ratio"]),
                 ]
             writer.writerow(fields)
 
@@ -914,6 +1003,15 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "append the committed reference models' band means and their "
             "ratios to run A to the --compare-with band table"
+        ),
+    )
+    parser.add_argument(
+        "--pitch",
+        type=float,
+        default=PITCH_DEG,
+        help=(
+            "collective pitch of the reference in deg, added to the blade "
+            "twist to rotate AeroDyn Cn/Ct into the plane frame (default 0)"
         ),
     )
     parser.add_argument(
@@ -1097,7 +1195,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.reference_source or DEFAULT_REFERENCE_SOURCES))
             store = args.reference_store
             try:
-                references = load_reference_profiles(store, sources)
+                references = load_reference_profiles(
+                    store, sources, pitch_deg=args.pitch)
             except (ReferenceStoreError, OSError) as error:
                 print(f"error: {error}", file=sys.stderr)
                 return 1

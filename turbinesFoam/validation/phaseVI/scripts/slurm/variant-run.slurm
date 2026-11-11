@@ -45,8 +45,10 @@ if [ -n "${LIB_DIR:-}" ]; then
 fi
 # Registry validation admits only known flags and scalar enum/numeric values.
 # Deliberately split token-per-line output, with pathname expansion disabled.
+# Keep the caller arguments (for example `--domain tunnel`): `set --` replaces "$@".
+extra="$*"
 set -f
-set -- $flags
+set -- $flags $extra
 exec scripts/runPhaseVI.sh -m "$MODEL" -u "$SPEED" -mesh coarse --sequence "$SEQUENCE" \
     --refine-level "$REFINE_LEVEL" --delta-t "$DELTA_T" --end-revs "$END_REVS" --ranks "$SLURM_NTASKS" \
     --blade-dz 0.05 --polar "$POLAR" --tip-effects on --tip-correction off --pitch-reference twist-zero \

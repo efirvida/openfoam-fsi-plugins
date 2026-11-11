@@ -145,10 +145,17 @@ class GeometryError(ValueError):
     """Raised when the blade geometry source is not the expected format."""
 
 
-def read_blade_table(path: Path | str | None = None) -> list[dict[str, float]]:
+#: Number of blade stations of the IEA 15-240-RWT AeroDyn table (other
+#: turbines that reuse these readers, e.g. ``iea22mw``, pass their own count).
+N_STATIONS = 50
+
+
+def read_blade_table(
+    path: Path | str | None = None, n_stations: int = N_STATIONS
+) -> list[dict[str, float]]:
     """Parse the AeroDyn15 blade table into per-station dictionaries.
 
-    50 numeric rows are expected; the header block and the unit line have fewer
+    ``n_stations`` numeric rows are expected (50 for the IEA 15-240-RWT); the header block and the unit line have fewer
     than seven numeric tokens and are skipped.
     """
     source = Path(path) if path is not None else DEFAULT_BLADE_FILE
@@ -174,9 +181,9 @@ def read_blade_table(path: Path | str | None = None) -> list[dict[str, float]]:
                 "af_id": values[6],
             }
         )
-    if len(rows) != 50:
+    if len(rows) != n_stations:
         raise GeometryError(
-            f"{source}: expected 50 blade stations, found {len(rows)}"
+            f"{source}: expected {n_stations} blade stations, found {len(rows)}"
         )
     if any(b["span"] <= a["span"] for a, b in zip(rows, rows[1:])):
         raise GeometryError(f"{source}: blade span must be strictly increasing")
@@ -254,7 +261,9 @@ def build_rows(
     return rows
 
 
-def read_geometry(path: Path | str | None = None) -> list[dict[str, float]]:
+def read_geometry(
+    path: Path | str | None = None, n_stations: int = N_STATIONS
+) -> list[dict[str, float]]:
     """Read the committed geometry CSV into per-station dictionaries."""
     source = Path(path) if path is not None else BLADE_CSV
     rows: list[dict[str, float]] = []
@@ -264,8 +273,10 @@ def read_geometry(path: Path | str | None = None) -> list[dict[str, float]]:
         )
         for record in reader:
             rows.append({key: float(record[key]) for key in COLUMNS})
-    if len(rows) != 50:
-        raise GeometryError(f"{source}: expected 50 rows, found {len(rows)}")
+    if len(rows) != n_stations:
+        raise GeometryError(
+            f"{source}: expected {n_stations} rows, found {len(rows)}"
+        )
     return rows
 
 
