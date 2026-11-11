@@ -173,3 +173,38 @@ def test_cli_summarize_counts_bands(tmp_path):
     done = _run("--summarize", str(out))
     assert done.returncode == 0, done.stderr
     assert "bem: inside 10 % 1/2 -> 1/2" in done.stdout
+
+
+def _synthetic_cell(tmp_path, cell, models=("bem",)):
+    runs = tmp_path / "runs"
+    for model in models:
+        run = runs / f"aerodyn-{model}-{cell[0]}U{cell[1:]}"
+        run.mkdir(parents=True)
+        stations = {f"{r:.2f}": {"cn": 1.2, "ct": 0.05, "alpha_deg": 20.0, "cn_exp": 1.1}
+                    for r in (0.80, 0.95)}
+        (run / "metrics.json").write_text(json.dumps({"stations": stations}))
+    return runs
+
+
+@pytest.mark.parametrize("cell", ["S10", "S13", "S15", "S20", "S25"])
+def test_stall_cells_are_selectable_but_not_default(cell):
+    labels = [f"{c[0]}{c[1]}" for c in nt.CELLS]
+    assert cell in labels
+    assert [f"{c[0]}{c[1]}" for c in nt.DEFAULT_CELLS] == ["S5", "S6", "S7", "S8", "H7"]
+
+
+@pytest.mark.parametrize("cell", ["S10", "S13", "S15", "S20", "S25"])
+def test_cli_accepts_stall_cells_with_bem(tmp_path, cell):
+    runs = _synthetic_cell(tmp_path, cell)
+    done = _run("--apply", "cl", "--runs-dir", str(runs), "--cells", cell, "--models", "bem")
+    assert done.returncode == 0, done.stderr
+    rows = done.stdout.splitlines()
+    assert len(rows) == 3 and all(r.split(",")[1] == cell for r in rows[1:])
+
+
+def test_cli_skips_models_without_a_run_for_the_cell(tmp_path):
+    runs = _synthetic_cell(tmp_path, "S20")
+    done = _run("--apply", "cl", "--runs-dir", str(runs), "--cells", "S20")
+    assert done.returncode == 0, done.stderr
+    assert "skipping alm S20" in done.stderr and "skipping olaf-dp S20" in done.stderr
+    assert {r.split(",")[0] for r in done.stdout.splitlines()[1:]} == {"bem"}

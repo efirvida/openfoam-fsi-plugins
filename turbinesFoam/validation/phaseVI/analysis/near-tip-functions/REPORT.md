@@ -13,6 +13,8 @@ python3 -I scripts/applyNearTipFunctions.py --apply cl --runs-dir $R --out analy
 python3 -I scripts/applyNearTipFunctions.py --apply full --kernel 3D --sigma-over-c 0.25 --runs-dir $R --out analysis/near-tip-functions/full_3D_s0.25.csv
 python3 -I scripts/applyNearTipFunctions.py --apply full --kernel 3D --sigma-over-c 0.5  --runs-dir $R --out analysis/near-tip-functions/full_3D_s0.5.csv
 python3 -I scripts/applyNearTipFunctions.py --summarize analysis/near-tip-functions/*.csv
+# stall cells (opt-in, not in the default set; models without a run are skipped; stations with d/c > 3.457 are outside the table):
+python3 -I scripts/applyNearTipFunctions.py --apply cl --models bem --cells S10 S13 S15 S20 S25 --runs-dir $R --out <tmp>/stall.csv
 ```
 
 (`F_profile.csv` is an identical earlier copy of `F_profile_cl.csv`.) Inputs: ALM v1.3 `alm-U*-coarse-seqS-var-tip-pitch-dag-sorensen-total`

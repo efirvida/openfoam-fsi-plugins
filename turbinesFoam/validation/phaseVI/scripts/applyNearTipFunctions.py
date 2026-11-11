@@ -34,6 +34,9 @@ exact and the corrected value is c_n - F c_l cos(alpha) (drag and alpha unchange
 alpha_e of the line model is kept, only the lift is rescaled). `cn_scale` columns give the
 approximation c_n (1 - F), which treats the drag term as part of the lift.
 
+Cells: S5 S6 S7 S8 H7 (default) and the stall cells S10 S13 S15 S20 S25 (opt-in with
+--cells). A model with no run directory for a cell is skipped with a message on stderr.
+
 Exit status: 0 on success, 2 on an input error (missing file, d/c outside the table,
 sigma/c outside [0.25, 1]).
 
@@ -71,7 +74,15 @@ CELLS = (
     ("S", 7, 4, 12),
     ("S", 8, 4, 12),
     ("H", 7, 4, 12),
+    # Stall cells (wait-t16-prep T2): opt-in via --cells; the windows apply to ALM runs
+    # once they exist (none yet), AeroDyn runs ignore them.
+    ("S", 10, 4, 12),
+    ("S", 13, 4, 12),
+    ("S", 15, 4, 12),
+    ("S", 20, 4, 12),
+    ("S", 25, 4, 12),
 )
+DEFAULT_CELLS = CELLS[:5]
 MODELS = ("alm", "olaf-dp", "bem")
 BAND = 0.10
 
@@ -300,7 +311,8 @@ def process(args) -> list[dict]:
     table = read_table(Path(args.table))
     blade = read_blade(Path(args.blade))
     cfg = cp.load_config(Path(args.config))
-    cells = [c for c in CELLS if not args.cells or f"{c[0]}{c[1]}" in args.cells]
+    cells = [c for c in (CELLS if args.cells else DEFAULT_CELLS)
+             if not args.cells or f"{c[0]}{c[1]}" in args.cells]
     models = args.models or list(MODELS)
     stations = args.stations
     rows = []
@@ -311,6 +323,10 @@ def process(args) -> list[dict]:
         _, experiment = cp.load_experiment(Path(args.experiment_dir), sequence, float(speed))
         for model in models:
             path = run_dirs(Path(args.runs_dir), model, sequence, speed)
+            if not path.exists():
+                print(f"applyNearTipFunctions: skipping {model} {cell}: no run at {path}",
+                      file=sys.stderr)
+                continue
             if model == "alm":
                 data = alm_station(path, cfg, float(speed), sequence, args.radius, stations)
             else:
@@ -403,7 +419,8 @@ def build_parser():
                    help="mollification size over chord, in [0.25, 1] (default 0.25)")
     p.add_argument("--stations", type=float, nargs="+", default=[0.80, 0.95],
                    help="r/R stations (default 0.80 0.95)")
-    p.add_argument("--cells", nargs="+", help="subset of S5 S6 S7 S8 H7 (default all)")
+    p.add_argument("--cells", nargs="+", help="subset of S5 S6 S7 S8 H7 S10 S13 S15 S20 S25 (default S5 S6 S7 S8 H7; "
+                        "a model with no run for a cell is skipped with a message)")
     p.add_argument("--models", nargs="+", choices=MODELS, help="default alm olaf-dp bem")
     p.add_argument("--runs-dir", default=str(ROOT / "runs"),
                    help="directory holding alm-U*-... and aerodyn-*-<seq>U* run dirs")
