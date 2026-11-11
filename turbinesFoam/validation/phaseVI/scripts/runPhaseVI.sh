@@ -18,7 +18,9 @@
 #
 # -m/-u select the model and the per-speed measured TSR from config/case.yaml.
 # -mesh selects the mesh (default coarse = D/32); -s S selects the Sequence S
-# 7 m/s repeat (s0700000). The case is rendered into runs/<id>/ (the committed
+# 7 m/s repeat (s0700000); -s T|U|J|I selects the pitch sequences (same rotor and
+# case as S at collective tip pitch 2/4/6/0 deg, ALM only, run id -seqT etc., pitch_deg
+# recorded in run.json and audited by compareYawPitch.py --pitch). The case is rendered into runs/<id>/ (the committed
 # case/ skeleton is never modified), the matching fvOptions twin is installed
 # as system/fvOptions, the shared mesh is hardlinked in and run.json is written.
 #
@@ -184,11 +186,27 @@ case "$domain" in
     long|squat|tunnel) ;;
     *) echo "ERROR: unsupported domain: $domain" >&2; exit 2 ;;
 esac
+# Pitch sequences share the Sequence S rotor and case; only the collective tip pitch
+# differs (T 2, U 4, J 6, I 0 deg; H and S are 3 deg). pitch_seq keeps the UAE letter for
+# the run id and run.json, sequence becomes S for the case selection and the renderer.
+pitch_seq=""
+pitch_deg=3
 case "$sequence" in
     h|H) sequence=H ;;
     s|S) sequence=S ;;
+    i|I) pitch_seq=I; pitch_deg=0 ;;
+    t|T) pitch_seq=T; pitch_deg=2 ;;
+    u|U) pitch_seq=U; pitch_deg=4 ;;
+    j|J) pitch_seq=J; pitch_deg=6 ;;
     *) echo "ERROR: unsupported sequence: $sequence" >&2; exit 2 ;;
 esac
+if [ -n "$pitch_seq" ]; then
+    sequence=S
+    if [ "$model" != "alm" ]; then
+        echo "ERROR: pitch sequence $pitch_seq is ALM-only (-m alm): the ASM twins and the lofted blade surface carry no pitch override" >&2
+        exit 2
+    fi
+fi
 case "$solver" in
     urans|iddes) ;;
     *) echo "ERROR: unsupported solver: $solver (choose urans or iddes)" >&2; exit 2 ;;
@@ -414,7 +432,9 @@ fi
 
 speed_token=$(printf '%g' "$speed")
 run_id="$model-U${speed_token}-$mesh"
-if [ "$sequence" = "S" ]; then
+if [ -n "$pitch_seq" ]; then
+    run_id="$run_id-seq$pitch_seq"
+elif [ "$sequence" = "S" ]; then
     run_id="$run_id-seqS"
 fi
 if [ "$solver" = "iddes" ]; then
@@ -444,6 +464,9 @@ if [ -n "$blade_dz" ]; then
     render_args+=(--blade-dz "$blade_dz")
 fi
 render_args+=(--pitch-reference "$pitch_reference")
+if [ -n "$pitch_seq" ]; then
+    render_args+=(--pitch-deg "$pitch_deg")
+fi
 if [ -n "$end_effects_model" ]; then
     render_args+=(--end-effects-model "$end_effects_model")
 fi
@@ -591,7 +614,8 @@ echo "Linked shared $mesh mesh (refinement level $refine_level) from $mesh_dir"
 
 python3 - "$run_dir" "$root" "$model" "$speed_token" "$mesh" "$domain" "$sequence" \
     "$stage0" "$solver" "$nchordwise" "$ranks" "$staged_stl_sha256" "$run_label" \
-    "$mesh_factor" "$refine_level" "$blade_dz" "$nacelle" "$pitch_reference" <<'PY'
+    "$mesh_factor" "$refine_level" "$blade_dz" "$nacelle" "$pitch_reference" \
+    "${pitch_seq:-$sequence}" "$pitch_deg" <<'PY'
 import datetime
 import hashlib
 import json
@@ -618,7 +642,9 @@ from pathlib import Path
     blade_dz,
     nacelle,
     pitch_reference,
-) = sys.argv[1:19]
+    sequence_label,
+    pitch_deg,
+) = sys.argv[1:21]
 run_dir = Path(run_dir)
 root = Path(root)
 
@@ -651,7 +677,8 @@ payload = {
     "wind_speed_m_s": float(speed),
     "mesh": mesh,
     "domain": domain,
-    "sequence": sequence,
+    "sequence": sequence_label,
+    "pitch_deg": float(pitch_deg),
     "solver": solver,
     "n_chordwise": int(nchordwise) if nchordwise else None,
     "mesh_factor": effective_mesh_factor,
@@ -741,7 +768,7 @@ PY
         sbatch "$here/slurm/production.slurm"
     fi
 else
-    suggestion="$0 -m $model -u $speed_token -mesh $mesh --sequence $sequence --solver $solver --ranks $ranks"
+    suggestion="$0 -m $model -u $speed_token -mesh $mesh --sequence ${pitch_seq:-$sequence} --solver $solver --ranks $ranks"
     if [ "$refine_level" -gt 0 ]; then
         suggestion="$suggestion --refine-level $refine_level"
     fi

@@ -1408,6 +1408,16 @@ def main(argv: list[str] | None = None) -> int:
              "Definition v1.2)",
     )
     parser.add_argument(
+        "--pitch-deg",
+        type=float,
+        default=None,
+        metavar="DEG",
+        help="override turbine.pitch_deg (the collective tip pitch, positive toward "
+             "feather; config 3 deg = UAE sequences H/S). The pitch sequences share the "
+             "Sequence S rotor and case: T 2, U 4, J 6, I 0 deg. Absent, the configured "
+             "value governs and the render is unchanged",
+    )
+    parser.add_argument(
         "--nacelle",
         choices=("on", "off"),
         default="off",
@@ -1459,6 +1469,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.blade_dz is not None:
             cfg["turbine"]["blade_dz"] = float(args.blade_dz)
         cfg["turbine"]["pitch_reference"] = args.pitch_reference
+        if args.pitch_deg is not None:
+            cfg["turbine"]["pitch_deg"] = float(args.pitch_deg)
         if args.refine_level:
             cfg["turbine"]["gaussian_mesh_factor"] = float(
                 cfg["turbine"]["gaussian_mesh_factor"]

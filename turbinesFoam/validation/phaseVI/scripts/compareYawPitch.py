@@ -10,7 +10,9 @@ The run's geometric yaw magnitude is audited from `system/fvOptions` (angle
 between the free-stream velocity and the rotor axis). Its sign is not audited:
 the mapping from the case azimuth/rotation to the report's "positive yaw =
 blade advances into the wind at 180 deg azimuth" is not established for the
-case templates. Pitch is not audited (run.json carries no pitch).
+case templates. The collective tip pitch is audited against run.json `pitch_deg` (recorded by
+runPhaseVI.sh) and fails closed on a mismatch; a legacy run.json without it is
+reported as not audited.
 """
 
 from __future__ import annotations
@@ -42,6 +44,8 @@ from comparePhaseVI import (
 
 DEFAULT_EXPERIMENT = ROOT / "data" / "experiment" / "yaw-pitch"
 EXIT_YAW_MISMATCH = 4
+EXIT_PITCH_MISMATCH = 5
+MAX_ABS_PITCH_DEG = 0.01
 
 PITCH_SEQUENCE = {0.0: "I", 2.0: "T", 3.0: "H", 4.0: "U", 6.0: "J"}
 NOMINAL_TOLERANCE = 1.0e-6
@@ -124,6 +128,20 @@ def audit_run_yaw(run_dir: Path):
         return None
     cosine = -sum(a * w for a, w in zip(axis, wind, strict=True)) / norm
     return math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
+
+
+def run_pitch_deg(run_dir: Path):
+    """Collective tip pitch [deg] recorded in run.json, or None if absent."""
+    path = run_dir / "run.json"
+    if not path.is_file():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8")).get("pitch_deg")
+    except ValueError:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
 
 
 def resolve_sequences(kind, value, sequence, config_sequence):
@@ -215,11 +233,14 @@ def main(argv: list[str] | None = None) -> int:
     # Run audit: yaw magnitude only (sign not established, see module doc).
     run_yaw = audit_run_yaw(run_dir)
     expected_yaw = abs(value) if kind == "yaw" else 0.0
+    run_pitch = run_pitch_deg(run_dir) if kind == "pitch" else None
     audit = {
         "run_yaw_magnitude_deg": run_yaw,
         "expected_yaw_magnitude_deg": expected_yaw,
         "yaw_sign_audited": False,
-        "run_pitch_audited": False,
+        "run_pitch_audited": run_pitch is not None,
+        "run_pitch_deg": run_pitch,
+        "expected_pitch_deg": value if kind == "pitch" else None,
         "fvOptions_found": run_yaw is not None,
     }
     if run_yaw is not None and abs(run_yaw - expected_yaw) > MAX_ABS_YAW_DEG:
@@ -227,6 +248,13 @@ def main(argv: list[str] | None = None) -> int:
             f"run yaw magnitude {run_yaw:.3f} deg (system/fvOptions) differs "
             f"from the requested {expected_yaw:g} deg by more than "
             f"{MAX_ABS_YAW_DEG} deg", EXIT_YAW_MISMATCH,
+        )
+
+    if run_pitch is not None and abs(run_pitch - value) > MAX_ABS_PITCH_DEG:
+        return _exit(
+            f"run pitch {run_pitch:g} deg (run.json pitch_deg) differs from the "
+            f"requested {value:g} deg by more than {MAX_ABS_PITCH_DEG} deg",
+            EXIT_PITCH_MISMATCH,
         )
 
     rho_value = (
@@ -337,7 +365,10 @@ def main(argv: list[str] | None = None) -> int:
                      "found; run yaw not audited")
     else:
         lines.append(f"run yaw magnitude (fvOptions): {run_yaw:.3f} deg; "
-                     "sign and pitch not audited")
+                     "sign not audited")
+    if kind == "pitch":
+        lines.append(f"run pitch (run.json): {run_pitch:g} deg" if run_pitch is not None
+                     else "WARNING: run.json carries no pitch_deg; run pitch not audited")
     report = "\n".join(lines) + "\n"
     (out_dir / "report.txt").write_text(report, encoding="utf-8")
     print(report)
