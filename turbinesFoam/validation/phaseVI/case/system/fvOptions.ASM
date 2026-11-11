@@ -68,6 +68,15 @@ turbine
             epsilon 0;
         }
 
+        nearTipCorrection
+        {
+            active on;
+            model TrigauxVirtualCamber;
+            table "system/trigaux2024_tableC.csv";
+            kernel "3D";
+            sigmaOverC 0.25;
+        }
+
         blades
         {
             blade1

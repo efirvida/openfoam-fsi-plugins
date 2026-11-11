@@ -53,7 +53,7 @@ def test_default_and_off_renders_are_byte_identical_to_the_frozen_baseline(tmp_p
     # renderer defaults since 2026-10-27): pin the v1.1 knobs so only the nacelle
     # option is tested.
     v1_1_polar = ("--polar", "S809_OSU_Re1M_total.dat", "--pitch-reference", "twist-zero",
-                  "--tip-effects", "on", "--tip-correction", "off")
+                  "--tip-effects", "on", "--tip-correction", "off", "--near-tip-correction", "off")
     default = render(tmp_path / "a", *v1_1_polar)
     off = render(tmp_path / "b", "--nacelle", "off", *v1_1_polar)
     for name, digest in FROZEN.items():

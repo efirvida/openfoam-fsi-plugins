@@ -13,10 +13,10 @@ ROOT = Path(__file__).resolve().parents[1] / "validation/phaseVI"
 CHECK = ROOT / "scripts/checkModelDefinition.py"
 SUMMARY = ROOT / "scripts/summarizeBands.py"
 POLAR = "data/polars/S809_OSU_Re1M_total.dat"
-# Every Model Definition v1.2 knob, explicit: the renderer defaults are v1.3 (the near-tip correction is
-# opt-in, so a record render passes --near-tip-correction on).
+# Every Model Definition v1.2 knob, explicit: the renderer defaults are v1.4 (the near-tip correction is
+# on, so v1.2/v1.3 renders pin --near-tip-correction off).
 V12_FLAGS = ["--pitch-reference", "twist-zero", "--tip-effects", "on", "--tip-correction", "off",
-             "--polar", "S809_OSU_Re1M_pressure.dat"]
+             "--near-tip-correction", "off", "--polar", "S809_OSU_Re1M_pressure.dat"]
 
 
 def invoke(script, *args):
@@ -38,17 +38,16 @@ NEAR_TIP_BLOCK = """        nearTipCorrection
 
 
 def make_run(tmp_path, twin="ALM", old=None, new=None, metadata=None, name="run", near_tip=True):
-    """A run dir from a committed twin (a v1.3 render); near_tip adds the v1.4 block so it is a record render."""
+    """A run dir from a committed twin (the v1.4 record render); near_tip=False strips the block (a v1.3 render)."""
     run = tmp_path / name
     (run / "system").mkdir(parents=True)
     text = (ROOT / f"case/system/fvOptions.{twin}").read_text()
     if old is not None:
         assert old in text
         text = text.replace(old, new)
-    if near_tip:
-        anchor = "        blades\n"
-        assert text.count(anchor) == 1 and "nearTipCorrection" not in text
-        text = text.replace(anchor, NEAR_TIP_BLOCK + anchor)
+    assert text.count(NEAR_TIP_BLOCK) == 1
+    if not near_tip:
+        text = text.replace(NEAR_TIP_BLOCK, "")
     (run / "system/fvOptions").write_text(text)
     if metadata is not None:
         (run / "run.json").write_text(json.dumps(metadata))
@@ -181,8 +180,8 @@ def test_record_render_conforms_without_a_variant_and_not_to_v12(tmp_path):
 
 
 def test_v13_render_conforms_to_the_frozen_v13_and_not_to_the_record(tmp_path):
-    """The v1.3 renderer defaults (near-tip off) stay reproducible and are no longer of record."""
-    case = render(tmp_path, "v13")
+    """The v1.3 render (`--near-tip-correction off`) stays reproducible and is no longer of record."""
+    case = render(tmp_path, "v13", "--near-tip-correction", "off")
     frozen = ROOT / "config/model-definition-v1.3.yaml"
     for args in (("--variant", "v1.3"), ("--definition", frozen)):
         own = invoke(CHECK, case, *args)

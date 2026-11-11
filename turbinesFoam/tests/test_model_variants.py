@@ -2,7 +2,7 @@
 """Synthetic public CLI contracts for the Phase VI A/B registry.
 
 Registry flags override the frozen Model Definition v1.2 base; v1.4 is the
-definition of record (v1.3 the renderer default, the near-tip correction opt-in), so a variant is rendered with every
+definition of record (the renderer default; v1.3 is `--near-tip-correction off`), so a variant is rendered with every
 v1.2 knob explicit first, exactly as scripts/slurm/variant-run.slurm does.
 """
 import json
@@ -18,7 +18,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1] / 'validation/phaseVI'
 ENV = {**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'}
 V12_FLAGS = ['--pitch-reference', 'twist-zero', '--tip-effects', 'on', '--tip-correction', 'off',
-             '--polar', 'S809_OSU_Re1M_pressure.dat']
+             '--near-tip-correction', 'off', '--polar', 'S809_OSU_Re1M_pressure.dat']
 
 
 def call(script, *args):

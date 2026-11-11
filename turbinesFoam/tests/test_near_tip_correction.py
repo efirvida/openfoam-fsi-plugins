@@ -147,32 +147,31 @@ def _tree(case):
             for p in sorted(case.rglob("*")) if p.is_file()}
 
 
-def test_renderer_default_is_byte_identical_and_flag_off_adds_nothing(tmp_path):
-    """No flag and ``--near-tip-correction off`` render the same files; ``on`` only adds
-    the table and the ``nearTipCorrection`` block."""
+def test_renderer_default_is_on_and_flag_off_removes_exactly_the_block(tmp_path):
+    """No flag and ``--near-tip-correction on`` render the same files (v1.4 default); ``off``
+    drops the table and the ``nearTipCorrection`` block and nothing else."""
     base = _tree(_generate(tmp_path, "base"))
+    on = _tree(_generate(tmp_path, "on", "--near-tip-correction", "on"))
     off = _tree(_generate(tmp_path, "off", "--near-tip-correction", "off"))
-    on_case = _generate(tmp_path, "on", "--near-tip-correction", "on")
-    on = _tree(on_case)
-    assert off == base
-    assert b"nearTipCorrection" not in base["system/fvOptions.ALM"]
-    assert set(on) - set(base) == {"system/trigaux2024_tableC.csv"}
-    assert set(base) <= set(on)
-    changed = {k for k in base if base[k] != on[k]}
+    assert on == base
+    assert b"nearTipCorrection" not in off["system/fvOptions.ALM"]
+    assert set(base) - set(off) == {"system/trigaux2024_tableC.csv"}
+    assert set(off) <= set(base)
+    changed = {k for k in off if off[k] != base[k]}
     assert changed == {"system/fvOptions.ALM", "system/fvOptions.ASM", "system/fvOptions.ASM-MESH"}
     for name in changed:
-        text = on[name].decode()
+        text = base[name].decode()
         assert (
             "        nearTipCorrection\n        {\n            active on;\n"
             "            model TrigauxVirtualCamber;\n"
             "            table \"system/trigaux2024_tableC.csv\";\n"
             "            kernel \"3D\";\n            sigmaOverC 0.25;\n        }"
         ) in text
-        # nothing else moved: removing the block restores the default render
+        # nothing else moved: removing the block restores the off render
         assert text.replace(
             text[text.index("\n\n        nearTipCorrection"):
                  text.index("}", text.index("sigmaOverC")) + 1], ""
-        ) == base[name].decode()
+        ) == off[name].decode()
 
 
 # --------------------------------------------------------------- solver tests

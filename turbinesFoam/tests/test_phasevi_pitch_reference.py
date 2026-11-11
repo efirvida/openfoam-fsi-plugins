@@ -28,8 +28,9 @@ import element_data  # noqa: E402
 from element_data import blade_element_rows  # noqa: E402
 
 TWIST_TIP = read_blade()[-1]["twist"]
-# The v1.2 knobs other than the pitch reference: the renderer defaults are v1.3.
-V12_KNOBS = ["--tip-effects", "on", "--tip-correction", "off", "--polar", "S809_OSU_Re1M_pressure.dat"]
+# The v1.2 knobs other than the pitch reference: the renderer defaults are v1.4.
+V12_KNOBS = ["--tip-effects", "on", "--tip-correction", "off", "--near-tip-correction", "off",
+             "--polar", "S809_OSU_Re1M_pressure.dat"]
 
 
 def _cfg(reference=None, blade_dz=None):
@@ -179,7 +180,7 @@ def test_runner_default_is_the_record_and_forwards_the_reference(tmp_path):
     run = package / "runs/alm-U7-coarse"
     assert '"pitch_reference": "tip"' in (run / "run.json").read_text()
     verdict = _check(run)
-    assert (verdict.returncode, verdict.stdout, verdict.stderr) == (0, f"{run}: CONFORMS v1.3\n", "")
+    assert (verdict.returncode, verdict.stdout, verdict.stderr) == (0, f"{run}: CONFORMS v1.4\n", "")
     again = subprocess.run(["bash", str(package / "scripts/runPhaseVI.sh"), "-m", "alm", "-u", "7",
                             "--pitch-reference", "twist-zero", *V12_KNOBS, "--run-label", "v12"],
                            capture_output=True, text=True, env=env, cwd=package)

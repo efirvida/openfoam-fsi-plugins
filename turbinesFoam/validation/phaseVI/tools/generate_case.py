@@ -1340,7 +1340,8 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="render the opt-in near-tip virtual-camber correction (Trigaux "
              "et al. 2024, F_Cl only: cl x (1 - F_Cl) from the effective tip "
-             "distance); default off, which renders nothing",
+             "distance); default on (Model Definition v1.4), `off` renders "
+             "nothing (the frozen v1.3 render)",
     )
     parser.add_argument(
         "--velocity-sample-radius",
@@ -1496,7 +1497,8 @@ def main(argv: list[str] | None = None) -> int:
         tip_correction = (
             None if args.tip_correction is None else args.tip_correction == "on"
         )
-        near_tip_correction = args.near_tip_correction == "on"
+        # Model Definition v1.4: the near-tip correction is on unless switched off.
+        near_tip_correction = args.near_tip_correction != "off"
         rendered = outputs(
             cfg,
             args.mesh,

@@ -1,8 +1,9 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Registry arm composed on the frozen Model Definition v1.2 (every v1.2 knob, incl.
-# --pitch-reference twist-zero, is passed explicitly; the registry flags come last and
-# override). VARIANT=v1.3 renders the definition of record with no POLAR needed.
+# --pitch-reference twist-zero and --near-tip-correction off, is passed explicitly; the registry
+# flags come last and override). VARIANT=v1.4 renders the record, v1.3 the frozen definition,
+# with no POLAR needed.
 # Run from phaseVI; VARIANT is required, LABEL defaults var-<variant>.
 # MODEL, SPEED, SEQUENCE required; REFINE_LEVEL, DELTA_T, END_REVS, POLAR as v1-2-run.slurm
 # (POLAR defaults to the v1.2 pressure polar; a registry --polar overrides it).
@@ -51,5 +52,5 @@ set -f
 set -- $flags $extra
 exec scripts/runPhaseVI.sh -m "$MODEL" -u "$SPEED" -mesh coarse --sequence "$SEQUENCE" \
     --refine-level "$REFINE_LEVEL" --delta-t "$DELTA_T" --end-revs "$END_REVS" --ranks "$SLURM_NTASKS" \
-    --blade-dz 0.05 --polar "$POLAR" --tip-effects on --tip-correction off --pitch-reference twist-zero \
+    --blade-dz 0.05 --polar "$POLAR" --tip-effects on --tip-correction off --near-tip-correction off --pitch-reference twist-zero \
     --root-effects on --rotational-augmentation off "$@" --run-label "$LABEL" --restart --run

@@ -1526,6 +1526,7 @@ def test_generated_case_is_current(cfg):
         PACKAGE / "case",
         generate_case.ASM_ELEMENT,
         surface_geometry=generate_case.SURFACE_GEOMETRY,
+        near_tip_correction=True,  # the committed twins are the v1.4 record render
     )
     committed = (PACKAGE / "case" / "system" / "fvOptions.ASM-MESH").read_text()
     assert committed == rendered
@@ -1536,7 +1537,7 @@ def test_generated_case_is_current(cfg):
         ("ASM", generate_case.ASM_ELEMENT),
     ):
         rendered_twin = generate_case.render_fv_options(
-            cfg, "7", "coarse", PACKAGE / "case", element_type
+            cfg, "7", "coarse", PACKAGE / "case", element_type, near_tip_correction=True
         )
         committed_twin = (
             PACKAGE / "case" / "system" / f"fvOptions.{name}"

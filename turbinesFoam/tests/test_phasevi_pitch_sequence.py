@@ -60,11 +60,12 @@ def _element_pitches(case):
 
 
 def test_s_render_is_unchanged_without_pitch_override(tmp_path):
-    result, case = _render(tmp_path, "s")
+    # The frozen digests predate v1.4: pin the near-tip correction off (the v1.3 render).
+    result, case = _render(tmp_path, "s", "--near-tip-correction", "off")
     assert result.returncode == 0, result.stderr
     for name, digest in FROZEN_S5.items():
         assert _digest(case / name) == digest, name
-    explicit, case3 = _render(tmp_path, "s3", "--pitch-deg", "3")
+    explicit, case3 = _render(tmp_path, "s3", "--pitch-deg", "3", "--near-tip-correction", "off")
     assert explicit.returncode == 0, explicit.stderr
     for name in FROZEN_S5:
         assert _digest(case3 / name) == _digest(case / name), name

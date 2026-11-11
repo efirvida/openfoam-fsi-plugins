@@ -60,8 +60,9 @@
 # pitch is measured. tip is Model Definition v1.3 (NREL/TP-500-29955 p.20: pitch at
 # the tip chord, tip mounting -pitch); twist-zero is v1.2 (pitch added to the report
 # twist, zero at 75 % span). Any other value exits 2. run.json records
-# `pitch_reference`. A plain render is the v1.3 record; v1.2 needs every knob passed
-# explicitly (scripts/slurm/v1-2-run.slurm).
+# `pitch_reference`. A plain render is the v1.4 record (v1.3 plus the near-tip
+# correction, on unless --near-tip-correction off); v1.3 needs `--near-tip-correction
+# off` and v1.2 every knob passed explicitly (scripts/slurm/v1-2-run.slurm).
 # --run-label WORD appends -WORD to the run id (`runs/<id>-WORD`) and records it
 # in run.json, so two render variants of the same (model, speed, mesh) live in
 # separate, independently restartable directories (the two-arm campaign uses it
